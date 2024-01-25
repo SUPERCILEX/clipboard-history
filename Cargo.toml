@@ -1,0 +1,33 @@
+[workspace]
+members = [
+    "cli",
+    "ringboard",
+    "server",
+]
+
+[workspace.package]
+version = "0.0.0"
+authors = ["Alex Saveau <saveau.alexandre@gmail.com>"]
+edition = "2021"
+repository = "https://github.com/SUPERCILEX/clipboard-history"
+license = "AGPL-3.0-only"
+
+[package]
+name = "lint"
+version = "0.0.0"
+publish = false
+
+[dev-dependencies]
+supercilex-tests = { version = "0.4.4", default-features = false }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dr]
+inherits = "release"
+debug = true
+debug-assertions = true
+strip = false
