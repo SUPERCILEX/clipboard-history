@@ -1,0 +1,357 @@
+The Ringboard (clipboard history) CLI
+
+Usage: clipboard-history <COMMAND>
+
+Commands:
+  add              Add an entry to the database
+  favorite         Favorite an entry
+  unfavorite       Unfavorite an entry
+  move-to-front    Move an entry to the front, making it the most recent entry
+  swap             Swap the positions of two entries
+  remove           Delete an entry from the database
+  wipe             Wipe the entire database
+  reload-settings  Reload configuration files on the server
+  migrate          Migrate from other clipboard managers to Ringboard
+  garbage-collect  Run garbage collection on the database
+  debug            Debugging tools for developers
+  help             Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help (use `--help` for more detail)
+  -V, --version  Print version
+
+---
+
+Add an entry to the database
+
+Usage: clipboard-history add <DATA_FILE>
+
+Arguments:
+  <DATA_FILE>  A file containing the data to be added to the entry
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Favorite an entry
+
+Usage: clipboard-history favorite <ID>
+
+Arguments:
+  <ID>  The entry ID
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Unfavorite an entry
+
+Usage: clipboard-history unfavorite <ID>
+
+Arguments:
+  <ID>  The entry ID
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Move an entry to the front, making it the most recent entry
+
+Usage: clipboard-history move-to-front <ID>
+
+Arguments:
+  <ID>  The entry ID
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Swap the positions of two entries
+
+Usage: clipboard-history swap <ID1> <ID2>
+
+Arguments:
+  <ID1>  The first entry ID
+  <ID2>  The second entry ID
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Delete an entry from the database
+
+Usage: clipboard-history remove <ID>
+
+Arguments:
+  <ID>  The entry ID
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Wipe the entire database
+
+Usage: clipboard-history wipe
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Reload configuration files on the server
+
+Usage: clipboard-history reload-settings [OPTIONS]
+
+Options:
+  -c, --config <CONFIG>  Use this configuration file instead of the default one
+  -h, --help             Print help (use `--help` for more detail)
+
+---
+
+Migrate from other clipboard managers to Ringboard
+
+Usage: clipboard-history migrate <FROM>
+
+Arguments:
+  <FROM>  The existing clipboard to migrate from [possible values: gnome-clipboard-history,
+          clipboard-indicator]
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Run garbage collection on the database
+
+Usage: clipboard-history garbage-collect
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Debugging tools for developers
+
+Usage: clipboard-history debug <COMMAND>
+
+Commands:
+  stats     Print statistics about the Ringboard database
+  dump      Dump the contents of the database for analysis
+  generate  Generate a pseudo-random database for testing and performance tuning purposes
+  fuzz      Spam the server with random commands
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Print statistics about the Ringboard database
+
+Usage: clipboard-history debug stats
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Dump the contents of the database for analysis
+
+Usage: clipboard-history debug dump [OPTIONS]
+
+Options:
+  -c, --contents  Include the plain-text contents of each entry
+  -h, --help      Print help (use `--help` for more detail)
+
+---
+
+Generate a pseudo-random database for testing and performance tuning purposes
+
+Usage: clipboard-history debug generate [OPTIONS]
+
+Options:
+  -n, --entries <NUM_ENTRIES>      The number of random entries to generate [default: 1_000_000]
+  -m, --mean-size <MEAN_SIZE>      The mean entry size [default: 128]
+  -s, --stddev-size <STDDEV_SIZE>  The standard deviation of the entry size [default: 100]
+  -h, --help                       Print help (use `--help` for more detail)
+
+---
+
+Spam the server with random commands
+
+Usage: clipboard-history debug fuzz [OPTIONS]
+
+Options:
+  -c, --clients <NUM_CLIENTS>  The number of random entries to generate [default: 3]
+  -h, --help                   Print help (use `--help` for more detail)
+
+---
+
+Print this message or the help of the given subcommand(s)
+
+Usage: clipboard-history debug help [COMMAND]
+
+Commands:
+  stats     Print statistics about the Ringboard database
+  dump      Dump the contents of the database for analysis
+  generate  Generate a pseudo-random database for testing and performance tuning purposes
+  fuzz      Spam the server with random commands
+  help      Print this message or the help of the given subcommand(s)
+
+---
+
+Print statistics about the Ringboard database
+
+Usage: clipboard-history debug help stats
+
+---
+
+Dump the contents of the database for analysis
+
+Usage: clipboard-history debug help dump
+
+---
+
+Generate a pseudo-random database for testing and performance tuning purposes
+
+Usage: clipboard-history debug help generate
+
+---
+
+Spam the server with random commands
+
+Usage: clipboard-history debug help fuzz
+
+---
+
+Print this message or the help of the given subcommand(s)
+
+Usage: clipboard-history debug help help
+
+---
+
+Print this message or the help of the given subcommand(s)
+
+Usage: clipboard-history help [COMMAND]
+
+Commands:
+  add              Add an entry to the database
+  favorite         Favorite an entry
+  unfavorite       Unfavorite an entry
+  move-to-front    Move an entry to the front, making it the most recent entry
+  swap             Swap the positions of two entries
+  remove           Delete an entry from the database
+  wipe             Wipe the entire database
+  reload-settings  Reload configuration files on the server
+  migrate          Migrate from other clipboard managers to Ringboard
+  garbage-collect  Run garbage collection on the database
+  debug            Debugging tools for developers
+  help             Print this message or the help of the given subcommand(s)
+
+---
+
+Add an entry to the database
+
+Usage: clipboard-history help add
+
+---
+
+Favorite an entry
+
+Usage: clipboard-history help favorite
+
+---
+
+Unfavorite an entry
+
+Usage: clipboard-history help unfavorite
+
+---
+
+Move an entry to the front, making it the most recent entry
+
+Usage: clipboard-history help move-to-front
+
+---
+
+Swap the positions of two entries
+
+Usage: clipboard-history help swap
+
+---
+
+Delete an entry from the database
+
+Usage: clipboard-history help remove
+
+---
+
+Wipe the entire database
+
+Usage: clipboard-history help wipe
+
+---
+
+Reload configuration files on the server
+
+Usage: clipboard-history help reload-settings
+
+---
+
+Migrate from other clipboard managers to Ringboard
+
+Usage: clipboard-history help migrate
+
+---
+
+Run garbage collection on the database
+
+Usage: clipboard-history help garbage-collect
+
+---
+
+Debugging tools for developers
+
+Usage: clipboard-history help debug [COMMAND]
+
+Commands:
+  stats     Print statistics about the Ringboard database
+  dump      Dump the contents of the database for analysis
+  generate  Generate a pseudo-random database for testing and performance tuning purposes
+  fuzz      Spam the server with random commands
+
+---
+
+Print statistics about the Ringboard database
+
+Usage: clipboard-history help debug stats
+
+---
+
+Dump the contents of the database for analysis
+
+Usage: clipboard-history help debug dump
+
+---
+
+Generate a pseudo-random database for testing and performance tuning purposes
+
+Usage: clipboard-history help debug generate
+
+---
+
+Spam the server with random commands
+
+Usage: clipboard-history help debug fuzz
+
+---
+
+Print this message or the help of the given subcommand(s)
+
+Usage: clipboard-history help help
