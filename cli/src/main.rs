@@ -1,7 +1,24 @@
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::IoSlice,
+    mem::size_of,
+    os::fd::{AsFd, OwnedFd},
+    path::{Path, PathBuf},
+    ptr, slice,
+};
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
+use clipboard_history_core::{dirs::socket_file, protocol::Request, Error, IoErr};
+use error_stack::Report;
+use rustix::{
+    net::{
+        connect_unix, sendmsg_unix, socket, AddressFamily, SendAncillaryBuffer,
+        SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketType,
+    },
+    stdio::stdin,
+};
+use thiserror::Error;
 
 /// The Ringboard (clipboard history) CLI.
 ///
@@ -152,19 +169,19 @@ enum MigrateFromClipboard {
 struct Generate {
     /// The number of random entries to generate.
     #[clap(short, long = "entries", alias = "num-entries")]
-    #[clap(value_parser = si_number::<u32>)]
+    #[clap(value_parser = si_number::< u32 >)]
     #[clap(default_value = "1_000_000")]
     num_entries: u32,
 
     /// The mean entry size.
     #[clap(short, long)]
-    #[clap(value_parser = si_number::<usize>)]
+    #[clap(value_parser = si_number::< usize >)]
     #[clap(default_value = "128")]
     mean_size: usize,
 
     /// The standard deviation of the entry size.
     #[clap(short, long)]
-    #[clap(value_parser = si_number::<usize>)]
+    #[clap(value_parser = si_number::< usize >)]
     #[clap(default_value = "100")]
     stddev_size: usize,
 }
@@ -173,7 +190,7 @@ struct Generate {
 struct Fuzz {
     /// The number of random entries to generate.
     #[clap(short = 'c', long = "clients", alias = "num-clients")]
-    #[clap(value_parser = si_number::<usize>)]
+    #[clap(value_parser = si_number::< usize >)]
     #[clap(default_value = "3")]
     num_clients: usize,
 }
@@ -185,8 +202,100 @@ struct Dump {
     contents: bool,
 }
 
-fn main() {
+#[derive(Error, Debug)]
+enum CliError {
+    #[error("{0}")]
+    Core(#[from] Error),
+}
+
+#[derive(Error, Debug)]
+enum Wrapper {
+    #[error("{0}")]
+    W(String),
+}
+
+fn main() -> error_stack::Result<(), Wrapper> {
+    #[cfg(not(debug_assertions))]
+    error_stack::Report::install_debug_hook::<std::panic::Location>(|_, _| {});
+
+    run().map_err(|e| {
+        let wrapper = Wrapper::W(e.to_string());
+        match e {
+            CliError::Core(Error::Io { error, context }) => Report::new(error)
+                .attach_printable(context)
+                .change_context(wrapper),
+            CliError::Core(Error::NotARingboard { file: _ }) => Report::new(wrapper),
+            CliError::Core(Error::InvalidPidError { error, context }) => Report::new(error)
+                .attach_printable(context)
+                .change_context(wrapper),
+        }
+    })
+}
+
+fn run() -> Result<(), CliError> {
+    let Cli { cmd, help: _ } = Cli::parse();
+
+    let socket_file = socket_file();
+    let server_addr = SocketAddrUnix::new(&socket_file)
+        .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+    match cmd {
+        Cmd::Add(data) => add(
+            data,
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+        )?,
+        Cmd::Favorite(_) => {}
+        Cmd::Unfavorite(_) => {}
+        Cmd::MoveToFront(_) => {}
+        Cmd::Swap(_) => {}
+        Cmd::Remove(_) => {}
+        Cmd::Wipe => {}
+        Cmd::ReloadSettings(_) => {}
+        Cmd::Migrate(_) => {}
+        Cmd::GarbageCollect => {}
+        Cmd::Debug(_) => {}
+    }
     todo!()
+}
+
+fn connect_to_server(addr: &SocketAddrUnix, socket_file: &Path) -> Result<OwnedFd, CliError> {
+    let socket = socket(AddressFamily::UNIX, SocketType::SEQPACKET, None)
+        .map_io_err(|| format!("Failed to create socket: {socket_file:?}"))?;
+    connect_unix(&socket, addr)
+        .map_io_err(|| format!("Failed to connect to server: {socket_file:?}"))?;
+    Ok(socket)
+}
+
+fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<(), CliError> {
+    let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
+    let mut buf = SendAncillaryBuffer::new(&mut space);
+    let file = if data_file == Path::new("-") {
+        None
+    } else {
+        Some(File::open(&data_file).map_io_err(|| format!("Failed to open file: {data_file:?}"))?)
+    };
+    let fds = [file.as_ref().map(|file| file.as_fd()).unwrap_or(stdin())];
+    debug_assert!(buf.push(SendAncillaryMessage::ScmRights(&fds)));
+
+    let data = Request::Add;
+    sendmsg_unix(
+        server,
+        &addr,
+        &[IoSlice::new(request_to_bytes(&data))],
+        &mut buf,
+        SendFlags::empty(),
+    )
+    .map_io_err(|| "Failed to send message.")?;
+    Ok(())
+}
+
+fn request_to_bytes(request: &Request) -> &[u8] {
+    unsafe {
+        slice::from_raw_parts(
+            ptr::from_ref::<Request>(request).cast(),
+            size_of::<Request>(),
+        )
+    }
 }
 
 #[cfg(test)]
