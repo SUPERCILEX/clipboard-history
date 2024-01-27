@@ -1,0 +1,20 @@
+[package]
+name = "clipboard-history-server"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "The ringboard server."
+repository.workspace = true
+keywords = ["ringboard", "clipboard", "tools", "server"]
+categories = ["command-line-utilities", "development-tools", "filesystem"]
+license.workspace = true
+
+[dependencies]
+arrayvec = "0.7.4"
+clipboard-history-core = { version = "0", path = "../ringboard" }
+error-stack = "0.4.1"
+io-uring = { version = "0.6.2", path = "/home/asaveau/Desktop/wip/io-uring" }
+itoa = "1.0.10"
+libc = "0.2.152"
+rustix = { version = "0.38.30", features = ["fs", "process", "net"] }
+thiserror = "1.0.56"

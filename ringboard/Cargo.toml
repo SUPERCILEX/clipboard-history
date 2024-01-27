@@ -1,0 +1,18 @@
+[package]
+name = "clipboard-history-core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "The ringboard core library."
+repository.workspace = true
+keywords = ["ringboard", "clipboard", "tools", "core"]
+categories = ["command-line-utilities", "development-tools", "filesystem"]
+license.workspace = true
+
+[dependencies]
+dirs = "5.0.1"
+rustix = { version = "0.38.30", features = ["fs", "mm"] }
+thiserror = "1.0.56"
+
+[dev-dependencies]
+supercilex-tests = { version = "0.4.4", default-features = false, features = ["api"] }
