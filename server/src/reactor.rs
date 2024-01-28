@@ -4,6 +4,7 @@ use std::{
     mem,
     os::fd::AsRawFd,
     path::{Path, PathBuf},
+    ptr,
 };
 
 use arrayvec::ArrayVec;
@@ -11,7 +12,7 @@ use clipboard_history_core::{protocol::Request, IoErr};
 use io_uring::{
     buf_ring::BufRing,
     cqueue::{buffer_select, more},
-    opcode::{AcceptMulti, Close, RecvMsgMulti},
+    opcode::{AcceptMulti, Close, Read, RecvMsgMulti},
     squeue::Flags,
     types::{Fixed, RecvMsgOut},
     IoUring,
@@ -32,6 +33,27 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
         .setup_defer_taskrun()
         .build(MAX_NUM_CLIENTS * 2)
         .map_io_err(|| "Failed to create io_uring.")?;
+
+    let signal_handler = unsafe {
+        use std::os::fd::{FromRawFd, OwnedFd};
+
+        let mut set = mem::zeroed::<libc::sigset_t>();
+        libc::sigemptyset(&mut set);
+
+        libc::sigaddset(&mut set, libc::SIGTERM);
+        libc::sigaddset(&mut set, libc::SIGQUIT);
+        libc::sigaddset(&mut set, libc::SIGINT);
+        libc::sigprocmask(libc::SIG_BLOCK, &set, ptr::null_mut());
+
+        let fd = libc::signalfd(-1, &set, 0);
+        if fd < 0 {
+            return Err(CliError::Internal {
+                context: "Could not create signal fd.".into(),
+            });
+        } else {
+            OwnedFd::from_raw_fd(fd)
+        }
+    };
 
     let socket = {
         let addr = {
@@ -56,15 +78,18 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
 
     uring
         .submitter()
-        .register_files_sparse(MAX_NUM_CLIENTS)
+        .register_files_sparse(MAX_NUM_CLIENTS + 2)
         .map_io_err(|| "Failed to set up io_uring fixed file table.")?;
     uring
         .submitter()
-        .register_files_update(0, &[socket.as_raw_fd()])
+        .register_files_update(
+            MAX_NUM_CLIENTS,
+            &[socket.as_raw_fd(), signal_handler.as_raw_fd()],
+        )
         .map_io_err(|| "Failed to register socket FD with io_uring.")?;
     let buf_ring = uring
         .submitter()
-        .register_buf_ring(u16::try_from(MAX_NUM_CLIENTS * 2).unwrap(), 0, 64)
+        .register_buf_ring(u16::try_from(MAX_NUM_CLIENTS * 2).unwrap(), 0, 128)
         .map_io_err(|| "Failed to register buffer ring with io_uring.")?;
 
     Ok((uring, buf_ring))
@@ -74,9 +99,10 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
     const REQ_TYPE_ACCEPT: u64 = 0;
     const REQ_TYPE_RECV: u64 = 1;
     const REQ_TYPE_CLOSE: u64 = 2;
+    const REQ_TYPE_READ_SIGNALS: u64 = 3;
     const REQ_TYPE_MASK: u64 = 0b11;
 
-    let accept = AcceptMulti::new(Fixed(0))
+    let accept = AcceptMulti::new(Fixed(MAX_NUM_CLIENTS))
         .allocate_file_index(true)
         .build()
         .user_data(REQ_TYPE_ACCEPT);
@@ -94,15 +120,23 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
     let (mut uring, mut buf_ring) = setup_uring(socket_file)?;
 
     {
+        let read_signals = Read::new(Fixed(MAX_NUM_CLIENTS + 1), ptr::null_mut(), 0)
+            .buf_group(0)
+            .build()
+            .flags(Flags::BUFFER_SELECT)
+            .user_data(REQ_TYPE_READ_SIGNALS);
+
         let mut submission = uring.submission();
         unsafe {
-            submission.push(&accept).unwrap();
+            submission
+                .push_multiple(&[accept.clone(), read_signals])
+                .unwrap();
         }
     }
 
     let mut needs_reaccept = false;
     let mut bufs = buf_ring.submissions();
-    loop {
+    'outer: loop {
         match uring.submit_and_wait(1) {
             Err(e) if e.kind() == ErrorKind::Interrupted => continue,
             r => r,
@@ -134,7 +168,7 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                         &empty_msghdr,
                     )
                     .map_err(|()| CliError::Internal {
-                        context: "Didn't allocate enough buffer space.".into(),
+                        context: "Didn't allocate enough large enough buffers.".into(),
                     })?;
                     if msg.is_name_data_truncated()
                         || msg.is_control_data_truncated()
@@ -149,8 +183,8 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                         pending_entries.push(
                             Close::new(Fixed(fd))
                                 .build()
-                                .user_data(REQ_TYPE_CLOSE)
-                                .flags(Flags::SKIP_SUCCESS),
+                                .flags(Flags::SKIP_SUCCESS)
+                                .user_data(REQ_TYPE_CLOSE),
                         );
                     } else {
                         if !more(entry.flags()) {
@@ -166,17 +200,25 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                 REQ_TYPE_CLOSE => {
                     result.map_io_err(|| "Failed to close file.")?;
                 }
+                REQ_TYPE_READ_SIGNALS => {
+                    let result = result.map_io_err(|| "Failed to read signal.")?;
+                    debug_assert!(buffer_select(entry.flags()).is_some());
+                    unsafe { bufs.recycle(entry.flags(), usize::try_from(result).unwrap()) };
+
+                    break 'outer;
+                }
                 _ => unreachable!("Unknown request: {}", entry.user_data()),
             }
         }
         bufs.sync();
 
         let mut submission = uring.submission();
-        unsafe {
-            submission.push_multiple(&pending_entries).unwrap();
-        }
+        unsafe { submission.push_multiple(&pending_entries) }.map_err(|_| CliError::Internal {
+            context: "Didn't allocate enough io_uring slots.".into(),
+        })?;
         if needs_reaccept && unsafe { submission.push(&accept) }.is_ok() {
             needs_reaccept = false;
         }
     }
+    Ok(())
 }
