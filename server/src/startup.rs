@@ -26,7 +26,7 @@ impl OwnedServer {
     }
 }
 
-pub fn claim_server_ownership(lock_file_path: &Path) -> Result<OwnedServer, CliError> {
+pub fn claim_server_ownership(lock_file_path: &Path) -> Result<Option<OwnedServer>, CliError> {
     let lock_file = match openat(
         CWD,
         lock_file_path,
@@ -35,13 +35,15 @@ pub fn claim_server_ownership(lock_file_path: &Path) -> Result<OwnedServer, CliE
     ) {
         Err(e) if e.kind() == AlreadyExists => {
             let pid = read_server_pid(lock_file_path)?;
-            let pid = NonZeroU32::new(pid).ok_or(CliError::UncleanShutdown)?;
+            let Some(pid) = NonZeroU32::new(pid) else {
+                return Ok(None);
+            };
 
             match test_kill_process(unsafe {
                 Pid::from_raw_unchecked(i32::try_from(pid.get()).unwrap())
             }) {
                 Err(e) if e == Errno::SRCH => {
-                    return Err(CliError::UncleanShutdown);
+                    return Ok(None);
                 }
                 r => r.map_io_err(|| format!("Failed to check server status (PID {pid})."))?,
             }
@@ -62,5 +64,5 @@ pub fn claim_server_ownership(lock_file_path: &Path) -> Result<OwnedServer, CliE
             .map_io_err(|| format!("Failed to write to server lock file: {lock_file_path:?}"))?;
     }
 
-    Ok(OwnedServer(lock_file_path.to_path_buf()))
+    Ok(Some(OwnedServer(lock_file_path.to_path_buf())))
 }

@@ -20,8 +20,6 @@ enum CliError {
     Core(#[from] Error),
     #[error("The server is already running (PID {pid})")]
     ServerAlreadyRunning { pid: NonZeroU32, lock_file: PathBuf },
-    #[error("The server was shutdown unexpectedly and may have corrupted the database")]
-    UncleanShutdown,
     #[error("Internal error")]
     Internal { context: Cow<'static, str> },
 }
@@ -53,9 +51,6 @@ fn main() -> error_stack::Result<(), Wrapper> {
                      to initiate the recovery sequence on the next startup.",
                 )
                 .attach_printable(format!("Lock file: {lock_file:?}")),
-            CliError::UncleanShutdown => {
-                unreachable!()
-            }
             CliError::Internal { context } => Report::new(wrapper)
                 .attach_printable(context)
                 .attach_printable("Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new"),
@@ -67,12 +62,8 @@ fn run() -> Result<(), CliError> {
     let mut data_dir = data_dir();
     fs::create_dir_all(&data_dir)
         .map_io_err(|| format!("Failed to create data directory: {data_dir:?}"))?;
-    let server_guard = match claim_server_ownership(&PathView::new(&mut data_dir, "server.lock")) {
-        Err(CliError::UncleanShutdown) => {
-            todo!()
-        }
-        r => r,
-    }?;
+    let server_guard = claim_server_ownership(&PathView::new(&mut data_dir, "server.lock"))?
+        .unwrap_or_else(|| todo!());
     let socket_file = socket_file();
 
     let result = reactor::run(data_dir, &socket_file);

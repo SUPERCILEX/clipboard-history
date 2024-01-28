@@ -207,7 +207,11 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
 
                     break 'outer;
                 }
-                _ => unreachable!("Unknown request: {}", entry.user_data()),
+                _ => {
+                    return Err(CliError::Internal {
+                        context: format!("Unknown request: {}", entry.user_data()).into(),
+                    });
+                }
             }
         }
         bufs.sync();
