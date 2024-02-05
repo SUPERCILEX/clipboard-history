@@ -14,15 +14,14 @@ use clipboard_history_core::{protocol::Request, IoErr};
 use io_uring::{
     buf_ring::BufRing,
     cqueue::{buffer_select, more, Entry},
-    opcode::{AcceptMulti, AsyncCancel2, Close, PollAdd, Read, RecvMsgMulti, SendMsg},
+    opcode::{AcceptMulti, Close, PollAdd, Read, RecvMsgMulti, SendMsg, Shutdown},
     squeue::Flags,
-    types::{CancelBuilder, Fixed, RecvMsgOut},
+    types::{Fixed, RecvMsgOut},
     IoUring,
 };
 use log::{debug, info, warn};
-use rustix::{
-    io::Errno,
-    net::{bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType},
+use rustix::net::{
+    bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType,
 };
 
 use crate::{requests, send_msg_bufs::SendMsgBufs, CliError};
@@ -57,6 +56,7 @@ impl Clients {
     }
 
     fn set_closed(&mut self, id: u32) {
+        self.connections &= !(1 << id);
         self.pending_closes &= !(1 << id);
     }
 }
@@ -170,7 +170,7 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
     const REQ_TYPE_CLOSE: u64 = 2;
     const REQ_TYPE_READ_SIGNALS: u64 = 3;
     const REQ_TYPE_SENDMSG: u64 = 4;
-    const REQ_TYPE_CANCEL_FOR_CLOSE: u64 = 5;
+    const REQ_TYPE_SHUTDOWN_CONN: u64 = 5;
     const REQ_TYPE_LOW_MEM: u64 = 6;
     const REQ_TYPE_MASK: u64 = 0b111;
     const REQ_TYPE_SHIFT: u32 = REQ_TYPE_MASK.count_ones();
@@ -249,27 +249,17 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                 REQ_TYPE_RECV => 'recv: {
                     info!("Handling recv completion.");
                     let fd = restore_fd(&entry);
-                    let result = match result {
-                        Err(e) if e.raw_os_error() == Some(Errno::CANCELED.raw_os_error()) => {
-                            info!("Connection to client {fd} cancelled.");
-                            break 'recv;
-                        }
-                        r => r.map_io_err(|| format!("Failed to recv from client {fd}."))?,
-                    };
+                    let result =
+                        result.map_io_err(|| format!("Failed to recv from client {fd}."))?;
 
                     debug_assert!(buffer_select(entry.flags()).is_some());
-                    let data =
-                        unsafe { bufs.recycle(entry.flags(), usize::try_from(result).unwrap()) };
-
-                    if clients.is_closing(fd) {
-                        warn!("Dropping spurious message for client {fd}.");
-                        break 'recv;
-                    }
-
-                    let msg =
-                        RecvMsgOut::parse(data, &receive_hdr).map_err(|()| CliError::Internal {
-                            context: "Didn't allocate enough large enough buffers.".into(),
-                        })?;
+                    let msg = RecvMsgOut::parse(
+                        unsafe { bufs.recycle(entry.flags(), usize::try_from(result).unwrap()) },
+                        &receive_hdr,
+                    )
+                    .map_err(|()| CliError::Internal {
+                        context: "Didn't allocate enough large enough buffers.".into(),
+                    })?;
                     if msg.is_name_data_truncated()
                         || msg.is_control_data_truncated()
                         || msg.is_payload_truncated()
@@ -280,16 +270,25 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                     }
 
                     if msg.payload_data().is_empty() {
-                        info!("Client {fd} closed the connection.");
-                        clients.set_disconnected(fd);
+                        if clients.is_closing(fd) {
+                            info!("Client {fd} shut down.");
+                        } else {
+                            info!("Client {fd} closed the connection.");
+                            pending_entries.push(
+                                Close::new(Fixed(fd))
+                                    .build()
+                                    .flags(Flags::SKIP_SUCCESS)
+                                    .user_data(REQ_TYPE_CLOSE | store_fd(fd)),
+                            );
+                        }
+
                         clients.set_closed(fd);
-                        pending_entries.push(
-                            Close::new(Fixed(fd))
-                                .build()
-                                .flags(Flags::SKIP_SUCCESS)
-                                .user_data(REQ_TYPE_CLOSE | store_fd(fd)),
-                        );
                     } else {
+                        if clients.is_closing(fd) {
+                            warn!("Dropping spurious message for client {fd}.");
+                            break 'recv;
+                        }
+
                         if !more(entry.flags()) {
                             pending_entries.push(recvmsg(fd).user_data(entry.user_data()));
                         }
@@ -335,10 +334,10 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
 
                         if !clients.is_connected(fd) {
                             pending_entries.push(
-                                AsyncCancel2::new(CancelBuilder::fd(Fixed(fd)))
+                                Shutdown::new(Fixed(fd), libc::SHUT_RDWR)
                                     .build()
-                                    .flags(Flags::IO_LINK)
-                                    .user_data(REQ_TYPE_CANCEL_FOR_CLOSE | store_fd(fd)),
+                                    .flags(Flags::IO_LINK | Flags::SKIP_SUCCESS)
+                                    .user_data(REQ_TYPE_SHUTDOWN_CONN | store_fd(fd)),
                             );
                             pending_entries.push(
                                 Close::new(Fixed(fd))
@@ -366,12 +365,10 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                         }
                     }
                 }
-                REQ_TYPE_CANCEL_FOR_CLOSE => {
-                    info!("Handling cancel-to-close completion.");
+                REQ_TYPE_SHUTDOWN_CONN => {
+                    info!("Handling connection shutdown completion.");
                     let fd = restore_fd(&entry);
                     result.map_io_err(|| format!("Failed to cancel recv for client {fd}."))?;
-
-                    clients.set_closed(fd);
                 }
                 REQ_TYPE_CLOSE => {
                     info!("Handling close completion.");
