@@ -20,8 +20,9 @@ use io_uring::{
     IoUring,
 };
 use log::{debug, info, warn};
-use rustix::net::{
-    bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType,
+use rustix::{
+    io::Errno,
+    net::{bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType},
 };
 
 use crate::{requests, send_msg_bufs::SendMsgBufs, CliError};
@@ -157,7 +158,7 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
         .map_io_err(|| "Failed to register socket FD with io_uring.")?;
     let buf_ring = uring
         .submitter()
-        .register_buf_ring(u16::try_from(URING_ENTRIES).unwrap(), 0, 128)
+        .register_buf_ring(u16::try_from(MAX_NUM_CLIENTS * 2).unwrap(), 0, 128)
         .map_io_err(|| "Failed to register buffer ring with io_uring.")?;
 
     Ok((uring, buf_ring))
@@ -249,7 +250,7 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                     info!("Handling recv completion.");
                     let fd = restore_fd(&entry);
                     let result = match result {
-                        Err(e) if e.raw_os_error() == Some(125) => {
+                        Err(e) if e.raw_os_error() == Some(Errno::CANCELED.raw_os_error()) => {
                             info!("Connection to client {fd} cancelled.");
                             break 'recv;
                         }
