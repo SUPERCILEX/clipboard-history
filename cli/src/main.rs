@@ -207,10 +207,10 @@ enum CliError {
     #[error("{0}")]
     Core(#[from] Error),
     #[error(
-        "Protocol version mismatch: expected {} but got {actual}",
+        "Protocol version mismatch: expected {} but got {actual:?}",
         protocol::VERSION
     )]
-    VersionMismatch { actual: u8 },
+    VersionMismatch { actual: Option<u8> },
 }
 
 #[derive(Error, Debug)]
@@ -278,19 +278,24 @@ fn connect_to_server(addr: &SocketAddrUnix, socket_file: &Path) -> Result<OwnedF
             &mut SendAncillaryBuffer::default(),
             SendFlags::empty(),
         )
-        .map_io_err(|| "Failed to send message.")?;
+        .map_io_err(|| "Failed to send version.")?;
 
         let mut version = 0;
-        recvmsg(
+        let result = recvmsg(
             &socket,
             &mut [IoSliceMut::new(slice::from_mut(&mut version))],
             &mut RecvAncillaryBuffer::default(),
             RecvFlags::TRUNC,
         )
-        .map_io_err(|| "Failed to receive message.")?;
+        .map_io_err(|| "Failed to receive version.")?;
 
+        if result.bytes != 1 {
+            return Err(CliError::VersionMismatch { actual: None });
+        }
         if version != protocol::VERSION {
-            return Err(CliError::VersionMismatch { actual: version });
+            return Err(CliError::VersionMismatch {
+                actual: Some(version),
+            });
         }
     }
 
@@ -316,7 +321,7 @@ fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<
         &mut buf,
         SendFlags::empty(),
     )
-    .map_io_err(|| "Failed to send message.")?;
+    .map_io_err(|| "Failed to send add request.")?;
     Ok(())
 }
 
