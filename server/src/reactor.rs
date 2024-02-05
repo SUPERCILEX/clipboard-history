@@ -102,7 +102,7 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
                     .match_indices(':')
                     .nth(1)
                     .map(|(idx, _)| idx)
-                    .unwrap_or(start),
+                    .unwrap_or(start - 1),
             "",
         );
         cgroup.truncate(cgroup.trim_end().len());
