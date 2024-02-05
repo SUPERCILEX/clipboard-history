@@ -1,6 +1,6 @@
 use std::{
     fs, io,
-    io::{Error, ErrorKind},
+    io::ErrorKind,
     mem,
     os::fd::AsRawFd,
     path::{Path, PathBuf},
@@ -11,10 +11,10 @@ use arrayvec::ArrayVec;
 use clipboard_history_core::{protocol::Request, IoErr};
 use io_uring::{
     buf_ring::BufRing,
-    cqueue::{buffer_select, more},
-    opcode::{AcceptMulti, Close, Read, RecvMsgMulti, SendMsg},
+    cqueue::{buffer_select, more, Entry},
+    opcode::{AcceptMulti, AsyncCancel2, Close, Read, RecvMsgMulti, SendMsg},
     squeue::Flags,
-    types::{Fixed, RecvMsgOut},
+    types::{CancelBuilder, Fixed, RecvMsgOut},
     IoUring,
 };
 use log::{debug, info, warn};
@@ -36,11 +36,11 @@ impl Clients {
         (self.0 & (1 << id)) != 0
     }
 
-    fn connect(&mut self, id: u32) {
+    fn set_connected(&mut self, id: u32) {
         self.0 |= 1 << id;
     }
 
-    fn disconnect(&mut self, id: u32) {
+    fn set_disconnected(&mut self, id: u32) {
         self.0 &= !(1 << id);
     }
 }
@@ -117,6 +117,7 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
     const REQ_TYPE_CLOSE: u64 = 2;
     const REQ_TYPE_READ_SIGNALS: u64 = 3;
     const REQ_TYPE_SENDMSG: u64 = 4;
+    const REQ_TYPE_CANCEL_FOR_CLOSE: u64 = 5;
     const REQ_TYPE_MASK: u64 = 0b111;
     const REQ_TYPE_SHIFT: u32 = REQ_TYPE_MASK.count_ones();
 
@@ -133,6 +134,11 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
         RecvMsgMulti::new(Fixed(fd), &receive_hdr, 0)
             .flags(RecvFlags::TRUNC.bits())
             .build()
+    };
+
+    let store_fd = |fd| u64::from(fd) << (u64::BITS - MAX_NUM_CLIENTS_SHIFT);
+    let restore_fd = |entry: &Entry| {
+        u32::try_from(entry.user_data() >> (u64::BITS - MAX_NUM_CLIENTS_SHIFT)).unwrap()
     };
 
     let (mut uring, mut buf_ring) = setup_uring(socket_file)?;
@@ -174,17 +180,20 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                     info!("Handling accept completion.");
                     let result = result.map_io_err(|| "Failed to accept socket connection.")?;
                     needs_reaccept |= !more(entry.flags());
-                    pending_entries.push(recvmsg(result).user_data(
-                        REQ_TYPE_RECV | (u64::from(result) << (u64::BITS - MAX_NUM_CLIENTS_SHIFT)),
-                    ));
+                    pending_entries
+                        .push(recvmsg(result).user_data(REQ_TYPE_RECV | store_fd(result)));
                     debug_assert_eq!(0, result & !MAX_NUM_CLIENTS_SHIFT);
                 }
-                REQ_TYPE_RECV => {
+                REQ_TYPE_RECV => 'recv: {
                     info!("Handling recv completion.");
-                    let result = result.map_io_err(|| "Failed to accept recv from socket.")?;
-                    let fd =
-                        u32::try_from(entry.user_data() >> (u64::BITS - MAX_NUM_CLIENTS_SHIFT))
-                            .unwrap();
+                    let fd = restore_fd(&entry);
+                    let result = match result {
+                        Err(e) if e.raw_os_error() == Some(125) => {
+                            // Cancelled
+                            break 'recv;
+                        }
+                        r => r.map_io_err(|| format!("Failed to recv from client {fd}."))?,
+                    };
 
                     debug_assert!(buffer_select(entry.flags()).is_some());
                     let msg = RecvMsgOut::parse(
@@ -205,12 +214,12 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
 
                     if msg.payload_data().is_empty() {
                         info!("Client {fd} closed the connection.");
-                        clients.disconnect(fd);
+                        clients.set_disconnected(fd);
                         pending_entries.push(
                             Close::new(Fixed(fd))
                                 .build()
                                 .flags(Flags::SKIP_SUCCESS)
-                                .user_data(REQ_TYPE_CLOSE),
+                                .user_data(REQ_TYPE_CLOSE | store_fd(fd)),
                         );
                     } else {
                         if !more(entry.flags()) {
@@ -233,16 +242,40 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                                 requests::connect(msg.payload_data(), &mut send_bufs)?;
                             if version_valid {
                                 info!("Client {fd} connected.");
-                                clients.connect(fd);
+                                clients.set_connected(fd);
                             }
                             Some(resp)
                         };
                         if let Some((token, msghdr)) = response {
                             pending_entries.push(
-                                SendMsg::new(Fixed(fd), msghdr).build().user_data(
-                                    REQ_TYPE_SENDMSG | (u64::from(token) << REQ_TYPE_SHIFT),
-                                ),
+                                SendMsg::new(Fixed(fd), msghdr)
+                                    .build()
+                                    .flags(if clients.is_connected(fd) {
+                                        Flags::empty()
+                                    } else {
+                                        Flags::IO_LINK
+                                    })
+                                    .user_data(
+                                        REQ_TYPE_SENDMSG
+                                            | (u64::from(token) << REQ_TYPE_SHIFT)
+                                            | store_fd(fd),
+                                    ),
                             )
+                        }
+
+                        if !clients.is_connected(fd) {
+                            pending_entries.push(
+                                AsyncCancel2::new(CancelBuilder::fd(Fixed(fd)))
+                                    .build()
+                                    .flags(Flags::IO_LINK | Flags::SKIP_SUCCESS)
+                                    .user_data(REQ_TYPE_CANCEL_FOR_CLOSE | store_fd(fd)),
+                            );
+                            pending_entries.push(
+                                Close::new(Fixed(fd))
+                                    .build()
+                                    .flags(Flags::SKIP_SUCCESS)
+                                    .user_data(REQ_TYPE_CLOSE | store_fd(fd)),
+                            );
                         }
                     }
                 }
@@ -253,18 +286,25 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                         send_bufs.free(token);
                     }
 
+                    let fd = restore_fd(&entry);
                     match result {
                         Err(e) if e.kind() == ErrorKind::BrokenPipe => {
-                            warn!("Client forcefully disconnected: {e:?}");
+                            warn!("Client {fd} forcefully disconnected: {e:?}");
                         }
                         r => {
-                            r.map_io_err(|| "Failed to send response.")?;
+                            r.map_io_err(|| format!("Failed to send response to client {fd}."))?;
                         }
                     }
                 }
+                REQ_TYPE_CANCEL_FOR_CLOSE => {
+                    info!("Handling cancel-to-close completion.");
+                    let fd = restore_fd(&entry);
+                    result.map_io_err(|| format!("Failed to cancel recv for client {fd}."))?;
+                }
                 REQ_TYPE_CLOSE => {
                     info!("Handling close completion.");
-                    result.map_io_err(|| "Failed to close file.")?;
+                    let fd = restore_fd(&entry);
+                    result.map_io_err(|| format!("Failed to close client {fd}."))?;
                 }
                 REQ_TYPE_READ_SIGNALS => {
                     info!("Handling read_signals completion.");
