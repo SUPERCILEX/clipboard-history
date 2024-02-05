@@ -28,22 +28,35 @@ use crate::{requests, send_msg_bufs::SendMsgBufs, CliError};
 
 const MAX_NUM_CLIENTS_SHIFT: u32 = 5;
 const MAX_NUM_CLIENTS: u32 = 1 << MAX_NUM_CLIENTS_SHIFT;
-const URING_ENTRIES: u32 = MAX_NUM_CLIENTS * 2;
+const URING_ENTRIES: u32 = MAX_NUM_CLIENTS * 3;
 
 #[derive(Default, Debug)]
-struct Clients(u32);
+struct Clients {
+    connections: u32,
+    pending_closes: u32,
+}
 
 impl Clients {
     fn is_connected(&self, id: u32) -> bool {
-        (self.0 & (1 << id)) != 0
+        (self.connections & (1 << id)) != 0
+    }
+
+    fn is_closing(&self, id: u32) -> bool {
+        (self.pending_closes & (1 << id)) != 0
     }
 
     fn set_connected(&mut self, id: u32) {
-        self.0 |= 1 << id;
+        self.connections |= 1 << id;
+        self.pending_closes &= !(1 << id);
     }
 
     fn set_disconnected(&mut self, id: u32) {
-        self.0 &= !(1 << id);
+        self.connections &= !(1 << id);
+        self.pending_closes |= 1 << id;
+    }
+
+    fn set_closed(&mut self, id: u32) {
+        self.pending_closes &= !(1 << id);
     }
 }
 
@@ -52,11 +65,11 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
         .setup_coop_taskrun()
         .setup_single_issuer()
         .setup_defer_taskrun()
-        .build(URING_ENTRIES + 2)
+        .build(URING_ENTRIES)
         .map_io_err(|| "Failed to create io_uring.")?;
 
     let signal_handler = unsafe {
-        use std::os::fd::{FromRawFd, OwnedFd};
+        use std::os::fd::FromRawFd;
 
         let mut set = mem::zeroed::<libc::sigset_t>();
         libc::sigemptyset(&mut set);
@@ -237,20 +250,25 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                     let fd = restore_fd(&entry);
                     let result = match result {
                         Err(e) if e.raw_os_error() == Some(125) => {
-                            // Cancelled
+                            info!("Connection to client {fd} cancelled.");
                             break 'recv;
                         }
                         r => r.map_io_err(|| format!("Failed to recv from client {fd}."))?,
                     };
 
                     debug_assert!(buffer_select(entry.flags()).is_some());
-                    let msg = RecvMsgOut::parse(
-                        unsafe { bufs.recycle(entry.flags(), usize::try_from(result).unwrap()) },
-                        &receive_hdr,
-                    )
-                    .map_err(|()| CliError::Internal {
-                        context: "Didn't allocate enough large enough buffers.".into(),
-                    })?;
+                    let data =
+                        unsafe { bufs.recycle(entry.flags(), usize::try_from(result).unwrap()) };
+
+                    if clients.is_closing(fd) {
+                        warn!("Dropping spurious message for client {fd}.");
+                        break 'recv;
+                    }
+
+                    let msg =
+                        RecvMsgOut::parse(data, &receive_hdr).map_err(|()| CliError::Internal {
+                            context: "Didn't allocate enough large enough buffers.".into(),
+                        })?;
                     if msg.is_name_data_truncated()
                         || msg.is_control_data_truncated()
                         || msg.is_payload_truncated()
@@ -263,6 +281,7 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                     if msg.payload_data().is_empty() {
                         info!("Client {fd} closed the connection.");
                         clients.set_disconnected(fd);
+                        clients.set_closed(fd);
                         pending_entries.push(
                             Close::new(Fixed(fd))
                                 .build()
@@ -291,6 +310,8 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                             if version_valid {
                                 info!("Client {fd} connected.");
                                 clients.set_connected(fd);
+                            } else {
+                                clients.set_disconnected(fd);
                             }
                             Some(resp)
                         };
@@ -315,7 +336,7 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                             pending_entries.push(
                                 AsyncCancel2::new(CancelBuilder::fd(Fixed(fd)))
                                     .build()
-                                    .flags(Flags::IO_LINK | Flags::SKIP_SUCCESS)
+                                    .flags(Flags::IO_LINK)
                                     .user_data(REQ_TYPE_CANCEL_FOR_CLOSE | store_fd(fd)),
                             );
                             pending_entries.push(
@@ -348,6 +369,8 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                     info!("Handling cancel-to-close completion.");
                     let fd = restore_fd(&entry);
                     result.map_io_err(|| format!("Failed to cancel recv for client {fd}."))?;
+
+                    clients.set_closed(fd);
                 }
                 REQ_TYPE_CLOSE => {
                     info!("Handling close completion.");
