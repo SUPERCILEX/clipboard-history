@@ -5,13 +5,15 @@ use clipboard_history_core::{
     Error, IoErr,
 };
 use error_stack::Report;
+use log::info;
 use thiserror::Error;
 
 use crate::{path_view::PathView, startup::claim_server_ownership};
 
-mod handler;
 mod path_view;
 mod reactor;
+mod requests;
+mod send_msg_bufs;
 mod startup;
 
 #[derive(Error, Debug)]
@@ -33,6 +35,12 @@ enum Wrapper {
 fn main() -> error_stack::Result<(), Wrapper> {
     #[cfg(not(debug_assertions))]
     error_stack::Report::install_debug_hook::<std::panic::Location>(|_, _| {});
+
+    if cfg!(debug_assertions) {
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    } else {
+        env_logger::init();
+    }
 
     run().map_err(|e| {
         let wrapper = Wrapper::W(e.to_string());
@@ -65,6 +73,7 @@ fn run() -> Result<(), CliError> {
     let server_guard = claim_server_ownership(&PathView::new(&mut data_dir, "server.lock"))?
         .unwrap_or_else(|| todo!());
     let socket_file = socket_file();
+    info!("Acquired server lock.");
 
     let result = reactor::run(data_dir, &socket_file);
     let _ = fs::remove_file(socket_file);

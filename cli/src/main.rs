@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::IoSlice,
+    io::{IoSlice, IoSliceMut},
     mem::size_of,
     os::fd::{AsFd, OwnedFd},
     path::{Path, PathBuf},
@@ -9,12 +9,12 @@ use std::{
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
-use clipboard_history_core::{dirs::socket_file, protocol::Request, Error, IoErr};
+use clipboard_history_core::{dirs::socket_file, protocol, protocol::Request, Error, IoErr};
 use error_stack::Report;
 use rustix::{
     net::{
-        connect_unix, sendmsg_unix, socket, AddressFamily, SendAncillaryBuffer,
-        SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketType,
+        connect_unix, recvmsg, sendmsg_unix, socket, AddressFamily, RecvAncillaryBuffer, RecvFlags,
+        SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketType,
     },
     stdio::stdin,
 };
@@ -206,6 +206,11 @@ struct Dump {
 enum CliError {
     #[error("{0}")]
     Core(#[from] Error),
+    #[error(
+        "Protocol version mismatch: expected {} but got {actual}",
+        protocol::VERSION
+    )]
+    VersionMismatch { actual: u8 },
 }
 
 #[derive(Error, Debug)]
@@ -224,7 +229,8 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::Core(Error::Io { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
-            CliError::Core(Error::NotARingboard { file: _ }) => Report::new(wrapper),
+            CliError::Core(Error::NotARingboard { file: _ })
+            | CliError::VersionMismatch { actual: _ } => Report::new(wrapper),
             CliError::Core(Error::InvalidPidError { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
@@ -263,6 +269,31 @@ fn connect_to_server(addr: &SocketAddrUnix, socket_file: &Path) -> Result<OwnedF
         .map_io_err(|| format!("Failed to create socket: {socket_file:?}"))?;
     connect_unix(&socket, addr)
         .map_io_err(|| format!("Failed to connect to server: {socket_file:?}"))?;
+
+    {
+        sendmsg_unix(
+            &socket,
+            addr,
+            &[IoSlice::new(&[protocol::VERSION])],
+            &mut SendAncillaryBuffer::default(),
+            SendFlags::empty(),
+        )
+        .map_io_err(|| "Failed to send message.")?;
+
+        let mut version = 0;
+        recvmsg(
+            &socket,
+            &mut [IoSliceMut::new(slice::from_mut(&mut version))],
+            &mut RecvAncillaryBuffer::default(),
+            RecvFlags::TRUNC,
+        )
+        .map_io_err(|| "Failed to receive message.")?;
+
+        if version != protocol::VERSION {
+            return Err(CliError::VersionMismatch { actual: version });
+        }
+    }
+
     Ok(socket)
 }
 

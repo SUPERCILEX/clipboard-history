@@ -11,7 +11,7 @@ license.workspace = true
 
 [dependencies]
 dirs = "5.0.1"
-rustix = { version = "0.38.30", features = ["fs", "mm"] }
+rustix = { version = "0.38.30", features = ["fs", "mm"], path = "/home/asaveau/Desktop/wip/rustix" }
 thiserror = "1.0.56"
 
 [dev-dependencies]

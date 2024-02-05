@@ -12,9 +12,11 @@ license.workspace = true
 [dependencies]
 arrayvec = "0.7.4"
 clipboard-history-core = { version = "0", path = "../ringboard" }
+env_logger = "0.11.1"
 error-stack = "0.4.1"
 io-uring = { version = "0.6.2", path = "/home/asaveau/Desktop/wip/io-uring" }
 itoa = "1.0.10"
 libc = "0.2.152"
-rustix = { version = "0.38.30", features = ["fs", "process", "net"] }
+log = { version = "0.4.20", features = ["release_max_level_info"] }
+rustix = { version = "0.38.30", features = ["fs", "process", "net"], path = "/home/asaveau/Desktop/wip/rustix" }
 thiserror = "1.0.56"
