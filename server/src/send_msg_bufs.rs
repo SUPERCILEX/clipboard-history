@@ -86,4 +86,8 @@ impl SendMsgBufs {
         self.pool
             .push(unsafe { self.bufs[usize::from(token)].assume_init_read() });
     }
+
+    pub fn trim(&mut self) {
+        self.pool.clear();
+    }
 }

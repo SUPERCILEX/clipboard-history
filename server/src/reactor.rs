@@ -1,8 +1,10 @@
 use std::{
-    fs, io,
-    io::ErrorKind,
+    fs,
+    fs::File,
+    io,
+    io::{ErrorKind, Read as StdRead, Write},
     mem,
-    os::fd::AsRawFd,
+    os::fd::{AsRawFd, OwnedFd},
     path::{Path, PathBuf},
     ptr, slice,
 };
@@ -12,7 +14,7 @@ use clipboard_history_core::{protocol::Request, IoErr};
 use io_uring::{
     buf_ring::BufRing,
     cqueue::{buffer_select, more, Entry},
-    opcode::{AcceptMulti, AsyncCancel2, Close, Read, RecvMsgMulti, SendMsg},
+    opcode::{AcceptMulti, AsyncCancel2, Close, PollAdd, Read, RecvMsgMulti, SendMsg},
     squeue::Flags,
     types::{CancelBuilder, Fixed, RecvMsgOut},
     IoUring,
@@ -50,7 +52,7 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
         .setup_coop_taskrun()
         .setup_single_issuer()
         .setup_defer_taskrun()
-        .build(URING_ENTRIES)
+        .build(URING_ENTRIES + 2)
         .map_io_err(|| "Failed to create io_uring.")?;
 
     let signal_handler = unsafe {
@@ -71,6 +73,39 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
             });
         }
         OwnedFd::from_raw_fd(fd)
+    };
+
+    let low_mem_listener = {
+        let mut cgroup = String::from("/sys/fs/cgroup");
+        let start = cgroup.len();
+        File::open("/proc/self/cgroup")
+            .map_io_err(|| "Failed to open cgroup file: \"/proc/self/cgroup\"")?
+            .read_to_string(&mut cgroup)
+            .map_io_err(|| "Failed to read cgroup file: \"/proc/self/cgroup\"")?;
+        cgroup.replace_range(
+            start
+                ..=cgroup
+                    .match_indices(':')
+                    .nth(1)
+                    .map(|(idx, _)| idx)
+                    .unwrap_or(start),
+            "",
+        );
+        cgroup.truncate(cgroup.trim_end().len());
+
+        let mut mem_pressure_path = PathBuf::from(cgroup);
+        mem_pressure_path.push("memory.pressure");
+        let mut mem_pressure = File::options()
+            .read(true)
+            .write(true)
+            .open(&mem_pressure_path)
+            .map_io_err(|| format!("Failed to open pressure file: {mem_pressure_path:?}"))?;
+
+        mem_pressure
+            .write_all("some 50000 2000000".as_bytes())
+            .map_io_err(|| format!("Failed to write to pressure file: {mem_pressure_path:?}"))?;
+
+        OwnedFd::from(mem_pressure)
     };
 
     let socket = {
@@ -94,7 +129,11 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
         socket
     };
 
-    let built_ins = [socket.as_raw_fd(), signal_handler.as_raw_fd()];
+    let built_ins = [
+        socket.as_raw_fd(),
+        signal_handler.as_raw_fd(),
+        low_mem_listener.as_raw_fd(),
+    ];
     uring
         .submitter()
         .register_files_sparse(MAX_NUM_CLIENTS + u32::try_from(built_ins.len()).unwrap())
@@ -118,6 +157,7 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
     const REQ_TYPE_READ_SIGNALS: u64 = 3;
     const REQ_TYPE_SENDMSG: u64 = 4;
     const REQ_TYPE_CANCEL_FOR_CLOSE: u64 = 5;
+    const REQ_TYPE_LOW_MEM: u64 = 6;
     const REQ_TYPE_MASK: u64 = 0b111;
     const REQ_TYPE_SHIFT: u32 = REQ_TYPE_MASK.count_ones();
 
@@ -125,6 +165,13 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
         .allocate_file_index(true)
         .build()
         .user_data(REQ_TYPE_ACCEPT);
+    let poll_low_mem = PollAdd::new(
+        Fixed(MAX_NUM_CLIENTS + 2),
+        u32::try_from(libc::POLLPRI).unwrap(),
+    )
+    .multi(true)
+    .build()
+    .user_data(REQ_TYPE_LOW_MEM);
     let receive_hdr = {
         let mut hdr = unsafe { mem::zeroed::<libc::msghdr>() };
         hdr.msg_controllen = 24;
@@ -153,14 +200,13 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
         let mut submission = uring.submission();
         unsafe {
             submission
-                .push_multiple(&[accept.clone(), read_signals])
+                .push_multiple(&[accept.clone(), read_signals, poll_low_mem.clone()])
                 .unwrap();
         }
     }
 
     info!("Server event loop started.");
 
-    let mut needs_reaccept = false;
     let mut bufs = buf_ring.submissions();
     let mut send_bufs = SendMsgBufs::new();
     let mut clients = Clients::default();
@@ -179,7 +225,9 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
                 REQ_TYPE_ACCEPT => {
                     info!("Handling accept completion.");
                     let result = result.map_io_err(|| "Failed to accept socket connection.")?;
-                    needs_reaccept |= !more(entry.flags());
+                    if !more(entry.flags()) {
+                        pending_entries.push(accept.clone());
+                    }
                     pending_entries
                         .push(recvmsg(result).user_data(REQ_TYPE_RECV | store_fd(result)));
                     debug_assert_eq!(0, result & !MAX_NUM_CLIENTS_SHIFT);
@@ -314,6 +362,27 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
 
                     break 'outer;
                 }
+                REQ_TYPE_LOW_MEM => {
+                    info!("Handling low memory completion.");
+                    let result = result.map_io_err(|| "Failed to poll.")?;
+
+                    if !more(entry.flags()) {
+                        pending_entries.push(poll_low_mem.clone());
+                    }
+
+                    if (result & u32::try_from(libc::POLLERR).unwrap()) != 0 {
+                        return Err(CliError::Internal {
+                            context: "Error polling for low memory events".into(),
+                        });
+                    } else if (result & u32::try_from(libc::POLLPRI).unwrap()) != 0 {
+                        send_bufs.trim();
+                    } else {
+                        return Err(CliError::Internal {
+                            context: format!("Unknown low memory poll event received: {result}")
+                                .into(),
+                        });
+                    }
+                }
                 _ => {
                     return Err(CliError::Internal {
                         context: format!("Unknown request: {}", entry.user_data()).into(),
@@ -328,10 +397,6 @@ pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
         unsafe { submission.push_multiple(&pending_entries) }.map_err(|_| CliError::Internal {
             context: "Didn't allocate enough io_uring slots.".into(),
         })?;
-        if needs_reaccept && unsafe { submission.push(&accept) }.is_ok() {
-            debug!("Queueing accept: {accept:?}");
-            needs_reaccept = false;
-        }
     }
     Ok(())
 }
