@@ -36,11 +36,12 @@ impl SendMsgBufs {
 
         let metadata_end = mem::size_of::<libc::msghdr>() + mem::size_of::<libc::iovec>();
         let control_end = metadata_end + control_bytes;
+        let data_end = control_end + data_bytes;
         let mut buf = self.pool.pop().unwrap_or_default();
-        buf.reserve_exact(control_end + data_bytes);
+        buf.reserve_exact(data_end);
 
-        control(&mut buf.spare_capacity_mut()[metadata_end..]);
-        data(&mut buf.spare_capacity_mut()[control_end..]);
+        control(&mut buf.spare_capacity_mut()[metadata_end..control_end]);
+        data(&mut buf.spare_capacity_mut()[control_end..data_end]);
 
         {
             let ptr = buf.spare_capacity_mut().as_mut_ptr();
@@ -68,7 +69,7 @@ impl SendMsgBufs {
             unsafe {
                 ptr::copy_nonoverlapping(
                     ptr::from_ref(&iov).cast(),
-                    ptr,
+                    ptr.add(mem::size_of::<libc::msghdr>()),
                     mem::size_of::<libc::iovec>(),
                 )
             }
