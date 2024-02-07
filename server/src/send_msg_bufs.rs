@@ -92,3 +92,73 @@ impl SendMsgBufs {
         self.pool.clear();
     }
 }
+
+impl Drop for SendMsgBufs {
+    fn drop(&mut self) {
+        for i in 0..u64::BITS {
+            if (self.allocated_mask >> i) & 1 == 1 {
+                unsafe {
+                    self.bufs[usize::try_from(i).unwrap()].assume_init_drop();
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::mem::MaybeUninit;
+
+    use crate::send_msg_bufs::SendMsgBufs;
+
+    #[test]
+    fn fill() {
+        let mut bufs = SendMsgBufs::new();
+        for _ in 0..u64::BITS {
+            bufs.alloc(
+                69,
+                420,
+                |control| {
+                    control[22].write(42);
+                },
+                |data| data.fill(MaybeUninit::new(0xDE)),
+            )
+            .unwrap();
+        }
+
+        assert!(
+            bufs.alloc(
+                69,
+                420,
+                |control| {
+                    control[22].write(42);
+                },
+                |data| data.fill(MaybeUninit::new(0xDE)),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn free_random() {
+        let mut bufs = SendMsgBufs::new();
+
+        let tokens = (0..3)
+            .map(|_| {
+                bufs.alloc(
+                    69,
+                    420,
+                    |control| {
+                        control[22].write(42);
+                    },
+                    |data| data.fill(MaybeUninit::new(0xDE)),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        unsafe {
+            bufs.free(tokens[1].0.into());
+        }
+    }
+}
