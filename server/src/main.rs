@@ -8,8 +8,9 @@ use error_stack::Report;
 use log::info;
 use thiserror::Error;
 
-use crate::{startup::claim_server_ownership, views::PathView};
+use crate::{allocator::Allocator, startup::claim_server_ownership, views::PathView};
 
+mod allocator;
 mod reactor;
 mod requests;
 mod send_msg_bufs;
@@ -22,6 +23,15 @@ enum CliError {
     Core(#[from] Error),
     #[error("The server is already running (PID {pid})")]
     ServerAlreadyRunning { pid: NonZeroU32, lock_file: PathBuf },
+    #[error("Failed to deserialize free lists.")]
+    FreeListsDeserializeError {
+        file: PathBuf,
+        error: bitcode::Error,
+    },
+    #[error("Failed to serialize free lists.")]
+    FreeListsSerializeError(bitcode::Error),
+    #[error("A chain of errors occurred.")]
+    Stacked(Report<CliError>),
     #[error("Internal error")]
     Internal { context: Cow<'static, str> },
 }
@@ -59,6 +69,11 @@ fn main() -> error_stack::Result<(), Wrapper> {
                      to initiate the recovery sequence on the next startup.",
                 )
                 .attach_printable(format!("Lock file: {lock_file:?}")),
+            CliError::FreeListsDeserializeError { file, error } => Report::new(wrapper)
+                .attach_printable(error)
+                .attach_printable(format!("Free lists file: {file:?}")),
+            CliError::FreeListsSerializeError(error) => Report::new(wrapper).attach_printable(error),
+            CliError::Stacked(r) => r.change_context(wrapper),
             CliError::Internal { context } => Report::new(wrapper)
                 .attach_printable(context)
                 .attach_printable("Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new"),
@@ -84,8 +99,24 @@ fn run() -> Result<(), CliError> {
     let socket_file = socket_file();
     info!("Acquired server lock.");
 
-    let result = reactor::run(data_dir, &socket_file);
-    let _ = fs::remove_file(socket_file);
-    server_guard.shutdown()?;
-    result
+    let mut allocator = Allocator::open(data_dir)?;
+    [
+        reactor::run(&mut allocator, &socket_file),
+        fs::remove_file(&socket_file)
+            .map_io_err(|| format!("Failed to delete server socket: {socket_file:?}"))
+            .map_err(CliError::from),
+        allocator.shutdown(),
+        server_guard.shutdown(),
+    ]
+    .into_iter()
+    .fold(None::<Report<CliError>>, |err, r| match (r, err) {
+        (Ok(()), err) => err,
+        (Err(e), None) => Some(Report::from(e)),
+        (Err(e), Some(mut err)) => {
+            err.extend_one(e.into());
+            Some(err)
+        }
+    })
+    .map(|e| Err(CliError::Stacked(e)))
+    .unwrap_or(Ok(()))
 }

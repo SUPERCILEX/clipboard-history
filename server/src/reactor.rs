@@ -24,7 +24,7 @@ use rustix::net::{
     bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType,
 };
 
-use crate::{requests, send_msg_bufs::SendMsgBufs, CliError};
+use crate::{allocator::Allocator, requests, send_msg_bufs::SendMsgBufs, CliError};
 
 const MAX_NUM_CLIENTS_SHIFT: u32 = 5;
 const MAX_NUM_CLIENTS: u32 = 1 << MAX_NUM_CLIENTS_SHIFT;
@@ -158,7 +158,7 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
     Ok((uring, buf_ring))
 }
 
-pub fn run(_data_dir: PathBuf, socket_file: &Path) -> Result<(), CliError> {
+pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError> {
     const REQ_TYPE_ACCEPT: u64 = 0;
     const REQ_TYPE_RECV: u64 = 1;
     const REQ_TYPE_CLOSE: u64 = 2;
