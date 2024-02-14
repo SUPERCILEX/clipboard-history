@@ -1,11 +1,10 @@
-use std::{fs::File, io::Read};
-
 use arrayvec::ArrayVec;
 use clipboard_history_core::{protocol, protocol::Request};
 use log::{info, warn};
 use rustix::net::{AncillaryDrain, RecvAncillaryMessage};
 
 use crate::{
+    allocator::Allocator,
     send_msg_bufs::{SendMsgBufs, Token},
     CliError,
 };
@@ -44,6 +43,7 @@ pub fn handle(
     request: &Request,
     control_data: &mut [u8],
     send_bufs: &mut SendMsgBufs,
+    allocator: &mut Allocator,
 ) -> Result<Option<(Token, *const libc::msghdr)>, CliError> {
     info!("Processing request: {request:?}");
     match request {
@@ -56,12 +56,11 @@ pub fn handle(
                 }
             }
 
+            let mut ids = ArrayVec::<_, 1>::new();
             for fd in fds {
-                let mut f = File::from(fd);
-                let mut s = String::new();
-                f.read_to_string(&mut s).unwrap();
-                dbg!(s);
+                ids.push(allocator.add(fd)?);
             }
+
             Ok(None)
         }
     }

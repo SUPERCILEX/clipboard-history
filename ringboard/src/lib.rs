@@ -21,7 +21,7 @@ pub enum Error {
         error: io::Error,
         context: Cow<'static, str>,
     },
-    #[error("The provided file was not a Ringboard database: {file:?}")]
+    #[error("Not a Ringboard database: {file:?}")]
     NotARingboard { file: PathBuf },
     #[error("Invalid PID")]
     InvalidPidError {

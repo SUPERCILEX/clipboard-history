@@ -9,6 +9,15 @@ use rustix::{
     path::Arg,
 };
 
+pub const TEXT_MIMES: &[&str] = &[
+    "",
+    "text",
+    "string",
+    "utf8_string",
+    "text/plain",
+    "text/plain;charset=utf-8",
+];
+
 pub fn link_tmp_file<Fd: AsFd, P: Arg>(tmp_file: Fd, path: P) -> rustix::io::Result<()> {
     const _: () = assert!(RawFd::BITS <= i32::BITS);
     let mut buf = [0u8; "/proc/self/fd/".len() + "-2147483648".len() + 1];

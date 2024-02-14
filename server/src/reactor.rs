@@ -297,6 +297,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
                                     )
                                 },
                                 &mut send_bufs,
+                                allocator,
                             )?
                         } else {
                             let (version_valid, resp) =
