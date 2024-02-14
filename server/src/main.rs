@@ -8,13 +8,13 @@ use error_stack::Report;
 use log::info;
 use thiserror::Error;
 
-use crate::{path_view::PathView, startup::claim_server_ownership};
+use crate::{startup::claim_server_ownership, views::PathView};
 
-mod path_view;
 mod reactor;
 mod requests;
 mod send_msg_bufs;
 mod startup;
+mod views;
 
 #[derive(Error, Debug)]
 enum CliError {
