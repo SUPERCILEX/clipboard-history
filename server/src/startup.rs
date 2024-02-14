@@ -1,14 +1,16 @@
 use std::{
+    fmt::Write as FmtWrite,
     fs::File,
     io::{ErrorKind::AlreadyExists, Write},
     num::NonZeroU32,
+    os::fd::AsRawFd,
     path::{Path, PathBuf},
     process,
 };
 
-use clipboard_history_core::{utils::read_server_pid, IoErr};
+use clipboard_history_core::{read_server_pid, IoErr};
 use rustix::{
-    fs::{openat, unlinkat, AtFlags, Mode, OFlags, CWD},
+    fs::{linkat, openat, unlinkat, AtFlags, Mode, OFlags, CWD},
     io::Errno,
     process::{test_kill_process, Pid},
 };
@@ -27,12 +29,29 @@ impl OwnedServer {
 }
 
 pub fn claim_server_ownership(lock_file_path: &Path) -> Result<Option<OwnedServer>, CliError> {
-    let lock_file = match openat(
-        CWD,
-        lock_file_path,
-        OFlags::RDWR | OFlags::CREATE | OFlags::EXCL,
-        Mode::RUSR,
-    ) {
+    let mut lock_file = File::from(
+        openat(
+            CWD,
+            lock_file_path.parent().unwrap(),
+            OFlags::WRONLY | OFlags::TMPFILE,
+            Mode::RUSR,
+        )
+        .map_io_err(|| format!("Failed to create server lock temp file: {lock_file_path:?}"))?,
+    );
+
+    {
+        let mut buf = itoa::Buffer::new();
+        lock_file
+            .write_all(buf.format(process::id()).as_bytes())
+            .map_io_err(|| format!("Failed to write to server lock file: {lock_file_path:?}"))?;
+    }
+
+    #[allow(clippy::blocks_in_conditions)]
+    match {
+        let mut s = String::from("/proc/self/fd/");
+        write!(s, "{}", lock_file.as_raw_fd()).unwrap();
+        linkat(CWD, &s, CWD, lock_file_path, AtFlags::SYMLINK_FOLLOW)
+    } {
         Err(e) if e.kind() == AlreadyExists => {
             let pid = read_server_pid(lock_file_path)?;
             let Some(pid) = NonZeroU32::new(pid) else {
@@ -53,16 +72,8 @@ pub fn claim_server_ownership(lock_file_path: &Path) -> Result<Option<OwnedServe
                 lock_file: lock_file_path.to_path_buf(),
             });
         }
-        r => r.map_io_err(|| format!("Failed to create server lock file: {lock_file_path:?}"))?,
+        r => r.map_io_err(|| format!("Failed to acquire server lock: {lock_file_path:?}"))?,
     };
-    let mut lock_file = File::from(lock_file);
-
-    {
-        let mut buf = itoa::Buffer::new();
-        lock_file
-            .write_all(buf.format(process::id()).as_bytes())
-            .map_io_err(|| format!("Failed to write to server lock file: {lock_file_path:?}"))?;
-    }
 
     Ok(Some(OwnedServer(lock_file_path.to_path_buf())))
 }

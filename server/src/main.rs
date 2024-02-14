@@ -70,8 +70,17 @@ fn run() -> Result<(), CliError> {
     let mut data_dir = data_dir();
     fs::create_dir_all(&data_dir)
         .map_io_err(|| format!("Failed to create data directory: {data_dir:?}"))?;
-    let server_guard = claim_server_ownership(&PathView::new(&mut data_dir, "server.lock"))?
-        .unwrap_or_else(|| todo!());
+    let server_guard = {
+        let lock = PathView::new(&mut data_dir, "server.lock");
+        loop {
+            if let Some(g) = claim_server_ownership(&lock)? {
+                break g;
+            }
+
+            fs::remove_file(&lock)
+                .map_io_err(|| format!("Failed to delete server lock: {lock:?}"))?;
+        }
+    };
     let socket_file = socket_file();
     info!("Acquired server lock.");
 

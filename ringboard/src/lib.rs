@@ -4,11 +4,12 @@
 use std::{borrow::Cow, io, num::ParseIntError, path::PathBuf};
 
 use thiserror::Error;
+pub use utils::read_server_pid;
 
 pub mod dirs;
 pub mod protocol;
 pub mod ring;
-pub mod utils;
+mod utils;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
