@@ -313,11 +313,10 @@ fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<
     let fds = [file.as_ref().map(|file| file.as_fd()).unwrap_or(stdin())];
     debug_assert!(buf.push(SendAncillaryMessage::ScmRights(&fds)));
 
-    let data = Request::Add;
     sendmsg_unix(
         server,
         &addr,
-        &[IoSlice::new(request_to_bytes(&data))],
+        &[IoSlice::new(Request::Add.as_bytes())],
         &mut buf,
         SendFlags::empty(),
     )
@@ -325,12 +324,13 @@ fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<
     Ok(())
 }
 
-fn request_to_bytes(request: &Request) -> &[u8] {
-    unsafe {
-        slice::from_raw_parts(
-            ptr::from_ref::<Request>(request).cast(),
-            size_of::<Request>(),
-        )
+trait AsBytes<T> {
+    fn as_bytes(&self) -> &[u8];
+}
+
+impl<T> AsBytes<T> for T {
+    fn as_bytes(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(ptr::from_ref::<T>(self).cast(), size_of::<T>()) }
     }
 }
 
