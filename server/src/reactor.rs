@@ -96,15 +96,9 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
             .map_io_err(|| "Failed to open cgroup file: \"/proc/self/cgroup\"")?
             .read_to_string(&mut cgroup)
             .map_io_err(|| "Failed to read cgroup file: \"/proc/self/cgroup\"")?;
-        cgroup.replace_range(
-            start
-                ..=cgroup
-                    .match_indices(':')
-                    .nth(1)
-                    .map(|(idx, _)| idx)
-                    .unwrap_or(start - 1),
-            "",
-        );
+        if let Some((idx, _)) = cgroup.match_indices(':').nth(1) {
+            cgroup.replace_range(start..=idx, "");
+        }
         cgroup.truncate(cgroup.trim_end().len());
 
         let mut mem_pressure_path = PathBuf::from(cgroup);
