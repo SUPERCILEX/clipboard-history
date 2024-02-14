@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fs, num::NonZeroU32, path::PathBuf};
+use std::{borrow::Cow, collections::VecDeque, fs, num::NonZeroU32, path::PathBuf};
 
 use clipboard_history_core::{
     dirs::{data_dir, socket_file},
@@ -77,8 +77,9 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
             .attach_printable(error)
             .attach_printable(format!("Free lists file: {file:?}")),
         CliError::FreeListsSerializeError(error) => Report::new(wrapper).attach_printable(error),
-        CliError::Multiple(mut errs) => {
-            let mut report = into_report(errs.pop().unwrap_or(CliError::Internal {
+        CliError::Multiple(errs) => {
+            let mut errs = VecDeque::from(errs);
+            let mut report = into_report(errs.pop_front().unwrap_or(CliError::Internal {
                 context: "Multiple errors variant contained no errors".into(),
             }));
             report.extend(errs.into_iter().map(into_report));
@@ -130,7 +131,6 @@ fn run() -> Result<(), CliError> {
         ]
         .into_iter()
         .flat_map(Result::err)
-        .rev()
         .collect::<Vec<_>>(),
     )
 }
