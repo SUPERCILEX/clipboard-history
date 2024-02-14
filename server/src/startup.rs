@@ -1,21 +1,19 @@
 use std::{
-    fmt::Write as FmtWrite,
     fs::File,
     io::{ErrorKind::AlreadyExists, Write},
     num::NonZeroU32,
-    os::fd::AsRawFd,
     path::{Path, PathBuf},
     process,
 };
 
 use clipboard_history_core::{read_server_pid, IoErr};
 use rustix::{
-    fs::{linkat, openat, unlinkat, AtFlags, Mode, OFlags, CWD},
+    fs::{openat, unlinkat, AtFlags, Mode, OFlags, CWD},
     io::Errno,
     process::{test_kill_process, Pid},
 };
 
-use crate::CliError;
+use crate::{utils::link_tmp_file, CliError};
 
 #[must_use]
 pub struct OwnedServer(PathBuf);
@@ -39,19 +37,10 @@ pub fn claim_server_ownership(lock_file_path: &Path) -> Result<Option<OwnedServe
         .map_io_err(|| format!("Failed to create server lock temp file: {lock_file_path:?}"))?,
     );
 
-    {
-        let mut buf = itoa::Buffer::new();
-        lock_file
-            .write_all(buf.format(process::id()).as_bytes())
-            .map_io_err(|| format!("Failed to write to server lock file: {lock_file_path:?}"))?;
-    }
+    write!(lock_file, "{}", process::id())
+        .map_io_err(|| format!("Failed to write to server lock file: {lock_file_path:?}"))?;
 
-    #[allow(clippy::blocks_in_conditions)]
-    match {
-        let mut s = String::from("/proc/self/fd/");
-        write!(s, "{}", lock_file.as_raw_fd()).unwrap();
-        linkat(CWD, &s, CWD, lock_file_path, AtFlags::SYMLINK_FOLLOW)
-    } {
+    match link_tmp_file(lock_file, lock_file_path) {
         Err(e) if e.kind() == AlreadyExists => {
             let pid = read_server_pid(lock_file_path)?;
             let Some(pid) = NonZeroU32::new(pid) else {

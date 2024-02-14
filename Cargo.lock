@@ -227,7 +227,7 @@ dependencies = [
  "clap-num",
  "clipboard-history-core",
  "error-stack",
- "rustix 0.38.30",
+ "rustix 0.38.31",
  "supercilex-tests",
  "thiserror",
 ]
@@ -237,7 +237,7 @@ name = "clipboard-history-core"
 version = "0.0.0"
 dependencies = [
  "dirs",
- "rustix 0.38.30",
+ "rustix 0.38.31",
  "supercilex-tests",
  "thiserror",
 ]
@@ -252,10 +252,9 @@ dependencies = [
  "env_logger",
  "error-stack",
  "io-uring",
- "itoa",
  "libc",
  "log",
- "rustix 0.38.30",
+ "rustix 0.38.31",
  "thiserror",
 ]
 
@@ -614,6 +613,8 @@ dependencies = [
 [[package]]
 name = "rustix"
 version = "0.38.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "322394588aaf33c24007e8bb3238ee3e4c5c09c084ab32bc73890b99ff326bca"
 dependencies = [
  "bitflags 2.4.2",
  "errno",
@@ -624,9 +625,7 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.30"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "322394588aaf33c24007e8bb3238ee3e4c5c09c084ab32bc73890b99ff326bca"
+version = "0.38.31"
 dependencies = [
  "bitflags 2.4.2",
  "errno",
@@ -731,7 +730,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21bebf2b7c9e0a515f6e0f8c51dc0f8e4696391e6f1ff30379559f8365fb0df7"
 dependencies = [
- "rustix 0.38.30 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustix 0.38.30",
  "windows-sys 0.48.0",
 ]
 
