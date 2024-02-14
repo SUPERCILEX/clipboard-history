@@ -46,18 +46,25 @@ struct FreeLists {
 struct RawFreeLists([Vec<u32>; 11]);
 
 impl FreeLists {
-    fn load<P: AsRef<Path> + Debug>(path: P) -> Result<Self, CliError> {
-        // TODO use openat syscalls
-        let mut file = match File::open(&path) {
+    fn load<P: AsRef<Path>>(path: P) -> Result<Self, CliError> {
+        let path = path.as_ref();
+        let mut file = match openat(CWD, path, OFlags::RDWR, Mode::empty()) {
             Err(e) if e.kind() == ErrorKind::NotFound => {
-                let file = File::create(&path)
-                    .map_io_err(|| format!("Failed to create free lists file: {path:?}"))?;
+                let file = File::from(
+                    openat(
+                        CWD,
+                        path,
+                        OFlags::RDWR | OFlags::CREATE | OFlags::EXCL,
+                        Mode::RUSR | Mode::WUSR,
+                    )
+                    .map_io_err(|| format!("Failed to create free lists file: {path:?}"))?,
+                );
                 return Ok(Self {
                     lists: RawFreeLists::default(),
                     file,
                 });
             }
-            r => r.map_io_err(|| format!("Failed to open free lists: {path:?}"))?,
+            r => File::from(r.map_io_err(|| format!("Failed to open free lists: {path:?}"))?),
         };
 
         let mut bytes = Vec::new();
@@ -69,7 +76,7 @@ impl FreeLists {
         } else {
             let lists =
                 bitcode::decode(&bytes).map_err(|e| CliError::FreeListsDeserializeError {
-                    file: path.as_ref().into(),
+                    file: path.into(),
                     error: e,
                 })?;
             file.set_len(0)
@@ -81,7 +88,7 @@ impl FreeLists {
     fn save(&mut self) -> Result<(), CliError> {
         let bytes = bitcode::encode(&self.lists).map_err(CliError::FreeListsSerializeError)?;
         self.file
-            .write_all(&bytes)
+            .write_all_at(&bytes, 0)
             .map_io_err(|| "Failed to write free lists.")?;
         Ok(())
     }
@@ -225,45 +232,52 @@ impl Allocator {
                     free_lists,
                 } = &mut self.buckets;
 
-                let grow = free_lists.alloc(bucket).is_none();
-
                 let bucket_index = free_lists
                     .alloc(bucket)
                     .unwrap_or_else(|| bucket_lengths[bucket]);
                 let mut offset = u64::from(bucket_index) << (bucket + 2);
-                if grow {
-                    bucket_lengths[bucket] += 1;
-                }
                 let bucket_len = 1 << (bucket + 2);
 
-                let mut total_copied = 0;
-                loop {
-                    let byte_copied = copy_file_range(
-                        &data,
-                        None,
-                        &buckets[bucket],
-                        Some(&mut offset),
-                        bucket_len - total_copied,
-                    )
-                    .map_io_err(|| format!("Failed to copy new data to bucket {bucket}.",))?;
+                {
+                    let mut total_copied = 0;
+                    loop {
+                        let byte_copied = copy_file_range(
+                            &data,
+                            None,
+                            &buckets[bucket],
+                            Some(&mut offset),
+                            bucket_len - total_copied,
+                        )
+                        .map_io_err(|| format!("Failed to copy new data to bucket {bucket}.",))?;
 
-                    if byte_copied == 0 {
-                        break;
+                        if byte_copied == 0 {
+                            break;
+                        }
+                        total_copied += byte_copied;
                     }
-                    total_copied += byte_copied;
                 }
 
-                let zeros = [0; 2047];
-                buckets[bucket]
-                    .write_all_at(
-                        if grow {
-                            &zeros[..bucket_len - usize::try_from(size).unwrap()]
-                        } else {
-                            &[0]
-                        },
-                        offset,
-                    )
-                    .map_io_err(|| format!("Failed to write NUL bytes to bucket {bucket}.",))?;
+                {
+                    let grow = free_lists.alloc(bucket).is_none();
+                    if grow {
+                        bucket_lengths[bucket] += 1;
+                    }
+
+                    if usize::try_from(size).unwrap() < bucket_len {
+                        buckets[bucket]
+                            .write_all_at(
+                                &[0],
+                                if grow {
+                                    (u64::from(bucket_lengths[bucket]) << (bucket + 2)) - 1
+                                } else {
+                                    offset
+                                },
+                            )
+                            .map_io_err(|| {
+                                format!("Failed to write NUL bytes to bucket {bucket}.",)
+                            })?;
+                    }
+                }
 
                 Ok(Entry::Bucketed(
                     BucketEntry::new(size, bucket_index).unwrap(),

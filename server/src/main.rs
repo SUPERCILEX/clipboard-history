@@ -30,8 +30,8 @@ enum CliError {
     },
     #[error("Failed to serialize free lists.")]
     FreeListsSerializeError(bitcode::Error),
-    #[error("A chain of errors occurred.")]
-    Stacked(Report<CliError>),
+    #[error("Multiple errors occurred.")]
+    Multiple(Vec<CliError>),
     #[error("Internal error")]
     Internal { context: Cow<'static, str> },
 }
@@ -52,33 +52,51 @@ fn main() -> error_stack::Result<(), Wrapper> {
         env_logger::init();
     }
 
-    run().map_err(|e| {
-        let wrapper = Wrapper::W(e.to_string());
-        match e {
-            CliError::Core(Error::Io { error, context }) => Report::new(error)
-                .attach_printable(context)
-                .change_context(wrapper),
-            CliError::Core(Error::NotARingboard { file: _ }) => Report::new(wrapper),
-            CliError::Core(Error::InvalidPidError { error, context }) => Report::new(error)
-                .attach_printable(context)
-                .change_context(wrapper),
-            CliError::ServerAlreadyRunning { pid: _, lock_file } => Report::new(wrapper)
-                .attach_printable(
-                    "Unable to safely start server: please shut down the existing instance. If \
-                     something has gone terribly wrong, please create an empty server lock file \
-                     to initiate the recovery sequence on the next startup.",
-                )
-                .attach_printable(format!("Lock file: {lock_file:?}")),
-            CliError::FreeListsDeserializeError { file, error } => Report::new(wrapper)
-                .attach_printable(error)
-                .attach_printable(format!("Free lists file: {file:?}")),
-            CliError::FreeListsSerializeError(error) => Report::new(wrapper).attach_printable(error),
-            CliError::Stacked(r) => r.change_context(wrapper),
-            CliError::Internal { context } => Report::new(wrapper)
-                .attach_printable(context)
-                .attach_printable("Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new"),
+    run().map_err(into_report)
+}
+
+fn into_report(cli_err: CliError) -> Report<Wrapper> {
+    let wrapper = Wrapper::W(cli_err.to_string());
+    match cli_err {
+        CliError::Core(Error::Io { error, context }) => Report::new(error)
+            .attach_printable(context)
+            .change_context(wrapper),
+        CliError::Core(Error::NotARingboard { file: _ }) => Report::new(wrapper),
+        CliError::Core(Error::InvalidPidError { error, context }) => Report::new(error)
+            .attach_printable(context)
+            .change_context(wrapper),
+        CliError::ServerAlreadyRunning { pid: _, lock_file } => Report::new(wrapper)
+            .attach_printable(
+                "Unable to safely start server: please shut down the existing instance. If \
+                 something has gone terribly wrong, please create an empty server lock file to \
+                 initiate the recovery sequence on the next startup.",
+            )
+            .attach_printable(format!("Lock file: {lock_file:?}")),
+        CliError::FreeListsDeserializeError { file, error } => Report::new(wrapper)
+            .attach_printable(error)
+            .attach_printable(format!("Free lists file: {file:?}")),
+        CliError::FreeListsSerializeError(error) => Report::new(wrapper).attach_printable(error),
+        CliError::Multiple(mut errs) => {
+            let mut report = into_report(errs.pop().unwrap_or(CliError::Internal {
+                context: "Multiple errors variant contained no errors".into(),
+            }));
+            report.extend(errs.into_iter().map(into_report));
+            report
         }
-    })
+        CliError::Internal { context } => Report::new(wrapper)
+            .attach_printable(context)
+            .attach_printable(
+            "Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new",
+        ),
+    }
+}
+
+fn into_result(errs: Vec<CliError>) -> Result<(), CliError> {
+    if errs.is_empty() {
+        Ok(())
+    } else {
+        Err(CliError::Multiple(errs))
+    }
 }
 
 fn run() -> Result<(), CliError> {
@@ -100,23 +118,18 @@ fn run() -> Result<(), CliError> {
     info!("Acquired server lock.");
 
     let mut allocator = Allocator::open(data_dir)?;
-    [
-        reactor::run(&mut allocator, &socket_file),
-        fs::remove_file(&socket_file)
-            .map_io_err(|| format!("Failed to delete server socket: {socket_file:?}"))
-            .map_err(CliError::from),
-        allocator.shutdown(),
-        server_guard.shutdown(),
-    ]
-    .into_iter()
-    .fold(None::<Report<CliError>>, |err, r| match (r, err) {
-        (Ok(()), err) => err,
-        (Err(e), None) => Some(Report::from(e)),
-        (Err(e), Some(mut err)) => {
-            err.extend_one(e.into());
-            Some(err)
-        }
-    })
-    .map(|e| Err(CliError::Stacked(e)))
-    .unwrap_or(Ok(()))
+    into_result(
+        [
+            reactor::run(&mut allocator, &socket_file),
+            fs::remove_file(&socket_file)
+                .map_io_err(|| format!("Failed to delete server socket: {socket_file:?}"))
+                .map_err(CliError::from),
+            allocator.shutdown(),
+            server_guard.shutdown(),
+        ]
+        .into_iter()
+        .flat_map(Result::err)
+        .rev()
+        .collect::<Vec<_>>(),
+    )
 }

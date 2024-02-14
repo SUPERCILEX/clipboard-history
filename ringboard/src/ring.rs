@@ -157,7 +157,14 @@ impl Ring {
     }
 
     pub fn write_head(&self) -> u32 {
-        let bytes = unsafe { slice::from_raw_parts(self.ptr.as_ptr().add(4), 4) };
+        let bytes = unsafe {
+            slice::from_raw_parts(
+                self.ptr
+                    .as_ptr()
+                    .add(MAGIC.len() + mem::size_of_val(&VERSION)),
+                mem::size_of::<u32>(),
+            )
+        };
         u32::from_le_bytes(bytes.try_into().unwrap())
     }
 }
@@ -213,13 +220,19 @@ impl RingWriter {
 
     pub fn write(&mut self, entry: Entry, at: u32) -> Result<()> {
         self.ring
-            .write_all_at(&RawEntry::from(entry).0.to_le_bytes(), u64::from(at))
+            .write_all_at(
+                &RawEntry::from(entry).0.to_le_bytes(),
+                u64::from(at) * u64::try_from(mem::size_of::<RawEntry>()).unwrap(),
+            )
             .map_io_err(|| format!("Failed to write entry to Ringboard database: {entry:?}"))
     }
 
     pub fn set_write_head(&mut self, head: u32) -> Result<()> {
         self.ring
-            .write_all_at(&head.to_le_bytes(), 4)
+            .write_all_at(
+                &head.to_le_bytes(),
+                u64::try_from(MAGIC.len() + mem::size_of_val(&VERSION)).unwrap(),
+            )
             .map_io_err(|| format!("Failed to update Ringboard write head: {head}"))
     }
 }
