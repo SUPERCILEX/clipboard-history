@@ -287,6 +287,7 @@ impl Allocator {
         debug!("Allocating entry to {to:?} ring at position {head} with mime type {mime_type:?}.");
 
         if let Some(entry) = ring.get(head) {
+            // TODO get rid of this write on the happy path
             writer.write(Entry::Uninitialized, head)?;
             self.data.free(entry, to, head)?;
         }
