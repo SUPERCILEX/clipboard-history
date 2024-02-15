@@ -24,6 +24,7 @@ use clipboard_history_core::{
     ring::{BucketEntry, Entry, Ring, RingWriter},
     IoErr,
 };
+use log::{debug, info};
 use rustix::fs::{
     copy_file_range, openat, statx, unlinkat, AtFlags, Mode, OFlags, StatxFlags, CWD,
 };
@@ -42,8 +43,22 @@ pub enum RingKind {
 }
 
 struct WritableRing {
-    writer: RingWriter,
+    writer: LoggingRingWriter,
     ring: Ring,
+}
+
+struct LoggingRingWriter(RingWriter);
+
+impl LoggingRingWriter {
+    pub fn write(&mut self, entry: Entry, at: u32) -> clipboard_history_core::Result<()> {
+        debug!("Writing entry to position {at}: {entry:?}");
+        self.0.write(entry, at)
+    }
+
+    pub fn set_write_head(&mut self, head: u32) -> clipboard_history_core::Result<()> {
+        debug!("Setting write head to {head}.");
+        self.0.set_write_head(head)
+    }
 }
 
 struct Rings([WritableRing; 2]);
@@ -146,6 +161,7 @@ impl FreeLists {
     }
 
     fn save(&mut self) -> Result<(), CliError> {
+        info!("Saving allocator free list to disk.");
         let bytes = bitcode::encode(&self.lists).map_err(|error| CliError::SerializeError {
             error,
             context: "Free lists internal error".into(),
@@ -162,6 +178,7 @@ impl FreeLists {
     }
 
     fn free(&mut self, bucket: usize, index: u32) {
+        debug!("Freeing slot {index} for bucket {bucket}.");
         self.lists.0[bucket].push(index);
     }
 }
@@ -171,7 +188,7 @@ impl Allocator {
         let mut open_ring = |name| -> Result<_, CliError> {
             let main = PathView::new(&mut data_dir, name);
             Ok(WritableRing {
-                writer: RingWriter::open(&*main)?,
+                writer: LoggingRingWriter(RingWriter::open(&*main)?),
                 ring: Ring::open(10 /* todo */, &*main)?,
             })
         };
@@ -263,16 +280,17 @@ impl Allocator {
         mem::take(&mut self.data.cache);
     }
 
-    pub fn add(&mut self, data: OwnedFd, to: RingKind) -> Result<u32, CliError> {
+    pub fn add(&mut self, data: OwnedFd, to: RingKind, mime_type: &str) -> Result<u32, CliError> {
         let WritableRing { writer, ring } = &mut self.rings[to];
 
         let head = ring.write_head();
+        debug!("Allocating entry to {to:?} ring at position {head} with mime type {mime_type:?}.");
 
         if let Some(entry) = ring.get(head) {
             writer.write(Entry::Uninitialized, head)?;
             self.data.free(entry, to, head)?;
         }
-        let entry = self.data.alloc(data, "", to, head)?;
+        let entry = self.data.alloc(data, mime_type, to, head)?;
 
         writer
             .write(entry, head)
@@ -290,6 +308,7 @@ impl Allocator {
             head + 1
         })?;
         if head > ring.len() {
+            debug!("Growing {to:?} ring to length {head}.");
             unsafe {
                 ring.set_len(head);
             }
@@ -340,6 +359,7 @@ impl AllocatorData {
     }
 
     fn alloc_bucket(&mut self, data: File, size: u32) -> Result<Entry, CliError> {
+        debug!("Allocating {size} byte bucket slot.");
         let bucket = size_to_bucket(size);
         let Buckets {
             buckets,
@@ -354,6 +374,7 @@ impl AllocatorData {
             .unwrap_or_else(|| bucket_lengths[bucket]);
         let bucket_len = 1 << (bucket + 2);
 
+        debug!("Writing to bucket {bucket} at slot {bucket_index}.");
         {
             let grow = free_bucket.is_none();
             if grow {
@@ -395,6 +416,7 @@ impl AllocatorData {
         to: RingKind,
         id: u32,
     ) -> Result<Entry, CliError> {
+        debug!("Allocating direct entry.");
         const _: () = assert!(mem::size_of::<RingKind>() <= u8::BITS as usize);
         let mut buf = Default::default();
         let buf = direct_metadata_file_name(&mut buf, to, id);
@@ -434,6 +456,7 @@ impl AllocatorData {
     }
 
     fn free(&mut self, entry: Entry, to: RingKind, id: u32) -> Result<(), CliError> {
+        debug!("Freeing entry in {to:?} ring at position {id}: {entry:?}");
         match entry {
             Entry::Uninitialized => Ok(()),
             Entry::Bucketed(bucket) => {
@@ -447,6 +470,7 @@ impl AllocatorData {
     }
 
     fn free_direct(&mut self, to: RingKind, id: u32) -> Result<(), CliError> {
+        debug!("Freeing direct allocation.");
         let mut buf = Default::default();
         let buf = direct_metadata_file_name(&mut buf, to, id);
         unlinkat(&self.direct_dir, &*buf, AtFlags::empty())

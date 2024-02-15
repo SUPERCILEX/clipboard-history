@@ -58,7 +58,9 @@ pub fn handle(
 
             let mut ids = ArrayVec::<_, 1>::new();
             for fd in fds {
-                ids.push(allocator.add(fd, RingKind::Main)?);
+                let id = allocator.add(fd, RingKind::Main, "")?;
+                info!("Entry added: {id}");
+                ids.push(id);
             }
 
             Ok(None)
