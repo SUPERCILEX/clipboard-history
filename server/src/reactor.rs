@@ -392,6 +392,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
                         });
                     } else if (result & u32::try_from(libc::POLLPRI).unwrap()) != 0 {
                         send_bufs.trim();
+                        allocator.trim();
                     } else {
                         return Err(CliError::Internal {
                             context: format!("Unknown low memory poll event received: {result}")

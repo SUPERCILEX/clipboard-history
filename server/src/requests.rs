@@ -4,7 +4,7 @@ use log::{info, warn};
 use rustix::net::{AncillaryDrain, RecvAncillaryMessage};
 
 use crate::{
-    allocator::Allocator,
+    allocator::{Allocator, RingKind},
     send_msg_bufs::{SendMsgBufs, Token},
     CliError,
 };
@@ -58,7 +58,7 @@ pub fn handle(
 
             let mut ids = ArrayVec::<_, 1>::new();
             for fd in fds {
-                ids.push(allocator.add(fd)?);
+                ids.push(allocator.add(fd, RingKind::Main)?);
             }
 
             Ok(None)
