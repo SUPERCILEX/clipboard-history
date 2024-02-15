@@ -9,6 +9,7 @@ pub struct SendMsgBufs {
 }
 
 pub type Token = u8;
+pub type SendBufAllocation = (Token, *const libc::msghdr);
 
 impl SendMsgBufs {
     const TOKEN_MASK: u64 = 64 - 1;
@@ -26,7 +27,7 @@ impl SendMsgBufs {
         &mut self,
         control: Control,
         data: Data,
-    ) -> Result<(Token, *const libc::msghdr), ()> {
+    ) -> Result<SendBufAllocation, ()> {
         let token = u8::try_from(self.allocated_mask.trailing_ones()).unwrap();
         if u32::from(token) == u64::BITS {
             return Err(());

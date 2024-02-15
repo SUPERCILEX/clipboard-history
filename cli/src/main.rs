@@ -1,12 +1,11 @@
 use std::{
     borrow::Cow,
     fs::File,
-    io::{IoSlice, IoSliceMut, Write},
-    mem::size_of,
-    os::fd::{AsFd, OwnedFd},
+    io::{IoSlice, IoSliceMut},
+    mem,
+    os::fd::{AsFd, BorrowedFd, OwnedFd},
     path::{Path, PathBuf},
-    ptr, slice, str,
-    str::FromStr,
+    str,
 };
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
@@ -14,8 +13,11 @@ use clap_num::si_number;
 use clipboard_history_core::{
     dirs::socket_file,
     protocol,
-    protocol::{MimeType, Request, RingKind},
-    Error, IoErr,
+    protocol::{
+        AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse, Request,
+        RingKind, SwapResponse,
+    },
+    AsBytes, Error, IoErr,
 };
 use error_stack::Report;
 use rustix::{
@@ -239,12 +241,14 @@ enum CliError {
     #[error("{0}")]
     Core(#[from] Error),
     #[error(
-        "Protocol version mismatch: expected {} but got {actual:?}",
+        "Protocol version mismatch: expected {} but got {actual}",
         protocol::VERSION
     )]
-    VersionMismatch { actual: Option<u8> },
-    #[error("The server returned an invalid entry ID.")]
-    InvalidEntryId { context: Cow<'static, str> },
+    VersionMismatch { actual: u8 },
+    #[error("The server returned an invalid response.")]
+    InvalidResponse { context: Cow<'static, str> },
+    #[error("Id not found.")]
+    IdNotFound(IdNotFoundError),
 }
 
 #[derive(Error, Debug)]
@@ -268,7 +272,13 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::Core(Error::InvalidPidError { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
-            CliError::InvalidEntryId { context } => Report::new(wrapper).attach_printable(context),
+            CliError::InvalidResponse { context } => Report::new(wrapper).attach_printable(context),
+            CliError::IdNotFound(IdNotFoundError::Ring(id)) => {
+                Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
+            }
+            CliError::IdNotFound(IdNotFoundError::Entry(id)) => {
+                Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
+            }
         }
     })
 }
@@ -281,22 +291,134 @@ fn run() -> Result<(), CliError> {
         .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
     match cmd {
         Cmd::Add(data) => add(
-            data,
             connect_to_server(&server_addr, &socket_file)?,
             server_addr,
-        )?,
-        Cmd::Favorite(_) => {}
-        Cmd::Unfavorite(_) => {}
-        Cmd::MoveToFront(_) => {}
-        Cmd::Swap(_) => {}
-        Cmd::Remove(_) => {}
-        Cmd::Wipe => {}
-        Cmd::ReloadSettings(_) => {}
-        Cmd::Migrate(_) => {}
-        Cmd::GarbageCollect => {}
-        Cmd::Debug(_) => {}
+            data,
+        ),
+        Cmd::Favorite(data) => move_to_front(
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+            data,
+            Some(RingKind::Favorites),
+        ),
+        Cmd::Unfavorite(data) => move_to_front(
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+            data,
+            Some(RingKind::Main),
+        ),
+        Cmd::MoveToFront(data) => move_to_front(
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+            data,
+            None,
+        ),
+        Cmd::Swap(data) => swap(
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+            data,
+        ),
+        Cmd::Remove(data) => remove(
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+            data,
+        ),
+        Cmd::Wipe => wipe(),
+        Cmd::ReloadSettings(data) => reload_settings(
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+            data,
+        ),
+        Cmd::GarbageCollect => request(
+            connect_to_server(&server_addr, &socket_file)?,
+            &server_addr,
+            Request::GarbageCollect,
+        ),
+        Cmd::Migrate(data) => migrate(
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+            data,
+        ),
+        Cmd::Debug(Dev::Stats) => stats(),
+        Cmd::Debug(Dev::Dump(data)) => dump(data),
+        Cmd::Debug(Dev::Generate(data)) => generate(
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+            data,
+        ),
+        Cmd::Debug(Dev::Fuzz(data)) => fuzz(
+            connect_to_server(&server_addr, &socket_file)?,
+            server_addr,
+            data,
+        ),
     }
-    todo!()
+}
+
+fn request(server: impl AsFd, addr: &SocketAddrUnix, request: Request) -> Result<(), CliError> {
+    request_with_ancillary(server, addr, request, &mut SendAncillaryBuffer::default())
+}
+
+fn request_with_fd(
+    server: impl AsFd,
+    addr: &SocketAddrUnix,
+    request: Request,
+    fd: BorrowedFd,
+) -> Result<(), CliError> {
+    let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
+    let mut buf = SendAncillaryBuffer::new(&mut space);
+    let fds = [fd];
+    debug_assert!(buf.push(SendAncillaryMessage::ScmRights(&fds)));
+
+    request_with_ancillary(server, addr, request, &mut buf)
+}
+
+fn request_with_ancillary(
+    server: impl AsFd,
+    addr: &SocketAddrUnix,
+    request: Request,
+    ancillary: &mut SendAncillaryBuffer,
+) -> Result<(), CliError> {
+    sendmsg_unix(
+        server,
+        addr,
+        &[IoSlice::new(request.as_bytes())],
+        ancillary,
+        SendFlags::empty(),
+    )
+    .map_io_err(|| format!("Failed to send request: {request:?}"))?;
+    Ok(())
+}
+
+unsafe fn response<T: Copy, const N: usize>(server: impl AsFd) -> Result<T, CliError> {
+    let type_name = || {
+        let name = std::any::type_name::<T>();
+        if let Some((_, name)) = name.rsplit_once(':') {
+            name
+        } else {
+            name
+        }
+    };
+
+    let mut buf = [0u8; N];
+    let result = recvmsg(
+        server,
+        &mut [IoSliceMut::new(buf.as_mut_slice())],
+        &mut RecvAncillaryBuffer::default(),
+        RecvFlags::TRUNC,
+    )
+    .map_io_err(|| format!("Failed to receive {}.", type_name()))?;
+    if result.bytes != mem::size_of::<T>() {
+        return Err(CliError::InvalidResponse {
+            context: format!("Bad {}.", type_name()).into(),
+        });
+    }
+    Ok(unsafe { *buf.as_ptr().cast::<T>() })
+}
+
+macro_rules! response {
+    ($t:ty) => {
+        response::<$t, { mem::size_of::<$t>() }>
+    };
 }
 
 fn connect_to_server(addr: &SocketAddrUnix, socket_file: &Path) -> Result<OwnedFd, CliError> {
@@ -315,22 +437,9 @@ fn connect_to_server(addr: &SocketAddrUnix, socket_file: &Path) -> Result<OwnedF
         )
         .map_io_err(|| "Failed to send version.")?;
 
-        let mut version = 0;
-        let result = recvmsg(
-            &socket,
-            &mut [IoSliceMut::new(slice::from_mut(&mut version))],
-            &mut RecvAncillaryBuffer::default(),
-            RecvFlags::TRUNC,
-        )
-        .map_io_err(|| "Failed to receive version.")?;
-
-        if result.bytes != 1 {
-            return Err(CliError::VersionMismatch { actual: None });
-        }
+        let version = unsafe { response!(u8)(&socket) }?;
         if version != protocol::VERSION {
-            return Err(CliError::VersionMismatch {
-                actual: Some(version),
-            });
+            return Err(CliError::VersionMismatch { actual: version });
         }
     }
 
@@ -338,17 +447,15 @@ fn connect_to_server(addr: &SocketAddrUnix, socket_file: &Path) -> Result<OwnedF
 }
 
 fn add(
+    server: OwnedFd,
+    addr: SocketAddrUnix,
     Add {
         data_file,
         target,
         mime_type,
     }: Add,
-    server: OwnedFd,
-    addr: SocketAddrUnix,
 ) -> Result<(), CliError> {
     {
-        let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
-        let mut buf = SendAncillaryBuffer::new(&mut space);
         let file = if data_file == Path::new("-") {
             None
         } else {
@@ -357,52 +464,122 @@ fn add(
                     .map_io_err(|| format!("Failed to open file: {data_file:?}"))?,
             )
         };
-        let fds = [file.as_ref().map(|file| file.as_fd()).unwrap_or(stdin())];
-        debug_assert!(buf.push(SendAncillaryMessage::ScmRights(&fds)));
 
-        sendmsg_unix(
+        request_with_fd(
             &server,
             &addr,
-            &[IoSlice::new(
-                Request::Add {
-                    kind: target.into(),
-                    mime_type,
-                }
-                .as_bytes(),
-            )],
-            &mut buf,
-            SendFlags::empty(),
-        )
-        .map_io_err(|| "Failed to send add request.")?;
+            Request::Add {
+                to: target.into(),
+                mime_type,
+            },
+            file.as_ref().map(|file| file.as_fd()).unwrap_or(stdin()),
+        )?;
     }
 
-    let mut buf = [0u8; 8];
-    let result = recvmsg(
-        &server,
-        &mut [IoSliceMut::new(buf.as_mut_slice())],
-        &mut RecvAncillaryBuffer::default(),
-        RecvFlags::TRUNC,
-    )
-    .map_io_err(|| "Failed to receive add response.")?;
-    if result.bytes != buf.len() {
-        return Err(CliError::InvalidEntryId {
-            context: "Bad add response.".into(),
-        });
-    }
-
-    println!("Entry added: {}", u64::from_le_bytes(buf));
+    let AddResponse { id } = unsafe { response!(AddResponse)(&server) }?;
+    println!("Entry added: {id}");
 
     Ok(())
 }
 
-trait AsBytes<T> {
-    fn as_bytes(&self) -> &[u8];
+fn move_to_front(
+    server: OwnedFd,
+    addr: SocketAddrUnix,
+    EntryAction { id }: EntryAction,
+    to: Option<RingKind>,
+) -> Result<(), CliError> {
+    request(&server, &addr, Request::MoveToFront { id, to })?;
+
+    let MoveToFrontResponse { error } = unsafe { response!(MoveToFrontResponse)(&server) }?;
+    if let Some(e) = error {
+        return Err(CliError::IdNotFound(e));
+    } else {
+        println!("Done.");
+    }
+
+    Ok(())
 }
 
-impl<T> AsBytes<T> for T {
-    fn as_bytes(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(ptr::from_ref::<T>(self).cast(), size_of::<T>()) }
+fn swap(server: OwnedFd, addr: SocketAddrUnix, Swap { id1, id2 }: Swap) -> Result<(), CliError> {
+    request(&server, &addr, Request::Swap { id1, id2 })?;
+
+    let SwapResponse { error1, error2 } = unsafe { response!(SwapResponse)(&server) }?;
+    if let Some(e) = error1 {
+        return Err(CliError::IdNotFound(e));
+    } else if let Some(e) = error2 {
+        return Err(CliError::IdNotFound(e));
+    } else {
+        println!("Done.");
     }
+
+    Ok(())
+}
+
+fn remove(
+    server: OwnedFd,
+    addr: SocketAddrUnix,
+    EntryAction { id }: EntryAction,
+) -> Result<(), CliError> {
+    request(&server, &addr, Request::Remove { id })?;
+
+    let RemoveResponse { error } = unsafe { response!(RemoveResponse)(&server) }?;
+    if let Some(e) = error {
+        return Err(CliError::IdNotFound(e));
+    } else {
+        println!("Done.");
+    }
+
+    Ok(())
+}
+
+fn wipe() -> Result<(), CliError> {
+    // TODO move directory, shut down server if running, then delete
+    // TODO server needs to only use paths on startup and use relative FDs
+    // otherwise
+    todo!()
+}
+
+fn reload_settings(
+    server: OwnedFd,
+    addr: SocketAddrUnix,
+    ReloadSettings { config }: ReloadSettings,
+) -> Result<(), CliError> {
+    // TODO send config as ancillary data
+    // TODO make config not an option by computing its default location at runtime
+    // (if possible)
+    todo!()
+}
+
+fn migrate(
+    server: OwnedFd,
+    addr: SocketAddrUnix,
+    Migrate { from }: Migrate,
+) -> Result<(), CliError> {
+    todo!()
+}
+
+fn stats() -> Result<(), CliError> {
+    todo!()
+}
+
+fn dump(Dump { contents }: Dump) -> Result<(), CliError> {
+    todo!()
+}
+
+fn generate(
+    server: OwnedFd,
+    addr: SocketAddrUnix,
+    Generate {
+        num_entries,
+        mean_size,
+        stddev_size,
+    }: Generate,
+) -> Result<(), CliError> {
+    todo!()
+}
+
+fn fuzz(server: OwnedFd, addr: SocketAddrUnix, Fuzz { num_clients }: Fuzz) -> Result<(), CliError> {
+    todo!()
 }
 
 #[cfg(test)]

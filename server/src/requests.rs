@@ -3,21 +3,22 @@ use std::mem;
 use arrayvec::ArrayVec;
 use clipboard_history_core::{
     protocol,
-    protocol::{composite_id, MimeType, Request, RingKind},
+    protocol::{composite_id, AddResponse, MimeType, Request, RingKind},
+    AsBytes,
 };
 use log::{info, warn};
 use rustix::net::{AncillaryDrain, RecvAncillaryMessage};
 
 use crate::{
     allocator::Allocator,
-    send_msg_bufs::{SendMsgBufs, Token},
+    send_msg_bufs::{SendBufAllocation, SendMsgBufs},
     CliError,
 };
 
 pub fn connect(
     payload: &[u8],
     send_bufs: &mut SendMsgBufs,
-) -> Result<(bool, (Token, *const libc::msghdr)), CliError> {
+) -> Result<(bool, SendBufAllocation), CliError> {
     info!("Establishing client/server protocol connection.");
     let version = payload[0];
     let valid = version == protocol::VERSION;
@@ -47,7 +48,7 @@ pub fn handle(
     control_data: &mut [u8],
     send_bufs: &mut SendMsgBufs,
     allocator: &mut Allocator,
-) -> Result<Option<(Token, *const libc::msghdr)>, CliError> {
+) -> Result<Option<SendBufAllocation>, CliError> {
     if request_data.len() < mem::size_of::<Request>() {
         warn!("Dropping invalid request (too short).");
         return Ok(None);
@@ -56,10 +57,14 @@ pub fn handle(
 
     info!("Processing request: {request:?}");
     match request {
-        &Request::Add {
-            kind,
-            ref mime_type,
-        } => add(control_data, send_bufs, allocator, kind, mime_type).map(Some),
+        &Request::Add { to, ref mime_type } => {
+            add(control_data, send_bufs, allocator, to, mime_type).map(Some)
+        }
+        &Request::MoveToFront { id, to } => move_to_front(send_bufs, allocator, id, to).map(Some),
+        &Request::Swap { id1, id2 } => swap(send_bufs, allocator, id1, id2).map(Some),
+        &Request::Remove { id } => remove(send_bufs, allocator, id).map(Some),
+        Request::ReloadSettings => reload_settings(control_data, send_bufs, allocator).map(Some),
+        Request::GarbageCollect => gc(allocator).map(|()| None),
     }
 }
 
@@ -69,7 +74,7 @@ fn add(
     allocator: &mut Allocator,
     kind: RingKind,
     mime_type: &MimeType,
-) -> Result<(Token, *const libc::msghdr), CliError> {
+) -> Result<SendBufAllocation, CliError> {
     let mut ids = ArrayVec::<_, 1>::new();
 
     for message in unsafe { AncillaryDrain::parse(control_data) } {
@@ -87,11 +92,49 @@ fn add(
             |_| (),
             |buf| {
                 for id in ids {
-                    buf.extend_from_slice(&id.to_le_bytes());
+                    buf.extend_from_slice(AddResponse { id }.as_bytes());
                 }
             },
         )
         .map_err(|()| CliError::Internal {
             context: "Didn't allocate enough send buffers.".into(),
         })
+}
+
+fn move_to_front(
+    send_bufs: &mut SendMsgBufs,
+    allocator: &mut Allocator,
+    id: u64,
+    to: Option<RingKind>,
+) -> Result<SendBufAllocation, CliError> {
+    todo!()
+}
+
+fn swap(
+    send_bufs: &mut SendMsgBufs,
+    allocator: &mut Allocator,
+    id1: u64,
+    id2: u64,
+) -> Result<SendBufAllocation, CliError> {
+    todo!()
+}
+
+fn remove(
+    send_bufs: &mut SendMsgBufs,
+    allocator: &mut Allocator,
+    id: u64,
+) -> Result<SendBufAllocation, CliError> {
+    todo!()
+}
+
+fn reload_settings(
+    control_data: &mut [u8],
+    send_bufs: &mut SendMsgBufs,
+    allocator: &mut Allocator,
+) -> Result<SendBufAllocation, CliError> {
+    todo!()
+}
+
+fn gc(allocator: &mut Allocator) -> Result<(), CliError> {
+    todo!()
 }

@@ -2,7 +2,6 @@ use std::{
     cmp::max,
     convert::Infallible,
     ffi::CStr,
-    fmt::Debug,
     fs,
     fs::File,
     io,

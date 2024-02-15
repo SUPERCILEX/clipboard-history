@@ -1,8 +1,9 @@
 use std::{
     fs::File,
     io::{BorrowedBuf, ErrorKind::UnexpectedEof, Read},
-    mem::MaybeUninit,
+    mem::{size_of, MaybeUninit},
     path::Path,
+    ptr, slice,
     str::FromStr,
 };
 
@@ -38,5 +39,11 @@ pub fn read_server_pid(lock_file: &Path) -> Result<u32> {
             error,
             context: format!("Server lock file contains invalid PID: {pid:?}").into(),
         })
+    }
+}
+
+pub trait AsBytes: Sized {
+    fn as_bytes(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(ptr::from_ref::<Self>(self).cast(), size_of::<Self>()) }
     }
 }
