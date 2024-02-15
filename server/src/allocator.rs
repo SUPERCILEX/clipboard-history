@@ -184,12 +184,12 @@ impl FreeLists {
 }
 
 impl Allocator {
-    pub fn open(mut data_dir: PathBuf) -> Result<Self, CliError> {
+    pub fn open(mut data_dir: PathBuf, max_entries: u32) -> Result<Self, CliError> {
         let mut open_ring = |name| -> Result<_, CliError> {
             let main = PathView::new(&mut data_dir, name);
             Ok(WritableRing {
                 writer: LoggingRingWriter(RingWriter::open(&*main)?),
-                ring: Ring::open(10 /* todo */, &*main)?,
+                ring: Ring::open(max_entries, &*main)?,
             })
         };
         let main_ring = open_ring("main.ring")?;

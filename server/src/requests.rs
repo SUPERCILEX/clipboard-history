@@ -53,6 +53,8 @@ pub fn handle(
             for message in unsafe { AncillaryDrain::parse(control_data) } {
                 if let RecvAncillaryMessage::ScmRights(received_fds) = message {
                     for fd in received_fds {
+                        // TODO mime
+                        // TODO ring
                         let id = allocator.add(fd, RingKind::Main, "")?;
                         info!("Entry added: {id}");
                         ids.push(id);

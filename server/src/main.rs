@@ -124,7 +124,8 @@ fn run() -> Result<(), CliError> {
     let socket_file = socket_file();
     info!("Acquired server lock.");
 
-    let mut allocator = Allocator::open(data_dir)?;
+    // TODO max entries
+    let mut allocator = Allocator::open(data_dir, 10)?;
     into_result(
         [
             reactor::run(&mut allocator, &socket_file),
