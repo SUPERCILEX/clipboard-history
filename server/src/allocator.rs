@@ -95,11 +95,10 @@ impl FreeLists {
         if bytes.is_empty() {
             todo!("start recovery")
         } else {
-            let lists =
-                bitcode::decode(&bytes).map_err(|e| CliError::FreeListsDeserializeError {
-                    file: path.into(),
-                    error: e,
-                })?;
+            let lists = bitcode::decode(&bytes).map_err(|e| CliError::DeserializeError {
+                error: e,
+                context: format!("Free lists file: {path:?}").into(),
+            })?;
             file.set_len(0)
                 .map_io_err(|| format!("Failed to truncate free lists: {path:?}"))?;
             Ok(Self { lists, file })
@@ -107,7 +106,10 @@ impl FreeLists {
     }
 
     fn save(&mut self) -> Result<(), CliError> {
-        let bytes = bitcode::encode(&self.lists).map_err(CliError::FreeListsSerializeError)?;
+        let bytes = bitcode::encode(&self.lists).map_err(|error| CliError::SerializeError {
+            error,
+            context: "Free lists internal error".into(),
+        })?;
         self.file
             .write_all_at(&bytes, 0)
             .map_io_err(|| "Failed to write free lists.")?;

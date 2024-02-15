@@ -24,13 +24,16 @@ enum CliError {
     Core(#[from] Error),
     #[error("The server is already running (PID {pid})")]
     ServerAlreadyRunning { pid: NonZeroU32, lock_file: PathBuf },
-    #[error("Failed to deserialize free lists.")]
-    FreeListsDeserializeError {
-        file: PathBuf,
+    #[error("Failed to deserialize object.")]
+    DeserializeError {
         error: bitcode::Error,
+        context: Cow<'static, str>,
     },
-    #[error("Failed to serialize free lists.")]
-    FreeListsSerializeError(bitcode::Error),
+    #[error("Failed to serialize object.")]
+    SerializeError {
+        error: bitcode::Error,
+        context: Cow<'static, str>,
+    },
     #[error("Multiple errors occurred.")]
     Multiple(Vec<CliError>),
     #[error("Internal error")]
@@ -73,10 +76,12 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
                  initiate the recovery sequence on the next startup.",
             )
             .attach_printable(format!("Lock file: {lock_file:?}")),
-        CliError::FreeListsDeserializeError { file, error } => Report::new(wrapper)
+        CliError::DeserializeError { error, context } => Report::new(wrapper)
             .attach_printable(error)
-            .attach_printable(format!("Free lists file: {file:?}")),
-        CliError::FreeListsSerializeError(error) => Report::new(wrapper).attach_printable(error),
+            .attach_printable(context),
+        CliError::SerializeError { error, context } => Report::new(wrapper)
+            .attach_printable(error)
+            .attach_printable(context),
         CliError::Multiple(errs) => {
             let mut errs = VecDeque::from(errs);
             let mut report = into_report(errs.pop_front().unwrap_or(CliError::Internal {
