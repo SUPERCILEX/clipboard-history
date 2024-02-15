@@ -21,6 +21,7 @@ use std::{
 use arrayvec::ArrayVec;
 use bitcode::{Decode, Encode};
 use clipboard_history_core::{
+    protocol::{MimeType, RingKind},
     ring::{BucketEntry, Entry, Ring, RingWriter},
     IoErr,
 };
@@ -34,13 +35,6 @@ use crate::{
     views::{PathView, StringView},
     CliError,
 };
-
-#[repr(u8)]
-#[derive(Copy, Clone, Debug)]
-pub enum RingKind {
-    Main,
-    Favorites,
-}
 
 struct WritableRing {
     writer: LoggingRingWriter,
@@ -280,7 +274,12 @@ impl Allocator {
         mem::take(&mut self.data.cache);
     }
 
-    pub fn add(&mut self, data: OwnedFd, to: RingKind, mime_type: &str) -> Result<u32, CliError> {
+    pub fn add(
+        &mut self,
+        data: OwnedFd,
+        to: RingKind,
+        mime_type: &MimeType,
+    ) -> Result<u32, CliError> {
         let WritableRing { writer, ring } = &mut self.rings[to];
 
         let head = ring.write_head();
@@ -327,7 +326,7 @@ impl AllocatorData {
     fn alloc(
         &mut self,
         data: OwnedFd,
-        mime_type: &str,
+        mime_type: &MimeType,
         to: RingKind,
         id: u32,
     ) -> Result<Entry, CliError> {
@@ -344,7 +343,7 @@ impl AllocatorData {
         io::copy(&mut File::from(data), &mut received)
             .map_io_err(|| "Failed to copy data to receiver file.")?;
 
-        if TEXT_MIMES.contains(&mime_type) {
+        if TEXT_MIMES.contains(&mime_type.as_str()) {
             let size = statx(&received, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
                 .map_io_err(|| "Failed to statx received data file.")?
                 .stx_size;
@@ -413,7 +412,7 @@ impl AllocatorData {
     fn alloc_direct(
         &mut self,
         data: File,
-        mime_type: &str,
+        &mime_type: &MimeType,
         to: RingKind,
         id: u32,
     ) -> Result<Entry, CliError> {
@@ -434,9 +433,10 @@ impl AllocatorData {
             );
 
             // TODO write the API for this
-            #[derive(Encode)]
-            struct Metadata<'a> {
-                mime_type: &'a str,
+            #[derive(Encode, Decode)]
+            struct Metadata {
+                #[bitcode(with_serde)]
+                mime_type: MimeType,
             }
 
             let bytes = self

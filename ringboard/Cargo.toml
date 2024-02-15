@@ -10,6 +10,7 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
+arrayvec = "0.7.4"
 dirs = "5.0.1"
 rustix = { version = "0.38.30", features = ["fs", "mm"], path = "/home/asaveau/Desktop/wip/rustix" }
 thiserror = "1.0.56"

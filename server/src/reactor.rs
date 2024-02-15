@@ -6,17 +6,17 @@ use std::{
     mem,
     os::fd::{AsRawFd, OwnedFd},
     path::{Path, PathBuf},
-    ptr, slice,
+    ptr,
 };
 
 use arrayvec::ArrayVec;
-use clipboard_history_core::{protocol::Request, IoErr};
+use clipboard_history_core::IoErr;
 use io_uring::{
     buf_ring::BufRing,
     cqueue::{buffer_select, more, Entry},
     opcode::{AcceptMulti, Close, PollAdd, Read, RecvMsgMulti, SendMsg, Shutdown},
     squeue::Flags,
-    types::{Fixed, RecvMsgOut},
+    types::{Fixed, RecvMsgOutMut},
     IoUring,
 };
 use log::{debug, info, warn};
@@ -152,7 +152,7 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
         .map_io_err(|| "Failed to register socket FD with io_uring.")?;
     let buf_ring = uring
         .submitter()
-        .register_buf_ring(u16::try_from(MAX_NUM_CLIENTS * 2).unwrap(), 0, 128)
+        .register_buf_ring(u16::try_from(MAX_NUM_CLIENTS * 2).unwrap(), 0, 256)
         .map_io_err(|| "Failed to register buffer ring with io_uring.")?;
 
     Ok((uring, buf_ring))
@@ -247,7 +247,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
                         result.map_io_err(|| format!("Failed to recv from client {fd}."))?;
 
                     debug_assert!(buffer_select(entry.flags()).is_some());
-                    let msg = RecvMsgOut::parse(
+                    let msg = RecvMsgOutMut::parse(
                         unsafe { bufs.recycle(entry.flags(), usize::try_from(result).unwrap()) },
                         &receive_hdr,
                     )
@@ -263,7 +263,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
                         });
                     }
 
-                    if msg.payload_data().is_empty() {
+                    if msg.payload_data.is_empty() {
                         if clients.is_closing(fd) {
                             info!("Client {fd} shut down.");
                         } else {
@@ -289,19 +289,14 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
 
                         let response = if clients.is_connected(fd) {
                             requests::handle(
-                                unsafe { &*msg.payload_data().as_ptr().cast::<Request>() },
-                                unsafe {
-                                    slice::from_raw_parts_mut(
-                                        msg.control_data().as_ptr().cast_mut(),
-                                        msg.control_data().len(),
-                                    )
-                                },
+                                msg.payload_data,
+                                msg.control_data,
                                 &mut send_bufs,
                                 allocator,
                             )?
                         } else {
                             let (version_valid, resp) =
-                                requests::connect(msg.payload_data(), &mut send_bufs)?;
+                                requests::connect(msg.payload_data, &mut send_bufs)?;
                             if version_valid {
                                 info!("Client {fd} connected.");
                                 clients.set_connected(fd);

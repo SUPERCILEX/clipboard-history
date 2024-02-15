@@ -10,8 +10,8 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
-arrayvec = "0.7.4"
-bitcode = "0.5.1"
+arrayvec = { version = "0.7.4", features = ["serde"] }
+bitcode = { version = "0.5.1", features = ["serde"] }
 clipboard-history-core = { version = "0", path = "../ringboard" }
 env_logger = "0.11.1"
 error-stack = "0.4.1"

@@ -11,7 +11,12 @@ use std::{
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
-use clipboard_history_core::{dirs::socket_file, protocol, protocol::Request, Error, IoErr};
+use clipboard_history_core::{
+    dirs::socket_file,
+    protocol,
+    protocol::{MimeType, Request, RingKind},
+    Error, IoErr,
+};
 use error_stack::Report;
 use rustix::{
     net::{
@@ -121,24 +126,49 @@ struct Add {
     #[arg(required = true)]
     #[arg(value_hint = ValueHint::FilePath)]
     data_file: PathBuf,
+
+    /// The target ring.
+    #[clap(short, long, alias = "ring")]
+    #[clap(default_value = "main")]
+    target: CliRingKind,
+
+    /// The entry mime type.
+    #[clap(short, long)]
+    #[clap(default_value = "text/plain")]
+    mime_type: MimeType,
+}
+
+#[derive(ValueEnum, Copy, Clone, Debug)]
+pub enum CliRingKind {
+    Favorites,
+    Main,
+}
+
+impl From<CliRingKind> for RingKind {
+    fn from(value: CliRingKind) -> Self {
+        match value {
+            CliRingKind::Favorites => RingKind::Favorites,
+            CliRingKind::Main => RingKind::Main,
+        }
+    }
 }
 
 #[derive(Args, Debug)]
 struct EntryAction {
     /// The entry ID.
     #[arg(required = true)]
-    id: u32,
+    id: u64,
 }
 
 #[derive(Args, Debug)]
 struct Swap {
     /// The first entry ID.
     #[arg(required = true)]
-    id1: u32,
+    id1: u64,
 
     /// The second entry ID.
     #[arg(required = true)]
-    id2: u32,
+    id2: u64,
 }
 
 #[derive(Args, Debug)]
@@ -307,7 +337,15 @@ fn connect_to_server(addr: &SocketAddrUnix, socket_file: &Path) -> Result<OwnedF
     Ok(socket)
 }
 
-fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<(), CliError> {
+fn add(
+    Add {
+        data_file,
+        target,
+        mime_type,
+    }: Add,
+    server: OwnedFd,
+    addr: SocketAddrUnix,
+) -> Result<(), CliError> {
     {
         let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
         let mut buf = SendAncillaryBuffer::new(&mut space);
@@ -325,14 +363,20 @@ fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<
         sendmsg_unix(
             &server,
             &addr,
-            &[IoSlice::new(Request::Add.as_bytes())],
+            &[IoSlice::new(
+                Request::Add {
+                    kind: target.into(),
+                    mime_type,
+                }
+                .as_bytes(),
+            )],
             &mut buf,
             SendFlags::empty(),
         )
         .map_io_err(|| "Failed to send add request.")?;
     }
 
-    let mut buf = [0u8; 4];
+    let mut buf = [0u8; 8];
     let result = recvmsg(
         &server,
         &mut [IoSliceMut::new(buf.as_mut_slice())],
@@ -346,7 +390,7 @@ fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<
         });
     }
 
-    println!("Entry added: {}", u32::from_le_bytes(buf));
+    println!("Entry added: {}", u64::from_le_bytes(buf));
 
     Ok(())
 }
