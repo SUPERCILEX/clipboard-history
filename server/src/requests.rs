@@ -25,11 +25,9 @@ pub fn connect(
 
     let response = send_bufs
         .alloc(
-            0,
-            1,
             |_| (),
             |buf| {
-                buf[0].write(protocol::VERSION);
+                buf.push(protocol::VERSION);
             },
         )
         .map_err(|()| CliError::Internal {

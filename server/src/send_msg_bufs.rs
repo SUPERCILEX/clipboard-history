@@ -22,10 +22,8 @@ impl SendMsgBufs {
         }
     }
 
-    pub fn alloc<Control: FnOnce(&mut [MaybeUninit<u8>]), Data: FnOnce(&mut [MaybeUninit<u8>])>(
+    pub fn alloc<Control: FnOnce(&mut Vec<u8>), Data: FnOnce(&mut Vec<u8>)>(
         &mut self,
-        control_bytes: usize,
-        data_bytes: usize,
         control: Control,
         data: Data,
     ) -> Result<(Token, *const libc::msghdr), ()> {
@@ -33,26 +31,36 @@ impl SendMsgBufs {
         if u32::from(token) == u64::BITS {
             return Err(());
         }
-
-        let metadata_end = mem::size_of::<libc::msghdr>() + mem::size_of::<libc::iovec>();
-        let control_end = metadata_end + control_bytes;
-        let data_end = control_end + data_bytes;
         let mut buf = self.pool.pop().unwrap_or_default();
-        buf.reserve_exact(data_end);
 
-        control(&mut buf.spare_capacity_mut()[metadata_end..control_end]);
-        data(&mut buf.spare_capacity_mut()[control_end..data_end]);
+        control(&mut buf);
+        let control_len = buf.len();
+        data(&mut buf);
+        let data_len = buf.len() - control_len;
 
-        {
-            let ptr = buf.spare_capacity_mut().as_mut_ptr();
+        let ptr = {
+            let metadata_size = mem::size_of::<libc::msghdr>() + mem::size_of::<libc::iovec>();
+            let align_offset = loop {
+                let old_ptr = buf.as_ptr();
+                let align_offset = buf
+                    .spare_capacity_mut()
+                    .as_ptr()
+                    .align_offset(mem::align_of::<libc::msghdr>());
+                buf.reserve(align_offset + metadata_size);
 
+                if old_ptr == buf.as_ptr() {
+                    break align_offset;
+                }
+            };
+
+            let ptr = unsafe { buf.spare_capacity_mut().as_mut_ptr().add(align_offset) };
             let hdr = libc::msghdr {
                 msg_name: ptr::null_mut(),
                 msg_namelen: 0,
                 msg_iov: unsafe { ptr.add(mem::size_of::<libc::msghdr>()).cast() },
                 msg_iovlen: 1,
-                msg_control: unsafe { ptr.add(metadata_end).cast() },
-                msg_controllen: control_bytes,
+                msg_control: buf.as_mut_ptr().cast(),
+                msg_controllen: control_len,
                 msg_flags: 0,
             };
             unsafe {
@@ -62,9 +70,10 @@ impl SendMsgBufs {
                     mem::size_of::<libc::msghdr>(),
                 )
             }
+
             let iov = libc::iovec {
-                iov_base: unsafe { ptr.add(control_end).cast() },
-                iov_len: data_bytes,
+                iov_base: unsafe { buf.as_mut_ptr().add(control_len).cast() },
+                iov_len: data_len,
             };
             unsafe {
                 ptr::copy_nonoverlapping(
@@ -73,9 +82,10 @@ impl SendMsgBufs {
                     mem::size_of::<libc::iovec>(),
                 )
             }
-        }
 
-        let ptr = buf.as_ptr();
+            ptr
+        };
+
         self.allocated_mask |= 1 << token;
         self.bufs[usize::from(token)].write(buf);
         Ok((token, ptr.cast()))
@@ -84,8 +94,10 @@ impl SendMsgBufs {
     pub unsafe fn free(&mut self, token: u64) {
         let token = u8::try_from(token & Self::TOKEN_MASK).unwrap();
         self.allocated_mask &= !(1 << token);
-        self.pool
-            .push(unsafe { self.bufs[usize::from(token)].assume_init_read() });
+
+        let mut v = unsafe { self.bufs[usize::from(token)].assume_init_read() };
+        v.clear();
+        self.pool.push(v);
     }
 
     pub fn trim(&mut self) {
@@ -107,8 +119,6 @@ impl Drop for SendMsgBufs {
 
 #[cfg(test)]
 mod tests {
-    use std::mem::MaybeUninit;
-
     use crate::send_msg_bufs::SendMsgBufs;
 
     #[test]
@@ -116,24 +126,16 @@ mod tests {
         let mut bufs = SendMsgBufs::new();
         for _ in 0..u64::BITS {
             bufs.alloc(
-                69,
-                420,
-                |control| {
-                    control[22].write(42);
-                },
-                |data| data.fill(MaybeUninit::new(0xDE)),
+                |control| control.extend(1..=69),
+                |data| data.extend((0..420).map(|_| 0xDE)),
             )
             .unwrap();
         }
 
         assert!(
             bufs.alloc(
-                69,
-                420,
-                |control| {
-                    control[22].write(42);
-                },
-                |data| data.fill(MaybeUninit::new(0xDE)),
+                |control| control.extend(1..=69),
+                |data| data.extend((0..420).map(|_| 0xDE)),
             )
             .is_err()
         );
@@ -146,12 +148,8 @@ mod tests {
         let tokens = (0..3)
             .map(|_| {
                 bufs.alloc(
-                    69,
-                    420,
-                    |control| {
-                        control[22].write(42);
-                    },
-                    |data| data.fill(MaybeUninit::new(0xDE)),
+                    |control| control.extend(1..=69),
+                    |data| data.extend((0..420).map(|_| 0xDE)),
                 )
                 .unwrap()
             })
@@ -159,6 +157,38 @@ mod tests {
 
         unsafe {
             bufs.free(tokens[1].0.into());
+        }
+    }
+
+    #[test]
+    fn stress() {
+        let mut bufs = SendMsgBufs::new();
+        for control_len in 0..50 {
+            for data_len in 0..50 {
+                let control_data = 0..control_len;
+                let data = 0..data_len;
+                let (token, hdr) = bufs
+                    .alloc(
+                        |buf| buf.extend(control_data.clone()),
+                        |buf| buf.extend(data.clone()),
+                    )
+                    .unwrap();
+
+                let hdr = unsafe { &*hdr };
+                assert_eq!(hdr.msg_controllen, usize::from(control_len));
+                let iov = unsafe { &*hdr.msg_iov };
+                assert_eq!(iov.iov_len, usize::from(data_len));
+
+                for (i, data) in control_data.enumerate() {
+                    assert_eq!(unsafe { *hdr.msg_control.add(i).cast::<u8>() }, data);
+                }
+                for (i, data) in data.enumerate() {
+                    assert_eq!(unsafe { *iov.iov_base.add(i).cast::<u8>() }, data);
+                }
+
+                unsafe { bufs.free(token.into()) };
+                bufs.trim();
+            }
         }
     }
 }
