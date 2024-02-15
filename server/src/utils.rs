@@ -18,7 +18,11 @@ pub const TEXT_MIMES: &[&str] = &[
     "text/plain;charset=utf-8",
 ];
 
-pub fn link_tmp_file<Fd: AsFd, P: Arg>(tmp_file: Fd, path: P) -> rustix::io::Result<()> {
+pub fn link_tmp_file<Fd: AsFd, DirFd: AsFd, P: Arg>(
+    tmp_file: Fd,
+    dirfd: DirFd,
+    path: P,
+) -> rustix::io::Result<()> {
     const _: () = assert!(RawFd::BITS <= i32::BITS);
     let mut buf = [0u8; "/proc/self/fd/".len() + "-2147483648".len() + 1];
     write!(
@@ -31,7 +35,7 @@ pub fn link_tmp_file<Fd: AsFd, P: Arg>(tmp_file: Fd, path: P) -> rustix::io::Res
     linkat(
         CWD,
         unsafe { CStr::from_ptr(buf.as_ptr().cast()) },
-        CWD,
+        dirfd,
         path,
         AtFlags::SYMLINK_FOLLOW,
     )

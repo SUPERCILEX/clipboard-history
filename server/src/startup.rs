@@ -40,7 +40,7 @@ pub fn claim_server_ownership(lock_file_path: &Path) -> Result<Option<OwnedServe
     write!(lock_file, "{}", process::id())
         .map_io_err(|| format!("Failed to write to server lock file: {lock_file_path:?}"))?;
 
-    match link_tmp_file(lock_file, lock_file_path) {
+    match link_tmp_file(lock_file, CWD, lock_file_path) {
         Err(e) if e.kind() == AlreadyExists => {
             let pid = read_server_pid(lock_file_path)?;
             let Some(pid) = NonZeroU32::new(pid) else {
