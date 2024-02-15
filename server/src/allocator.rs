@@ -5,6 +5,7 @@ use std::{
     fs::File,
     io,
     io::{ErrorKind, Read, Write},
+    mem::ManuallyDrop,
     os::{
         fd::{AsFd, OwnedFd},
         unix::fs::FileExt,
@@ -46,6 +47,24 @@ struct FreeLists {
 
 #[derive(Encode, Decode, Default)]
 struct RawFreeLists([Vec<u32>; 11]);
+
+struct BucketSlotGuard<'a> {
+    id: u32,
+    free_list: &'a mut Vec<u32>,
+}
+
+impl BucketSlotGuard<'_> {
+    fn into_inner(self) -> u32 {
+        let this = ManuallyDrop::new(self);
+        this.id
+    }
+}
+
+impl Drop for BucketSlotGuard<'_> {
+    fn drop(&mut self) {
+        self.free_list.push(self.id);
+    }
+}
 
 impl FreeLists {
     fn load<P: AsRef<Path>>(path: P) -> Result<Self, CliError> {
@@ -95,8 +114,9 @@ impl FreeLists {
         Ok(())
     }
 
-    fn alloc(&mut self, bucket: usize) -> Option<u32> {
-        self.lists.0[bucket].pop()
+    fn alloc(&mut self, bucket: usize) -> Option<BucketSlotGuard> {
+        let free_list = &mut self.lists.0[bucket];
+        free_list.pop().map(|id| BucketSlotGuard { free_list, id })
     }
 
     fn free(&mut self, bucket: usize, index: u32) {
@@ -196,20 +216,37 @@ impl Allocator {
     pub fn add(&mut self, data: OwnedFd) -> Result<u32, CliError> {
         let head = self.main_ring.write_head();
 
-        let entry = self.alloc(data, "")?;
-        self.deallocate(head)?;
-        self.main_writer.write(entry, head)?;
+        if let Some(entry) = self.main_ring.get(head) {
+            self.main_writer.write(Entry::Uninitialized, head)?;
+            self.free(entry, head)?;
+        }
+        let entry = self.alloc(data, "", head)?;
+        self.main_writer
+            .write(entry, head)
+            .map_err(CliError::from)
+            .map_err(|e| {
+                if let Err(e2) = self.free(entry, head) {
+                    CliError::Multiple(vec![e, e2])
+                } else {
+                    e
+                }
+            })?;
         self.main_writer
             .set_write_head(if head == self.main_ring.capacity() - 1 {
                 0
             } else {
                 head + 1
             })?;
+        if head > self.main_ring.len() {
+            unsafe {
+                self.main_ring.set_len(head);
+            }
+        }
 
         Ok(head)
     }
 
-    fn alloc(&mut self, data: OwnedFd, mime_type: &str) -> Result<Entry, CliError> {
+    fn alloc(&mut self, data: OwnedFd, mime_type: &str, id: u32) -> Result<Entry, CliError> {
         let mut received = File::from(
             openat(
                 &self.direct_dir,
@@ -231,10 +268,10 @@ impl Allocator {
             if size > 0 && size < 4096 {
                 self.alloc_bucket(received, u32::try_from(size).unwrap())
             } else {
-                self.alloc_direct(received, mime_type)
+                self.alloc_direct(received, mime_type, id)
             }
         } else {
-            self.alloc_direct(received, mime_type)
+            self.alloc_direct(received, mime_type, id)
         }
     }
 
@@ -247,7 +284,10 @@ impl Allocator {
         } = &mut self.buckets;
 
         let free_bucket = free_lists.alloc(bucket);
-        let bucket_index = free_bucket.unwrap_or_else(|| bucket_lengths[bucket]);
+        let bucket_index = free_bucket
+            .as_ref()
+            .map(|g| g.id)
+            .unwrap_or_else(|| bucket_lengths[bucket]);
         let bucket_len = 1 << (bucket + 2);
 
         {
@@ -279,17 +319,30 @@ impl Allocator {
             }
         }
 
-        Ok(Entry::Bucketed(
-            BucketEntry::new(size, bucket_index).unwrap(),
-        ))
+        let entry = BucketEntry::new(size, bucket_index).unwrap();
+        free_bucket.map(BucketSlotGuard::into_inner);
+        Ok(Entry::Bucketed(entry))
     }
 
-    fn alloc_direct(&mut self, data: File, mime_type: &str) -> Result<Entry, CliError> {
+    fn alloc_direct(&mut self, data: File, mime_type: &str, id: u32) -> Result<Entry, CliError> {
         // TODO
         Ok(Entry::File)
     }
 
-    fn deallocate(&mut self, id: u32) -> Result<(), CliError> {
+    fn free(&mut self, entry: Entry, id: u32) -> Result<(), CliError> {
+        match entry {
+            Entry::Uninitialized => Ok(()),
+            Entry::Bucketed(bucket) => {
+                self.buckets
+                    .free_lists
+                    .free(size_to_bucket(bucket.size()), bucket.index());
+                Ok(())
+            }
+            Entry::File => self.free_direct(id),
+        }
+    }
+
+    fn free_direct(&mut self, id: u32) -> Result<(), CliError> {
         // TODO
         Ok(())
     }

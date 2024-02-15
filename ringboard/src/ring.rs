@@ -173,6 +173,10 @@ impl Ring {
         self.len
     }
 
+    pub unsafe fn set_len(&mut self, len: u32) {
+        self.len = len;
+    }
+
     pub fn capacity(&self) -> u32 {
         self.capacity
     }
@@ -188,6 +192,24 @@ impl Ring {
             )
         };
         u32::from_le_bytes(bytes.try_into().unwrap())
+    }
+
+    pub fn get(&self, index: u32) -> Option<Entry> {
+        if index >= self.len() {
+            return None;
+        }
+
+        let bytes = unsafe {
+            slice::from_raw_parts(
+                self.mem
+                    .ptr
+                    .as_ptr()
+                    .add(usize::try_from(entries_to_offset(index)).unwrap()),
+                mem::size_of::<u32>(),
+            )
+        };
+        let raw = RawEntry(u32::from_le_bytes(bytes.try_into().unwrap()));
+        Some(Entry::from(raw))
     }
 }
 
