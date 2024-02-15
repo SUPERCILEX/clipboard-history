@@ -1,10 +1,11 @@
 use std::{
     fs::File,
-    io::{IoSlice, IoSliceMut},
+    io::{stdout, IoSlice, IoSliceMut, Write},
     mem::size_of,
     os::fd::{AsFd, OwnedFd},
     path::{Path, PathBuf},
-    ptr, slice,
+    ptr, slice, str,
+    str::FromStr,
 };
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
@@ -303,24 +304,43 @@ fn connect_to_server(addr: &SocketAddrUnix, socket_file: &Path) -> Result<OwnedF
 }
 
 fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<(), CliError> {
-    let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
-    let mut buf = SendAncillaryBuffer::new(&mut space);
-    let file = if data_file == Path::new("-") {
-        None
-    } else {
-        Some(File::open(&data_file).map_io_err(|| format!("Failed to open file: {data_file:?}"))?)
-    };
-    let fds = [file.as_ref().map(|file| file.as_fd()).unwrap_or(stdin())];
-    debug_assert!(buf.push(SendAncillaryMessage::ScmRights(&fds)));
+    {
+        let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
+        let mut buf = SendAncillaryBuffer::new(&mut space);
+        let file = if data_file == Path::new("-") {
+            None
+        } else {
+            Some(
+                File::open(&data_file)
+                    .map_io_err(|| format!("Failed to open file: {data_file:?}"))?,
+            )
+        };
+        let fds = [file.as_ref().map(|file| file.as_fd()).unwrap_or(stdin())];
+        debug_assert!(buf.push(SendAncillaryMessage::ScmRights(&fds)));
 
-    sendmsg_unix(
-        server,
-        &addr,
-        &[IoSlice::new(Request::Add.as_bytes())],
-        &mut buf,
-        SendFlags::empty(),
+        sendmsg_unix(
+            &server,
+            &addr,
+            &[IoSlice::new(Request::Add.as_bytes())],
+            &mut buf,
+            SendFlags::empty(),
+        )
+        .map_io_err(|| "Failed to send add request.")?;
+    }
+
+    let mut buf = [0u8; "4294967296".len()];
+    let result = recvmsg(
+        &server,
+        &mut [IoSliceMut::new(buf.as_mut_slice())],
+        &mut RecvAncillaryBuffer::default(),
+        RecvFlags::TRUNC,
     )
-    .map_io_err(|| "Failed to send add request.")?;
+    .map_io_err(|| "Failed to receive add response.")?;
+
+    print!("Entry added: ");
+    stdout().write_all(&buf[..result.bytes]).unwrap();
+    println!();
+
     Ok(())
 }
 

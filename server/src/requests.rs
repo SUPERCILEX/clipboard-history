@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use arrayvec::ArrayVec;
 use clipboard_history_core::{protocol, protocol::Request};
 use log::{info, warn};
@@ -61,7 +63,19 @@ pub fn handle(
                 ids.push(id);
             }
 
-            Ok(None)
+            Ok(send_bufs
+                .alloc(
+                    |_| (),
+                    |buf| {
+                        for id in ids.iter().rev().skip(1).rev() {
+                            write!(buf, "{id}, ").unwrap();
+                        }
+                        if let Some(id) = ids.last() {
+                            write!(buf, "{id}").unwrap();
+                        }
+                    },
+                )
+                .ok())
         }
     }
 }
