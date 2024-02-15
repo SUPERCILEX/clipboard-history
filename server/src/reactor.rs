@@ -19,7 +19,7 @@ use io_uring::{
     types::{Fixed, RecvMsgOutMut},
     IoUring,
 };
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 use rustix::net::{
     bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType,
 };
@@ -231,7 +231,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
                 .map_err(|_| io::Error::from_raw_os_error(-entry.result()));
             match entry.user_data() & REQ_TYPE_MASK {
                 REQ_TYPE_ACCEPT => {
-                    info!("Handling accept completion.");
+                    debug!("Handling accept completion.");
                     let result = result.map_io_err(|| "Failed to accept socket connection.")?;
                     if !more(entry.flags()) {
                         pending_entries.push(accept.clone());
@@ -241,7 +241,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
                     debug_assert_eq!(0, result & !MAX_NUM_CLIENTS_SHIFT);
                 }
                 REQ_TYPE_RECV => 'recv: {
-                    info!("Handling recv completion.");
+                    debug!("Handling recv completion.");
                     let fd = restore_fd(&entry);
                     let result =
                         result.map_io_err(|| format!("Failed to recv from client {fd}."))?;
@@ -339,7 +339,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
                     }
                 }
                 REQ_TYPE_SENDMSG => {
-                    info!("Handling sendmsg completion.");
+                    debug!("Handling sendmsg completion.");
                     let token = entry.user_data() >> REQ_TYPE_SHIFT;
                     unsafe {
                         send_bufs.free(token);
@@ -356,17 +356,17 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
                     }
                 }
                 REQ_TYPE_SHUTDOWN_CONN => {
-                    info!("Handling connection shutdown completion.");
+                    debug!("Handling connection shutdown completion.");
                     let fd = restore_fd(&entry);
                     result.map_io_err(|| format!("Failed to cancel recv for client {fd}."))?;
                 }
                 REQ_TYPE_CLOSE => {
-                    info!("Handling close completion.");
+                    debug!("Handling close completion.");
                     let fd = restore_fd(&entry);
                     result.map_io_err(|| format!("Failed to close client {fd}."))?;
                 }
                 REQ_TYPE_READ_SIGNALS => {
-                    info!("Handling read_signals completion.");
+                    debug!("Handling read_signals completion.");
                     debug_assert!(buffer_select(entry.flags()).is_some());
                     unsafe { bufs.recycle(entry.flags(), 0) };
                     result.map_io_err(|| "Failed to read signal.")?;
@@ -374,7 +374,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
                     break 'outer;
                 }
                 REQ_TYPE_LOW_MEM => {
-                    info!("Handling low memory completion.");
+                    debug!("Handling low memory completion.");
                     let result = result.map_io_err(|| "Failed to poll.")?;
 
                     if !more(entry.flags()) {
@@ -404,7 +404,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
         }
         bufs.sync();
 
-        debug!("Queueing entries: {pending_entries:?}");
+        trace!("Queueing entries: {pending_entries:?}");
         let mut submission = uring.submission();
         unsafe { submission.push_multiple(&pending_entries) }.map_err(|_| CliError::Internal {
             context: "Didn't allocate enough io_uring slots.".into(),
