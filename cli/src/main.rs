@@ -1,6 +1,7 @@
 use std::{
+    borrow::Cow,
     fs::File,
-    io::{stdout, IoSlice, IoSliceMut, Write},
+    io::{IoSlice, IoSliceMut, Write},
     mem::size_of,
     os::fd::{AsFd, OwnedFd},
     path::{Path, PathBuf},
@@ -212,6 +213,8 @@ enum CliError {
         protocol::VERSION
     )]
     VersionMismatch { actual: Option<u8> },
+    #[error("The server returned an invalid entry ID.")]
+    InvalidEntryId { context: Cow<'static, str> },
 }
 
 #[derive(Error, Debug)]
@@ -235,6 +238,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::Core(Error::InvalidPidError { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
+            CliError::InvalidEntryId { context } => Report::new(wrapper).attach_printable(context),
         }
     })
 }
@@ -328,7 +332,7 @@ fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<
         .map_io_err(|| "Failed to send add request.")?;
     }
 
-    let mut buf = [0u8; "4294967296".len()];
+    let mut buf = [0u8; 4];
     let result = recvmsg(
         &server,
         &mut [IoSliceMut::new(buf.as_mut_slice())],
@@ -336,10 +340,13 @@ fn add(Add { data_file }: Add, server: OwnedFd, addr: SocketAddrUnix) -> Result<
         RecvFlags::TRUNC,
     )
     .map_io_err(|| "Failed to receive add response.")?;
+    if result.bytes != buf.len() {
+        return Err(CliError::InvalidEntryId {
+            context: "Bad add response.".into(),
+        });
+    }
 
-    print!("Entry added: ");
-    stdout().write_all(&buf[..result.bytes]).unwrap();
-    println!();
+    println!("Entry added: {}", u32::from_le_bytes(buf));
 
     Ok(())
 }
