@@ -68,6 +68,24 @@ pub fn handle(
     }
 }
 
+fn reply<R: AsBytes>(
+    send_bufs: &mut SendMsgBufs,
+    responses: impl IntoIterator<Item = R>,
+) -> Result<SendBufAllocation, CliError> {
+    send_bufs
+        .alloc(
+            |_| (),
+            |buf| {
+                for response in responses {
+                    buf.extend_from_slice(response.as_bytes());
+                }
+            },
+        )
+        .map_err(|()| CliError::Internal {
+            context: "Didn't allocate enough send buffers.".into(),
+        })
+}
+
 fn add(
     control_data: &mut [u8],
     send_bufs: &mut SendMsgBufs,
@@ -87,18 +105,7 @@ fn add(
         }
     }
 
-    send_bufs
-        .alloc(
-            |_| (),
-            |buf| {
-                for response in responses {
-                    buf.extend_from_slice(response.as_bytes());
-                }
-            },
-        )
-        .map_err(|()| CliError::Internal {
-            context: "Didn't allocate enough send buffers.".into(),
-        })
+    reply(send_bufs, responses)
 }
 
 fn move_to_front(
@@ -109,17 +116,7 @@ fn move_to_front(
 ) -> Result<SendBufAllocation, CliError> {
     let response = allocator.move_to_front(id, to)?;
     info!("Move entry response: {response:?}");
-
-    send_bufs
-        .alloc(
-            |_| (),
-            |buf| {
-                buf.extend_from_slice(response.as_bytes());
-            },
-        )
-        .map_err(|()| CliError::Internal {
-            context: "Didn't allocate enough send buffers.".into(),
-        })
+    reply(send_bufs, [response])
 }
 
 fn swap(
@@ -128,7 +125,9 @@ fn swap(
     id1: u64,
     id2: u64,
 ) -> Result<SendBufAllocation, CliError> {
-    todo!()
+    let response = allocator.swap(id1, id2)?;
+    info!("Swap entry response: {response:?}");
+    reply(send_bufs, [response])
 }
 
 fn remove(

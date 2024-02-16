@@ -22,13 +22,15 @@ use bitcode::{Decode, Encode};
 use clipboard_history_core::{
     protocol::{
         composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind,
+        SwapResponse,
     },
     ring::{BucketEntry, Entry, Ring, RingWriter},
     IoErr,
 };
 use log::{debug, info};
 use rustix::fs::{
-    copy_file_range, openat, renameat, statx, unlinkat, AtFlags, Mode, OFlags, StatxFlags, CWD,
+    copy_file_range, openat, renameat, renameat_with, statx, unlinkat, AtFlags, Mode, OFlags,
+    RenameFlags, StatxFlags, CWD,
 };
 
 use crate::{
@@ -323,24 +325,28 @@ impl Allocator {
         Ok(head)
     }
 
+    fn get_entry(&self, id: u64) -> Result<(RingKind, u32, Entry), IdNotFoundError> {
+        let (ring, id) = decompose_id(id)?;
+        let Some(entry) = self.rings[ring].ring.get(id) else {
+            return Err(IdNotFoundError::Entry(id));
+        };
+        Ok((ring, id, entry))
+    }
+
     pub fn move_to_front(
         &mut self,
         id: u64,
         to: Option<RingKind>,
     ) -> Result<MoveToFrontResponse, CliError> {
-        let (from, from_id) = match decompose_id(id) {
-            Ok(r) => r,
+        let (from, from_id, from_entry) = match self.get_entry(id) {
             Err(e) => return Ok(MoveToFrontResponse::Error(e)),
+            Ok((_, from_id, Entry::Uninitialized)) => {
+                return Ok(MoveToFrontResponse::Error(IdNotFoundError::Entry(from_id)));
+            }
+            Ok(r) => r,
         };
         let to = to.unwrap_or(from);
-
         let WritableRing { writer, ring } = &mut self.rings[from];
-        let Some(from_entry) = ring.get(from_id) else {
-            return Ok(MoveToFrontResponse::Error(IdNotFoundError::Entry(from_id)));
-        };
-        if from_entry == Entry::Uninitialized {
-            return Ok(MoveToFrontResponse::Error(IdNotFoundError::Entry(from_id)));
-        }
 
         if from == to && ring.next_head(from_id) == ring.write_head() {
             return Ok(MoveToFrontResponse::Success {
@@ -349,29 +355,29 @@ impl Allocator {
         }
         writer.write(Entry::Uninitialized, from_id)?;
 
-        let to_id = self.add_internal(to, |to_id, data| {
+        let to_id = self.add_internal(to, |to_id, AllocatorData { ref direct_dir, .. }| {
+            debug!(
+                "Moving entry {from_entry:?} from {from:?} ring at position {from_id} to {to:?} \
+                 ring at position {to_id}."
+            );
+
             match from_entry {
                 Entry::Uninitialized => unreachable!(),
                 Entry::Bucketed(_) => {
                     // Nothing to do, buckets are shared between rings.
                 }
                 Entry::File => {
-                    debug!(
-                        "Moving direct allocation from {from:?} ring at position {from_id} to \
-                         {to:?} ring at position {to_id}."
-                    );
-
                     let mut from_buf = Default::default();
                     let from_buf = direct_metadata_file_name(&mut from_buf, from, from_id);
                     let mut to_buf = Default::default();
                     let to_buf = direct_metadata_file_name(&mut to_buf, to, to_id);
 
-                    renameat(&data.direct_dir, &*from_buf, &data.direct_dir, &*to_buf)
+                    renameat(direct_dir, &*from_buf, direct_dir, &*to_buf)
                         .map_io_err(|| "Failed to rename direct allocation metadata file.")?;
                     renameat(
-                        &data.direct_dir,
+                        direct_dir,
                         &*direct_file_name(from_buf),
-                        &data.direct_dir,
+                        direct_dir,
                         &*direct_file_name(to_buf),
                     )
                     .map_io_err(|| "Failed to rename direct allocation file.")?;
@@ -381,6 +387,82 @@ impl Allocator {
         })?;
         Ok(MoveToFrontResponse::Success {
             id: composite_id(to, to_id),
+        })
+    }
+
+    pub fn swap(&mut self, id1: u64, id2: u64) -> Result<SwapResponse, CliError> {
+        let (ring1, id1, entry1) = match self.get_entry(id1) {
+            Ok(r) => r,
+            Err(e) => {
+                return Ok(SwapResponse {
+                    error1: Some(e),
+                    error2: None,
+                });
+            }
+        };
+        let (ring2, id2, entry2) = match self.get_entry(id2) {
+            Ok(r) => r,
+            Err(e) => {
+                return Ok(SwapResponse {
+                    error1: None,
+                    error2: Some(e),
+                });
+            }
+        };
+        if entry1 == Entry::Uninitialized && entry2 == Entry::Uninitialized {
+            return Ok(SwapResponse {
+                error1: Some(IdNotFoundError::Entry(id1)),
+                error2: Some(IdNotFoundError::Entry(id2)),
+            });
+        }
+        debug!(
+            "Swapping entry {entry1:?} in {ring1:?} ring at position {id1} with entry {entry2:?} \
+             in {ring2:?} ring at position {id2}."
+        );
+
+        self.rings[ring1].writer.write(entry2, id1)?;
+        self.rings[ring2].writer.write(entry1, id2)?;
+
+        match (entry1, entry2) {
+            (Entry::File, _) | (_, Entry::File) => {
+                let rings = [ring1, ring2];
+                let ids = [id1, id2];
+                let from_idx = usize::from(entry1 != Entry::File);
+                let to_idx = usize::from(entry1 == Entry::File);
+
+                let mut from_buf = Default::default();
+                let from_buf =
+                    direct_metadata_file_name(&mut from_buf, rings[from_idx], ids[from_idx]);
+                let mut to_buf = Default::default();
+                let to_buf = direct_metadata_file_name(&mut to_buf, rings[to_idx], ids[to_idx]);
+
+                let direct_dir = &self.data.direct_dir;
+                let flags = if entry1 == entry2 {
+                    RenameFlags::EXCHANGE
+                } else {
+                    RenameFlags::empty()
+                };
+                renameat_with(direct_dir, &*from_buf, direct_dir, &*to_buf, flags)
+                    .map_io_err(|| "Failed to rename direct allocation metadata file.")?;
+                renameat_with(
+                    direct_dir,
+                    &*direct_file_name(from_buf),
+                    direct_dir,
+                    &*direct_file_name(to_buf),
+                    flags,
+                )
+                .map_io_err(|| "Failed to rename direct allocation file.")?;
+            }
+            (Entry::Bucketed(_), Entry::Bucketed(_) | Entry::Uninitialized)
+            | (Entry::Uninitialized, Entry::Bucketed(_)) => {
+                // Nothing to do.
+            }
+            (Entry::Uninitialized, Entry::Uninitialized) => unreachable!(),
+        }
+
+        Ok(SwapResponse {
+            error1: None,
+            error2: None,
         })
     }
 
