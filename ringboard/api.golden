@@ -1,0 +1,487 @@
+pub mod clipboard_history_core
+pub mod clipboard_history_core::dirs
+pub fn clipboard_history_core::dirs::data_dir() -> std::path::PathBuf
+pub fn clipboard_history_core::dirs::socket_file() -> std::path::PathBuf
+pub mod clipboard_history_core::protocol
+#[repr(C)] pub enum clipboard_history_core::protocol::AddResponse
+pub clipboard_history_core::protocol::AddResponse::Success
+pub clipboard_history_core::protocol::AddResponse::Success::id: u64
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::AddResponse
+impl core::clone::Clone for clipboard_history_core::protocol::AddResponse
+pub fn clipboard_history_core::protocol::AddResponse::clone(&self) -> clipboard_history_core::protocol::AddResponse
+impl core::fmt::Debug for clipboard_history_core::protocol::AddResponse
+pub fn clipboard_history_core::protocol::AddResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for clipboard_history_core::protocol::AddResponse
+impl core::marker::Send for clipboard_history_core::protocol::AddResponse
+impl core::marker::Sync for clipboard_history_core::protocol::AddResponse
+impl core::marker::Unpin for clipboard_history_core::protocol::AddResponse
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::AddResponse
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::AddResponse
+impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::AddResponse where U: core::convert::From<T>
+pub fn clipboard_history_core::protocol::AddResponse::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::AddResponse where U: core::convert::Into<T>
+pub type clipboard_history_core::protocol::AddResponse::Error = core::convert::Infallible
+pub fn clipboard_history_core::protocol::AddResponse::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::protocol::AddResponse where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::protocol::AddResponse::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::protocol::AddResponse::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::protocol::AddResponse where T: core::clone::Clone
+pub type clipboard_history_core::protocol::AddResponse::Owned = T
+pub fn clipboard_history_core::protocol::AddResponse::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::protocol::AddResponse::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::protocol::AddResponse where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::protocol::AddResponse::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::AddResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::AddResponse::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::AddResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::AddResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::protocol::AddResponse
+pub fn clipboard_history_core::protocol::AddResponse::from(t: T) -> T
+#[repr(u8)] pub enum clipboard_history_core::protocol::IdNotFoundError
+pub clipboard_history_core::protocol::IdNotFoundError::Entry(u32)
+pub clipboard_history_core::protocol::IdNotFoundError::Ring(u32)
+impl core::clone::Clone for clipboard_history_core::protocol::IdNotFoundError
+pub fn clipboard_history_core::protocol::IdNotFoundError::clone(&self) -> clipboard_history_core::protocol::IdNotFoundError
+impl core::fmt::Debug for clipboard_history_core::protocol::IdNotFoundError
+pub fn clipboard_history_core::protocol::IdNotFoundError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for clipboard_history_core::protocol::IdNotFoundError
+impl core::marker::Send for clipboard_history_core::protocol::IdNotFoundError
+impl core::marker::Sync for clipboard_history_core::protocol::IdNotFoundError
+impl core::marker::Unpin for clipboard_history_core::protocol::IdNotFoundError
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::IdNotFoundError
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::IdNotFoundError
+impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::IdNotFoundError where U: core::convert::From<T>
+pub fn clipboard_history_core::protocol::IdNotFoundError::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::IdNotFoundError where U: core::convert::Into<T>
+pub type clipboard_history_core::protocol::IdNotFoundError::Error = core::convert::Infallible
+pub fn clipboard_history_core::protocol::IdNotFoundError::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::protocol::IdNotFoundError where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::protocol::IdNotFoundError::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::protocol::IdNotFoundError::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::protocol::IdNotFoundError where T: core::clone::Clone
+pub type clipboard_history_core::protocol::IdNotFoundError::Owned = T
+pub fn clipboard_history_core::protocol::IdNotFoundError::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::protocol::IdNotFoundError::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::protocol::IdNotFoundError where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::protocol::IdNotFoundError::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::IdNotFoundError where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::IdNotFoundError::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::IdNotFoundError where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::IdNotFoundError::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::protocol::IdNotFoundError
+pub fn clipboard_history_core::protocol::IdNotFoundError::from(t: T) -> T
+#[repr(u8)] pub enum clipboard_history_core::protocol::MoveToFrontResponse
+pub clipboard_history_core::protocol::MoveToFrontResponse::Error(clipboard_history_core::protocol::IdNotFoundError)
+pub clipboard_history_core::protocol::MoveToFrontResponse::Success
+pub clipboard_history_core::protocol::MoveToFrontResponse::Success::id: u64
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::MoveToFrontResponse
+impl core::clone::Clone for clipboard_history_core::protocol::MoveToFrontResponse
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::clone(&self) -> clipboard_history_core::protocol::MoveToFrontResponse
+impl core::fmt::Debug for clipboard_history_core::protocol::MoveToFrontResponse
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for clipboard_history_core::protocol::MoveToFrontResponse
+impl core::marker::Send for clipboard_history_core::protocol::MoveToFrontResponse
+impl core::marker::Sync for clipboard_history_core::protocol::MoveToFrontResponse
+impl core::marker::Unpin for clipboard_history_core::protocol::MoveToFrontResponse
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::MoveToFrontResponse
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::MoveToFrontResponse
+impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::MoveToFrontResponse where U: core::convert::From<T>
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::MoveToFrontResponse where U: core::convert::Into<T>
+pub type clipboard_history_core::protocol::MoveToFrontResponse::Error = core::convert::Infallible
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::protocol::MoveToFrontResponse where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::protocol::MoveToFrontResponse::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::protocol::MoveToFrontResponse where T: core::clone::Clone
+pub type clipboard_history_core::protocol::MoveToFrontResponse::Owned = T
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::protocol::MoveToFrontResponse where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::MoveToFrontResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::MoveToFrontResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::protocol::MoveToFrontResponse
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::from(t: T) -> T
+#[repr(u8)] pub enum clipboard_history_core::protocol::Request
+pub clipboard_history_core::protocol::Request::Add
+pub clipboard_history_core::protocol::Request::Add::mime_type: clipboard_history_core::protocol::MimeType
+pub clipboard_history_core::protocol::Request::Add::to: clipboard_history_core::protocol::RingKind
+pub clipboard_history_core::protocol::Request::GarbageCollect
+pub clipboard_history_core::protocol::Request::MoveToFront
+pub clipboard_history_core::protocol::Request::MoveToFront::id: u64
+pub clipboard_history_core::protocol::Request::MoveToFront::to: core::option::Option<clipboard_history_core::protocol::RingKind>
+pub clipboard_history_core::protocol::Request::ReloadSettings
+pub clipboard_history_core::protocol::Request::Remove
+pub clipboard_history_core::protocol::Request::Remove::id: u64
+pub clipboard_history_core::protocol::Request::Swap
+pub clipboard_history_core::protocol::Request::Swap::id1: u64
+pub clipboard_history_core::protocol::Request::Swap::id2: u64
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::Request
+impl core::clone::Clone for clipboard_history_core::protocol::Request
+pub fn clipboard_history_core::protocol::Request::clone(&self) -> clipboard_history_core::protocol::Request
+impl core::fmt::Debug for clipboard_history_core::protocol::Request
+pub fn clipboard_history_core::protocol::Request::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for clipboard_history_core::protocol::Request
+impl core::marker::Send for clipboard_history_core::protocol::Request
+impl core::marker::Sync for clipboard_history_core::protocol::Request
+impl core::marker::Unpin for clipboard_history_core::protocol::Request
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::Request
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::Request
+impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::Request where U: core::convert::From<T>
+pub fn clipboard_history_core::protocol::Request::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::Request where U: core::convert::Into<T>
+pub type clipboard_history_core::protocol::Request::Error = core::convert::Infallible
+pub fn clipboard_history_core::protocol::Request::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::protocol::Request where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::protocol::Request::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::protocol::Request::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::protocol::Request where T: core::clone::Clone
+pub type clipboard_history_core::protocol::Request::Owned = T
+pub fn clipboard_history_core::protocol::Request::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::protocol::Request::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::protocol::Request where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::protocol::Request::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::Request where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::Request::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::Request where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::Request::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::protocol::Request
+pub fn clipboard_history_core::protocol::Request::from(t: T) -> T
+#[repr(u8)] pub enum clipboard_history_core::protocol::RingKind
+pub clipboard_history_core::protocol::RingKind::Favorites
+pub clipboard_history_core::protocol::RingKind::Main
+impl core::clone::Clone for clipboard_history_core::protocol::RingKind
+pub fn clipboard_history_core::protocol::RingKind::clone(&self) -> clipboard_history_core::protocol::RingKind
+impl core::cmp::Eq for clipboard_history_core::protocol::RingKind
+impl core::cmp::PartialEq for clipboard_history_core::protocol::RingKind
+pub fn clipboard_history_core::protocol::RingKind::eq(&self, other: &clipboard_history_core::protocol::RingKind) -> bool
+impl core::fmt::Debug for clipboard_history_core::protocol::RingKind
+pub fn clipboard_history_core::protocol::RingKind::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for clipboard_history_core::protocol::RingKind
+pub fn clipboard_history_core::protocol::RingKind::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
+impl core::marker::Copy for clipboard_history_core::protocol::RingKind
+impl core::marker::StructuralPartialEq for clipboard_history_core::protocol::RingKind
+impl core::marker::Send for clipboard_history_core::protocol::RingKind
+impl core::marker::Sync for clipboard_history_core::protocol::RingKind
+impl core::marker::Unpin for clipboard_history_core::protocol::RingKind
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::RingKind
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::RingKind
+impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::RingKind where U: core::convert::From<T>
+pub fn clipboard_history_core::protocol::RingKind::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::RingKind where U: core::convert::Into<T>
+pub type clipboard_history_core::protocol::RingKind::Error = core::convert::Infallible
+pub fn clipboard_history_core::protocol::RingKind::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::protocol::RingKind where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::protocol::RingKind::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::protocol::RingKind::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::protocol::RingKind where T: core::clone::Clone
+pub type clipboard_history_core::protocol::RingKind::Owned = T
+pub fn clipboard_history_core::protocol::RingKind::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::protocol::RingKind::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::protocol::RingKind where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::protocol::RingKind::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::RingKind where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::RingKind::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::RingKind where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::RingKind::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::protocol::RingKind
+pub fn clipboard_history_core::protocol::RingKind::from(t: T) -> T
+#[repr(C)] pub struct clipboard_history_core::protocol::ReloadSettingsResponse
+pub clipboard_history_core::protocol::ReloadSettingsResponse::error: core::option::Option<()>
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::ReloadSettingsResponse
+impl core::clone::Clone for clipboard_history_core::protocol::ReloadSettingsResponse
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::clone(&self) -> clipboard_history_core::protocol::ReloadSettingsResponse
+impl core::fmt::Debug for clipboard_history_core::protocol::ReloadSettingsResponse
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for clipboard_history_core::protocol::ReloadSettingsResponse
+impl core::marker::Send for clipboard_history_core::protocol::ReloadSettingsResponse
+impl core::marker::Sync for clipboard_history_core::protocol::ReloadSettingsResponse
+impl core::marker::Unpin for clipboard_history_core::protocol::ReloadSettingsResponse
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::ReloadSettingsResponse
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::ReloadSettingsResponse
+impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::ReloadSettingsResponse where U: core::convert::From<T>
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::ReloadSettingsResponse where U: core::convert::Into<T>
+pub type clipboard_history_core::protocol::ReloadSettingsResponse::Error = core::convert::Infallible
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::protocol::ReloadSettingsResponse where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::protocol::ReloadSettingsResponse::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::protocol::ReloadSettingsResponse where T: core::clone::Clone
+pub type clipboard_history_core::protocol::ReloadSettingsResponse::Owned = T
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::protocol::ReloadSettingsResponse where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::ReloadSettingsResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::ReloadSettingsResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::protocol::ReloadSettingsResponse
+pub fn clipboard_history_core::protocol::ReloadSettingsResponse::from(t: T) -> T
+#[repr(C)] pub struct clipboard_history_core::protocol::RemoveResponse
+pub clipboard_history_core::protocol::RemoveResponse::error: core::option::Option<clipboard_history_core::protocol::IdNotFoundError>
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::RemoveResponse
+impl core::clone::Clone for clipboard_history_core::protocol::RemoveResponse
+pub fn clipboard_history_core::protocol::RemoveResponse::clone(&self) -> clipboard_history_core::protocol::RemoveResponse
+impl core::fmt::Debug for clipboard_history_core::protocol::RemoveResponse
+pub fn clipboard_history_core::protocol::RemoveResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for clipboard_history_core::protocol::RemoveResponse
+impl core::marker::Send for clipboard_history_core::protocol::RemoveResponse
+impl core::marker::Sync for clipboard_history_core::protocol::RemoveResponse
+impl core::marker::Unpin for clipboard_history_core::protocol::RemoveResponse
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::RemoveResponse
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::RemoveResponse
+impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::RemoveResponse where U: core::convert::From<T>
+pub fn clipboard_history_core::protocol::RemoveResponse::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::RemoveResponse where U: core::convert::Into<T>
+pub type clipboard_history_core::protocol::RemoveResponse::Error = core::convert::Infallible
+pub fn clipboard_history_core::protocol::RemoveResponse::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::protocol::RemoveResponse where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::protocol::RemoveResponse::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::protocol::RemoveResponse::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::protocol::RemoveResponse where T: core::clone::Clone
+pub type clipboard_history_core::protocol::RemoveResponse::Owned = T
+pub fn clipboard_history_core::protocol::RemoveResponse::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::protocol::RemoveResponse::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::protocol::RemoveResponse where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::protocol::RemoveResponse::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::RemoveResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::RemoveResponse::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::RemoveResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::RemoveResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::protocol::RemoveResponse
+pub fn clipboard_history_core::protocol::RemoveResponse::from(t: T) -> T
+#[repr(C)] pub struct clipboard_history_core::protocol::SwapResponse
+pub clipboard_history_core::protocol::SwapResponse::error1: core::option::Option<clipboard_history_core::protocol::IdNotFoundError>
+pub clipboard_history_core::protocol::SwapResponse::error2: core::option::Option<clipboard_history_core::protocol::IdNotFoundError>
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::SwapResponse
+impl core::clone::Clone for clipboard_history_core::protocol::SwapResponse
+pub fn clipboard_history_core::protocol::SwapResponse::clone(&self) -> clipboard_history_core::protocol::SwapResponse
+impl core::fmt::Debug for clipboard_history_core::protocol::SwapResponse
+pub fn clipboard_history_core::protocol::SwapResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for clipboard_history_core::protocol::SwapResponse
+impl core::marker::Send for clipboard_history_core::protocol::SwapResponse
+impl core::marker::Sync for clipboard_history_core::protocol::SwapResponse
+impl core::marker::Unpin for clipboard_history_core::protocol::SwapResponse
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::SwapResponse
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::SwapResponse
+impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::SwapResponse where U: core::convert::From<T>
+pub fn clipboard_history_core::protocol::SwapResponse::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::SwapResponse where U: core::convert::Into<T>
+pub type clipboard_history_core::protocol::SwapResponse::Error = core::convert::Infallible
+pub fn clipboard_history_core::protocol::SwapResponse::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::protocol::SwapResponse where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::protocol::SwapResponse::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::protocol::SwapResponse::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::protocol::SwapResponse where T: core::clone::Clone
+pub type clipboard_history_core::protocol::SwapResponse::Owned = T
+pub fn clipboard_history_core::protocol::SwapResponse::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::protocol::SwapResponse::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::protocol::SwapResponse where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::protocol::SwapResponse::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::SwapResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::SwapResponse::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::SwapResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::SwapResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::protocol::SwapResponse
+pub fn clipboard_history_core::protocol::SwapResponse::from(t: T) -> T
+pub const clipboard_history_core::protocol::VERSION: u8 = 0u8
+pub fn clipboard_history_core::protocol::composite_id(kind: clipboard_history_core::protocol::RingKind, id: u32) -> u64
+pub type clipboard_history_core::protocol::MimeType = arrayvec::array_string::ArrayString<usize>
+pub mod clipboard_history_core::ring
+pub enum clipboard_history_core::ring::Entry
+pub clipboard_history_core::ring::Entry::Bucketed(clipboard_history_core::ring::BucketEntry)
+pub clipboard_history_core::ring::Entry::File
+pub clipboard_history_core::ring::Entry::Uninitialized
+impl core::clone::Clone for clipboard_history_core::ring::Entry
+pub fn clipboard_history_core::ring::Entry::clone(&self) -> clipboard_history_core::ring::Entry
+impl core::cmp::Eq for clipboard_history_core::ring::Entry
+impl core::cmp::PartialEq for clipboard_history_core::ring::Entry
+pub fn clipboard_history_core::ring::Entry::eq(&self, other: &clipboard_history_core::ring::Entry) -> bool
+impl core::fmt::Debug for clipboard_history_core::ring::Entry
+pub fn clipboard_history_core::ring::Entry::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for clipboard_history_core::ring::Entry
+pub fn clipboard_history_core::ring::Entry::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
+impl core::marker::Copy for clipboard_history_core::ring::Entry
+impl core::marker::StructuralPartialEq for clipboard_history_core::ring::Entry
+impl core::marker::Send for clipboard_history_core::ring::Entry
+impl core::marker::Sync for clipboard_history_core::ring::Entry
+impl core::marker::Unpin for clipboard_history_core::ring::Entry
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::Entry
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::Entry
+impl<T, U> core::convert::Into<U> for clipboard_history_core::ring::Entry where U: core::convert::From<T>
+pub fn clipboard_history_core::ring::Entry::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::ring::Entry where U: core::convert::Into<T>
+pub type clipboard_history_core::ring::Entry::Error = core::convert::Infallible
+pub fn clipboard_history_core::ring::Entry::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::ring::Entry where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::ring::Entry::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::ring::Entry::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::ring::Entry where T: core::clone::Clone
+pub type clipboard_history_core::ring::Entry::Owned = T
+pub fn clipboard_history_core::ring::Entry::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::ring::Entry::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::ring::Entry where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::ring::Entry::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::ring::Entry where T: core::marker::Sized
+pub fn clipboard_history_core::ring::Entry::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::Entry where T: core::marker::Sized
+pub fn clipboard_history_core::ring::Entry::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::ring::Entry
+pub fn clipboard_history_core::ring::Entry::from(t: T) -> T
+pub struct clipboard_history_core::ring::BucketEntry
+impl clipboard_history_core::ring::BucketEntry
+pub const fn clipboard_history_core::ring::BucketEntry::index(&self) -> u32
+pub const fn clipboard_history_core::ring::BucketEntry::new(size: u32, index: u32) -> core::option::Option<Self>
+pub const fn clipboard_history_core::ring::BucketEntry::size(&self) -> u32
+impl core::clone::Clone for clipboard_history_core::ring::BucketEntry
+pub fn clipboard_history_core::ring::BucketEntry::clone(&self) -> clipboard_history_core::ring::BucketEntry
+impl core::cmp::Eq for clipboard_history_core::ring::BucketEntry
+impl core::cmp::PartialEq for clipboard_history_core::ring::BucketEntry
+pub fn clipboard_history_core::ring::BucketEntry::eq(&self, other: &clipboard_history_core::ring::BucketEntry) -> bool
+impl core::fmt::Debug for clipboard_history_core::ring::BucketEntry
+pub fn clipboard_history_core::ring::BucketEntry::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for clipboard_history_core::ring::BucketEntry
+pub fn clipboard_history_core::ring::BucketEntry::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
+impl core::marker::Copy for clipboard_history_core::ring::BucketEntry
+impl core::marker::StructuralPartialEq for clipboard_history_core::ring::BucketEntry
+impl core::marker::Send for clipboard_history_core::ring::BucketEntry
+impl core::marker::Sync for clipboard_history_core::ring::BucketEntry
+impl core::marker::Unpin for clipboard_history_core::ring::BucketEntry
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::BucketEntry
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::BucketEntry
+impl<T, U> core::convert::Into<U> for clipboard_history_core::ring::BucketEntry where U: core::convert::From<T>
+pub fn clipboard_history_core::ring::BucketEntry::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::ring::BucketEntry where U: core::convert::Into<T>
+pub type clipboard_history_core::ring::BucketEntry::Error = core::convert::Infallible
+pub fn clipboard_history_core::ring::BucketEntry::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::ring::BucketEntry where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::ring::BucketEntry::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::ring::BucketEntry::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::ring::BucketEntry where T: core::clone::Clone
+pub type clipboard_history_core::ring::BucketEntry::Owned = T
+pub fn clipboard_history_core::ring::BucketEntry::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::ring::BucketEntry::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::ring::BucketEntry where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::ring::BucketEntry::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::ring::BucketEntry where T: core::marker::Sized
+pub fn clipboard_history_core::ring::BucketEntry::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::BucketEntry where T: core::marker::Sized
+pub fn clipboard_history_core::ring::BucketEntry::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::ring::BucketEntry
+pub fn clipboard_history_core::ring::BucketEntry::from(t: T) -> T
+pub struct clipboard_history_core::ring::Ring
+impl clipboard_history_core::ring::Ring
+pub const fn clipboard_history_core::ring::Ring::capacity(&self) -> u32
+pub fn clipboard_history_core::ring::Ring::get(&self, index: u32) -> core::option::Option<clipboard_history_core::ring::Entry>
+pub const fn clipboard_history_core::ring::Ring::is_empty(&self) -> bool
+pub const fn clipboard_history_core::ring::Ring::len(&self) -> u32
+pub const fn clipboard_history_core::ring::Ring::next_head(&self, current: u32) -> u32
+pub fn clipboard_history_core::ring::Ring::open<P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(max_entries: u32, path: P) -> clipboard_history_core::Result<Self>
+pub unsafe fn clipboard_history_core::ring::Ring::set_len(&mut self, len: u32)
+pub fn clipboard_history_core::ring::Ring::write_head(&self) -> u32
+impl !core::marker::Send for clipboard_history_core::ring::Ring
+impl !core::marker::Sync for clipboard_history_core::ring::Ring
+impl core::marker::Unpin for clipboard_history_core::ring::Ring
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::Ring
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::Ring
+impl<T, U> core::convert::Into<U> for clipboard_history_core::ring::Ring where U: core::convert::From<T>
+pub fn clipboard_history_core::ring::Ring::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::ring::Ring where U: core::convert::Into<T>
+pub type clipboard_history_core::ring::Ring::Error = core::convert::Infallible
+pub fn clipboard_history_core::ring::Ring::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::ring::Ring where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::ring::Ring::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::ring::Ring::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_core::ring::Ring where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::ring::Ring::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::ring::Ring where T: core::marker::Sized
+pub fn clipboard_history_core::ring::Ring::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::Ring where T: core::marker::Sized
+pub fn clipboard_history_core::ring::Ring::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::ring::Ring
+pub fn clipboard_history_core::ring::Ring::from(t: T) -> T
+pub struct clipboard_history_core::ring::RingWriter
+impl clipboard_history_core::ring::RingWriter
+pub fn clipboard_history_core::ring::RingWriter::open<P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(path: P) -> clipboard_history_core::Result<Self>
+pub fn clipboard_history_core::ring::RingWriter::set_write_head(&mut self, head: u32) -> clipboard_history_core::Result<()>
+pub fn clipboard_history_core::ring::RingWriter::write(&mut self, entry: clipboard_history_core::ring::Entry, at: u32) -> clipboard_history_core::Result<()>
+impl core::marker::Send for clipboard_history_core::ring::RingWriter
+impl core::marker::Sync for clipboard_history_core::ring::RingWriter
+impl core::marker::Unpin for clipboard_history_core::ring::RingWriter
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::RingWriter
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::RingWriter
+impl<T, U> core::convert::Into<U> for clipboard_history_core::ring::RingWriter where U: core::convert::From<T>
+pub fn clipboard_history_core::ring::RingWriter::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::ring::RingWriter where U: core::convert::Into<T>
+pub type clipboard_history_core::ring::RingWriter::Error = core::convert::Infallible
+pub fn clipboard_history_core::ring::RingWriter::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::ring::RingWriter where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::ring::RingWriter::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::ring::RingWriter::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_core::ring::RingWriter where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::ring::RingWriter::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::ring::RingWriter where T: core::marker::Sized
+pub fn clipboard_history_core::ring::RingWriter::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::RingWriter where T: core::marker::Sized
+pub fn clipboard_history_core::ring::RingWriter::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::ring::RingWriter
+pub fn clipboard_history_core::ring::RingWriter::from(t: T) -> T
+pub const clipboard_history_core::ring::MAX_ENTRIES: _
+pub enum clipboard_history_core::Error
+pub clipboard_history_core::Error::InvalidPidError
+pub clipboard_history_core::Error::InvalidPidError::context: alloc::borrow::Cow<'static, str>
+pub clipboard_history_core::Error::InvalidPidError::error: core::num::error::ParseIntError
+pub clipboard_history_core::Error::Io
+pub clipboard_history_core::Error::Io::context: alloc::borrow::Cow<'static, str>
+pub clipboard_history_core::Error::Io::error: std::io::error::Error
+pub clipboard_history_core::Error::NotARingboard
+pub clipboard_history_core::Error::NotARingboard::file: std::path::PathBuf
+impl core::error::Error for clipboard_history_core::Error
+impl core::fmt::Debug for clipboard_history_core::Error
+pub fn clipboard_history_core::Error::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for clipboard_history_core::Error
+pub fn clipboard_history_core::Error::fmt(&self, __formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Send for clipboard_history_core::Error
+impl core::marker::Sync for clipboard_history_core::Error
+impl core::marker::Unpin for clipboard_history_core::Error
+impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::Error
+impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_core::Error
+impl<T, U> core::convert::Into<U> for clipboard_history_core::Error where U: core::convert::From<T>
+pub fn clipboard_history_core::Error::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::Error where U: core::convert::Into<T>
+pub type clipboard_history_core::Error::Error = core::convert::Infallible
+pub fn clipboard_history_core::Error::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::Error where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::Error::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::Error::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::string::ToString for clipboard_history_core::Error where T: core::fmt::Display + core::marker::Sized
+pub fn clipboard_history_core::Error::to_string(&self) -> alloc::string::String
+impl<T> core::any::Any for clipboard_history_core::Error where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::Error::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::Error where T: core::marker::Sized
+pub fn clipboard_history_core::Error::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::Error where T: core::marker::Sized
+pub fn clipboard_history_core::Error::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::Error
+pub fn clipboard_history_core::Error::from(t: T) -> T
+pub trait clipboard_history_core::AsBytes: core::marker::Sized
+pub fn clipboard_history_core::AsBytes::as_bytes(&self) -> &[u8]
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::AddResponse
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::MoveToFrontResponse
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::ReloadSettingsResponse
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::RemoveResponse
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::Request
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::SwapResponse
+pub trait clipboard_history_core::IoErr<Out>
+pub fn clipboard_history_core::IoErr::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, f: impl core::ops::function::FnOnce() -> I) -> Out
+impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_core::Error>> for core::result::Result<T, std::io::error::Error>
+pub fn core::result::Result<T, std::io::error::Error>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
+impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_core::Error>> for rustix::io::errno::Result<T>
+pub fn rustix::io::errno::Result<T>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
+pub fn clipboard_history_core::read_server_pid<Fd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(dir: Fd, lock_file: P) -> clipboard_history_core::Result<core::option::Option<rustix::pid::Pid>>
+pub type clipboard_history_core::Result<T> = core::result::Result<T, clipboard_history_core::Error>

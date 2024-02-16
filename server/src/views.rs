@@ -1,15 +1,12 @@
-use std::{
-    fmt::{Debug, Formatter},
-    ops::{Deref, DerefMut},
-};
-
 pub use path::PathView;
 pub use string::StringView;
 
 mod path {
-    use std::path::{Path, PathBuf};
-
-    use super::*;
+    use std::{
+        fmt::{Debug, Formatter},
+        ops::{Deref, DerefMut},
+        path::{Path, PathBuf},
+    };
 
     #[must_use]
     pub struct PathView<'a>(&'a mut PathBuf);
@@ -55,7 +52,10 @@ mod path {
 }
 
 mod string {
-    use super::*;
+    use std::{
+        fmt::{Debug, Formatter},
+        ops::{Deref, DerefMut},
+    };
 
     #[must_use]
     pub struct StringView<'a>(usize, &'a mut String);

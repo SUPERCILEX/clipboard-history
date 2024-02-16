@@ -87,7 +87,7 @@ struct AllocatorData {
 }
 
 struct Buckets {
-    buckets: [File; 11],
+    files: [File; 11],
     slot_counts: [u32; 11],
     free_lists: FreeLists,
 }
@@ -171,7 +171,7 @@ impl FreeLists {
 
     fn alloc(&mut self, bucket: usize) -> Option<BucketSlotGuard> {
         let free_list = &mut self.lists.0[bucket];
-        free_list.pop().map(|id| BucketSlotGuard { free_list, id })
+        free_list.pop().map(|id| BucketSlotGuard { id, free_list })
     }
 
     fn free(&mut self, bucket: usize, index: u32) {
@@ -262,7 +262,7 @@ impl Allocator {
             rings: Rings([main_ring, favorites_ring]),
             data: AllocatorData {
                 buckets: Buckets {
-                    buckets,
+                    files: buckets,
                     slot_counts,
                     free_lists,
                 },
@@ -390,6 +390,7 @@ impl Allocator {
         })
     }
 
+    #[allow(clippy::similar_names)]
     pub fn swap(&mut self, id1: u64, id2: u64) -> Result<SwapResponse, CliError> {
         let (ring1, id1, entry1) = match self.get_entry(id1) {
             Ok(r) => r,
@@ -526,7 +527,7 @@ impl AllocatorData {
         debug!("Allocating {size} byte bucket slot.");
         let bucket = size_to_bucket(size);
         let Buckets {
-            buckets,
+            files,
             slot_counts: bucket_lengths,
             free_lists,
         } = &mut self.buckets;
@@ -534,8 +535,7 @@ impl AllocatorData {
         let free_bucket = free_lists.alloc(bucket);
         let bucket_index = free_bucket
             .as_ref()
-            .map(|g| g.id)
-            .unwrap_or_else(|| bucket_lengths[bucket]);
+            .map_or_else(|| bucket_lengths[bucket], |g| g.id);
         let bucket_len = 1 << (bucket + 2);
 
         debug!("Writing to bucket {bucket} at slot {bucket_index}.");
@@ -549,13 +549,13 @@ impl AllocatorData {
             copy_file_range_all(
                 data,
                 Some(&mut 0),
-                &buckets[bucket],
+                &files[bucket],
                 Some(&mut offset),
                 usize::try_from(size).unwrap(),
             )
             .map_io_err(|| format!("Failed to copy data to bucket {bucket}."))?;
             if size < bucket_len {
-                buckets[bucket]
+                files[bucket]
                     .write_all_at(
                         &[0],
                         if grow {
@@ -694,6 +694,7 @@ fn direct_metadata_file_name(
     DirectFileNameToken(buf.as_mut_slice(), PhantomData)
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn direct_file_name(buf: DirectFileNameToken<()>) -> DirectFileNameToken<Infallible> {
     buf.0[14] = 0;
     DirectFileNameToken(buf.0, PhantomData)

@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use std::{
     borrow::Cow,
     io::{IoSlice, IoSliceMut},
@@ -118,7 +120,10 @@ fn request_with_fd(
     let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
     let mut buf = SendAncillaryBuffer::new(&mut space);
     let fds = [fd.as_fd()];
-    debug_assert!(buf.push(SendAncillaryMessage::ScmRights(&fds)));
+    {
+        let success = buf.push(SendAncillaryMessage::ScmRights(&fds));
+        debug_assert!(success);
+    }
 
     request_with_ancillary(server, addr, request, &mut buf)
 }

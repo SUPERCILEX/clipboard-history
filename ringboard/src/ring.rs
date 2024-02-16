@@ -63,16 +63,16 @@ impl From<Entry> for RawEntry {
 impl From<RawEntry> for Entry {
     fn from(RawEntry(value): RawEntry) -> Self {
         if value == 0 {
-            return Entry::Uninitialized;
+            return Self::Uninitialized;
         }
 
         let size = value & ((1 << 12) - 1);
         let index = value >> 12;
 
         if size == 0 {
-            Entry::File
+            Self::File
         } else {
-            Entry::Bucketed(BucketEntry { size, index })
+            Self::Bucketed(BucketEntry { size, index })
         }
     }
 }
@@ -91,19 +91,22 @@ pub struct BucketEntry {
 }
 
 impl BucketEntry {
-    pub fn new(size: u32, index: u32) -> std::result::Result<Self, ()> {
+    #[must_use]
+    pub const fn new(size: u32, index: u32) -> Option<Self> {
         if size > 0 && size < (1 << 12) && index < (1 << 20) {
-            Ok(Self { size, index })
+            Some(Self { size, index })
         } else {
-            Err(())
+            None
         }
     }
 
-    pub fn size(&self) -> u32 {
+    #[must_use]
+    pub const fn size(&self) -> u32 {
         self.size
     }
 
-    pub fn index(&self) -> u32 {
+    #[must_use]
+    pub const fn index(&self) -> u32 {
         self.index
     }
 }
@@ -169,18 +172,30 @@ impl Ring {
         })
     }
 
-    pub fn len(&self) -> u32 {
+    #[must_use]
+    pub const fn len(&self) -> u32 {
         self.len
     }
 
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// # Safety
+    ///
+    /// The ring file must have at least len entries and cannot exceed capacity.
     pub unsafe fn set_len(&mut self, len: u32) {
         self.len = len;
     }
 
-    pub fn capacity(&self) -> u32 {
+    #[must_use]
+    pub const fn capacity(&self) -> u32 {
         self.capacity
     }
 
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn write_head(&self) -> u32 {
         let bytes = unsafe {
             slice::from_raw_parts(
@@ -194,7 +209,8 @@ impl Ring {
         u32::from_le_bytes(bytes.try_into().unwrap())
     }
 
-    pub fn next_head(&self, current: u32) -> u32 {
+    #[must_use]
+    pub const fn next_head(&self, current: u32) -> u32 {
         if current == self.capacity() - 1 {
             0
         } else {
@@ -202,6 +218,8 @@ impl Ring {
         }
     }
 
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn get(&self, index: u32) -> Option<Entry> {
         if index >= self.len() {
             return None;
@@ -273,6 +291,7 @@ impl RingWriter {
             .map_io_err(|| format!("Failed to write entry to Ringboard database: {entry:?}"))
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn set_write_head(&mut self, head: u32) -> Result<()> {
         self.ring
             .write_all_at(

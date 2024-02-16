@@ -69,7 +69,7 @@ impl SendMsgBufs {
                     ptr::from_ref(&hdr).cast(),
                     ptr,
                     mem::size_of::<libc::msghdr>(),
-                )
+                );
             }
 
             let iov = libc::iovec {
@@ -81,7 +81,7 @@ impl SendMsgBufs {
                     ptr::from_ref(&iov).cast(),
                     ptr.add(mem::size_of::<libc::msghdr>()),
                     mem::size_of::<libc::iovec>(),
-                )
+                );
             }
 
             ptr

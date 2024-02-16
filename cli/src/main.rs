@@ -151,8 +151,8 @@ pub enum CliRingKind {
 impl From<CliRingKind> for RingKind {
     fn from(value: CliRingKind) -> Self {
         match value {
-            CliRingKind::Favorites => RingKind::Favorites,
-            CliRingKind::Main => RingKind::Main,
+            CliRingKind::Favorites => Self::Favorites,
+            CliRingKind::Main => Self::Main,
         }
     }
 }
@@ -307,24 +307,24 @@ fn run() -> Result<(), CliError> {
             .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
     };
     match cmd {
-        Cmd::Add(data) => add(connect_to_server(&server_addr)?, server_addr, data),
+        Cmd::Add(data) => add(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Favorite(data) => move_to_front(
             connect_to_server(&server_addr)?,
-            server_addr,
+            &server_addr,
             data,
             Some(RingKind::Favorites),
         ),
         Cmd::Unfavorite(data) => move_to_front(
             connect_to_server(&server_addr)?,
-            server_addr,
+            &server_addr,
             data,
             Some(RingKind::Main),
         ),
         Cmd::MoveToFront(data) => {
-            move_to_front(connect_to_server(&server_addr)?, server_addr, data, None)
+            move_to_front(connect_to_server(&server_addr)?, &server_addr, data, None)
         }
-        Cmd::Swap(data) => swap(connect_to_server(&server_addr)?, server_addr, data),
-        Cmd::Remove(data) => remove(connect_to_server(&server_addr)?, server_addr, data),
+        Cmd::Swap(data) => swap(connect_to_server(&server_addr)?, &server_addr, data),
+        Cmd::Remove(data) => remove(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Wipe => wipe(),
         Cmd::ReloadSettings(data) => {
             reload_settings(connect_to_server(&server_addr)?, server_addr, data)
@@ -344,7 +344,7 @@ fn run() -> Result<(), CliError> {
 
 fn add(
     server: OwnedFd,
-    addr: SocketAddrUnix,
+    addr: &SocketAddrUnix,
     Add {
         data_file,
         target,
@@ -363,7 +363,7 @@ fn add(
 
         ringboard_sdk::add(
             server,
-            &addr,
+            addr,
             target.into(),
             mime_type,
             file.as_ref().map_or(stdin(), |file| file.as_fd()),
@@ -377,11 +377,11 @@ fn add(
 
 fn move_to_front(
     server: OwnedFd,
-    addr: SocketAddrUnix,
+    addr: &SocketAddrUnix,
     EntryAction { id }: EntryAction,
     to: Option<RingKind>,
 ) -> Result<(), CliError> {
-    match ringboard_sdk::move_to_front(server, &addr, id, to)? {
+    match ringboard_sdk::move_to_front(server, addr, id, to)? {
         MoveToFrontResponse::Success { id } => {
             println!("Entry moved: {id}");
         }
@@ -393,30 +393,28 @@ fn move_to_front(
     Ok(())
 }
 
-fn swap(server: OwnedFd, addr: SocketAddrUnix, Swap { id1, id2 }: Swap) -> Result<(), CliError> {
-    let SwapResponse { error1, error2 } = ringboard_sdk::swap(server, &addr, id1, id2)?;
+fn swap(server: OwnedFd, addr: &SocketAddrUnix, Swap { id1, id2 }: Swap) -> Result<(), CliError> {
+    let SwapResponse { error1, error2 } = ringboard_sdk::swap(server, addr, id1, id2)?;
     if let Some(e) = error1 {
         return Err(CliError::IdNotFound(e));
     } else if let Some(e) = error2 {
         return Err(CliError::IdNotFound(e));
-    } else {
-        println!("Done.");
     }
+    println!("Done.");
 
     Ok(())
 }
 
 fn remove(
     server: OwnedFd,
-    addr: SocketAddrUnix,
+    addr: &SocketAddrUnix,
     EntryAction { id }: EntryAction,
 ) -> Result<(), CliError> {
-    let RemoveResponse { error } = ringboard_sdk::remove(server, &addr, id)?;
+    let RemoveResponse { error } = ringboard_sdk::remove(server, addr, id)?;
     if let Some(e) = error {
         return Err(CliError::IdNotFound(e));
-    } else {
-        println!("Done.");
     }
+    println!("Done.");
 
     Ok(())
 }

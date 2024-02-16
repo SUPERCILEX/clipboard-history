@@ -68,6 +68,7 @@ pub struct ReloadSettingsResponse {
     pub error: Option<()>,
 }
 
+#[must_use]
 pub fn composite_id(kind: RingKind, id: u32) -> u64 {
     ((kind as u64) << 32) | u64::from(id)
 }

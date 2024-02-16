@@ -37,11 +37,11 @@ struct Clients {
 }
 
 impl Clients {
-    fn is_connected(&self, id: u32) -> bool {
+    const fn is_connected(&self, id: u32) -> bool {
         (self.connections & (1 << id)) != 0
     }
 
-    fn is_closing(&self, id: u32) -> bool {
+    const fn is_closing(&self, id: u32) -> bool {
         (self.pending_closes & (1 << id)) != 0
     }
 
@@ -110,7 +110,7 @@ fn setup_uring() -> Result<(IoUring, BufRing), CliError> {
             .map_io_err(|| format!("Failed to open pressure file: {mem_pressure_path:?}"))?;
 
         mem_pressure
-            .write_all("some 50000 2000000".as_bytes())
+            .write_all(b"some 50000 2000000")
             .map_io_err(|| format!("Failed to write to pressure file: {mem_pressure_path:?}"))?;
 
         OwnedFd::from(mem_pressure)
@@ -159,6 +159,7 @@ fn setup_uring() -> Result<(IoUring, BufRing), CliError> {
     Ok((uring, buf_ring))
 }
 
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     const REQ_TYPE_ACCEPT: u64 = 0;
     const REQ_TYPE_RECV: u64 = 1;
@@ -320,7 +321,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                             | (u64::from(token) << REQ_TYPE_SHIFT)
                                             | store_fd(fd),
                                     ),
-                            )
+                            );
                         }
 
                         if !clients.is_connected(fd) {

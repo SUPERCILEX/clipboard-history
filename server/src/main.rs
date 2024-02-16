@@ -74,10 +74,8 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
                  initiate the recovery sequence on the next startup.",
             )
             .attach_printable(format!("Lock file: {lock_file:?}")),
-        CliError::DeserializeError { error, context } => Report::new(wrapper)
-            .attach_printable(error)
-            .attach_printable(context),
-        CliError::SerializeError { error, context } => Report::new(wrapper)
+        CliError::DeserializeError { error, context }
+        | CliError::SerializeError { error, context } => Report::new(wrapper)
             .attach_printable(error)
             .attach_printable(context),
         CliError::Multiple(errs) => {
@@ -130,7 +128,7 @@ fn run() -> Result<(), CliError> {
             server_guard.shutdown(),
         ]
         .into_iter()
-        .flat_map(Result::err)
+        .filter_map(Result::err)
         .collect::<Vec<_>>(),
     )
 }

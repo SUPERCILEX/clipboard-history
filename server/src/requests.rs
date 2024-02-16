@@ -53,7 +53,7 @@ pub fn handle(
         warn!("Dropping invalid request (too short).");
         return Ok(None);
     }
-    let request = unsafe { &*request_data.as_ptr().cast::<Request>() };
+    let request = unsafe { &request_data.as_ptr().cast::<Request>().read_unaligned() };
 
     info!("Processing request: {request:?}");
     match request {
@@ -110,13 +110,13 @@ fn add(
 }
 
 fn reload_settings(
-    control_data: &mut [u8],
-    send_bufs: &mut SendMsgBufs,
-    allocator: &mut Allocator,
+    _control_data: &mut [u8],
+    _send_bufs: &mut SendMsgBufs,
+    _allocator: &mut Allocator,
 ) -> Result<SendBufAllocation, CliError> {
     todo!()
 }
 
-fn gc(allocator: &mut Allocator) -> Result<(), CliError> {
+fn gc(_allocator: &mut Allocator) -> Result<(), CliError> {
     todo!()
 }
