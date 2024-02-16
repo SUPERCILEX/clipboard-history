@@ -1,30 +1,36 @@
 use std::{
     borrow::Cow,
+    fs,
     fs::File,
-    io::{IoSlice, IoSliceMut},
+    io,
+    io::{ErrorKind, IoSlice, IoSliceMut},
     mem,
     os::fd::{AsFd, BorrowedFd, OwnedFd},
     path::{Path, PathBuf},
     str,
 };
 
+use ask::Answer;
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
-use clipboard_history_core::{
-    dirs::socket_file,
+use error_stack::Report;
+use ringboard_core::{
+    dirs::{data_dir, socket_file},
     protocol,
     protocol::{
         AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse, Request,
         RingKind, SwapResponse,
     },
-    AsBytes, Error, IoErr,
+    read_server_pid, AsBytes, Error, IoErr,
 };
-use error_stack::Report;
 use rustix::{
+    event::{poll, PollFd, PollFlags},
+    fs::CWD,
     net::{
         connect_unix, recvmsg, sendmsg_unix, socket, AddressFamily, RecvAncillaryBuffer, RecvFlags,
         SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketType,
     },
+    process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
     stdio::stdin,
 };
 use thiserror::Error;
@@ -251,6 +257,8 @@ enum CliError {
     VersionMismatch { actual: u8 },
     #[error("The server returned an invalid response.")]
     InvalidResponse { context: Cow<'static, str> },
+    #[error("Failed to delete or copy files.")]
+    Fuc(fuc_engine::Error),
     #[error("Id not found.")]
     IdNotFound(IdNotFoundError),
 }
@@ -268,7 +276,8 @@ fn main() -> error_stack::Result<(), Wrapper> {
     run().map_err(|e| {
         let wrapper = Wrapper::W(e.to_string());
         match e {
-            CliError::Core(Error::Io { error, context }) => Report::new(error)
+            CliError::Core(Error::Io { error, context })
+            | CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
             CliError::Core(Error::NotARingboard { file: _ })
@@ -283,6 +292,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::IdNotFound(IdNotFoundError::Entry(id)) => {
                 Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
             }
+            CliError::Fuc(e) => Report::new(e).change_context(wrapper),
         }
     })
 }
@@ -539,8 +549,53 @@ fn remove(
 }
 
 fn wipe() -> Result<(), CliError> {
-    // TODO move directory, shut down server if running, then delete
-    todo!()
+    let Answer::Yes = ask::ask(
+        "⚠️ Are you sure you want to delete your entire clipboard history? ⚠️ [y/N] ",
+        Answer::No,
+        &mut io::stdin(),
+        &mut io::stdout(),
+    )
+    .map_io_err(|| "Failed to ask for confirmation.")?
+    else {
+        println!("Aborting.");
+        std::process::exit(1)
+    };
+
+    let data_dir = data_dir();
+    let mut tmp_data_dir = data_dir.with_extension("tmp");
+    match fs::rename(&data_dir, &tmp_data_dir) {
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            println!("Nothing to delete");
+            return Ok(());
+        }
+        r => r,
+    }
+    .map_io_err(|| format!("Failed to rename dir: {data_dir:?} -> {tmp_data_dir:?}"))?;
+
+    tmp_data_dir.push("server.lock");
+    let running_server = read_server_pid(CWD, &tmp_data_dir).ok().flatten();
+    tmp_data_dir.pop();
+
+    if let Some(pid) = running_server {
+        let fd = pidfd_open(pid, PidfdFlags::empty())
+            .map_io_err(|| format!("Failed to get FD for server: {pid:?}"))?;
+        pidfd_send_signal(&fd, Signal::Quit)
+            .map_io_err(|| format!("Failed to send shut down signal to server: {pid:?}"))?;
+
+        let mut fds = [PollFd::new(&fd, PollFlags::IN)];
+        poll(&mut fds, -1).map_io_err(|| format!("Failed to wait for server exit: {pid:?}"))?;
+        if !fds[0].revents().contains(PollFlags::IN) {
+            return Err(CliError::Core(Error::Io {
+                error: io::Error::new(ErrorKind::InvalidInput, "Bad poll response."),
+                context: "Failed to receive server exit response.".into(),
+            }));
+        }
+    }
+
+    fuc_engine::remove_dir_all(tmp_data_dir).map_err(CliError::Fuc)?;
+    println!("Done.");
+
+    Ok(())
 }
 
 fn reload_settings(

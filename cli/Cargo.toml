@@ -10,11 +10,13 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
+ask = { package = "ask-cli", version = "0.3.0" }
 clap = { version = "4.4.18", features = ["derive", "wrap_help"] }
 clap-num = "1.1.1"
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
 error-stack = "0.4.1"
-rustix = { version = "0.38.30", features = ["stdio", "net"], path = "/home/asaveau/Desktop/wip/rustix" }
+fuc_engine = "2.0.0"
+rustix = { version = "0.38.30", features = ["stdio", "net", "event"], path = "/home/asaveau/Desktop/wip/rustix" }
 thiserror = "1.0.56"
 
 [dev-dependencies]
