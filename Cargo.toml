@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "cli",
+    "client-sdk",
     "ringboard",
     "server",
 ]

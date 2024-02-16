@@ -1,0 +1,18 @@
+[package]
+name = "clipboard-history-client-sdk"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "API bindings to the ringboard server."
+repository.workspace = true
+keywords = ["ringboard", "clipboard", "tools", "sdk"]
+categories = ["command-line-utilities", "development-tools", "filesystem"]
+license.workspace = true
+
+[dependencies]
+ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
+rustix = { version = "0.38.30", features = ["net"], path = "/home/asaveau/Desktop/wip/rustix" }
+thiserror = "1.0.56"
+
+[dev-dependencies]
+supercilex-tests = { version = "0.4.4", default-features = false, features = ["api"] }

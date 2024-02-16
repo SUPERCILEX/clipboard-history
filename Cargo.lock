@@ -254,9 +254,20 @@ dependencies = [
  "ask-cli",
  "clap",
  "clap-num",
+ "clipboard-history-client-sdk",
  "clipboard-history-core",
  "error-stack",
  "fuc_engine",
+ "rustix 0.38.31",
+ "supercilex-tests",
+ "thiserror",
+]
+
+[[package]]
+name = "clipboard-history-client-sdk"
+version = "0.0.0"
+dependencies = [
+ "clipboard-history-core",
  "rustix 0.38.31",
  "supercilex-tests",
  "thiserror",

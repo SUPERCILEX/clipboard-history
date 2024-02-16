@@ -1,11 +1,9 @@
 use std::{
-    borrow::Cow,
     fs,
     fs::File,
     io,
-    io::{ErrorKind, IoSlice, IoSliceMut},
-    mem,
-    os::fd::{AsFd, BorrowedFd, OwnedFd},
+    io::ErrorKind,
+    os::fd::{AsFd, OwnedFd},
     path::{Path, PathBuf},
     str,
 };
@@ -16,20 +14,17 @@ use clap_num::si_number;
 use error_stack::Report;
 use ringboard_core::{
     dirs::{data_dir, socket_file},
-    protocol,
     protocol::{
-        AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse, Request,
-        RingKind, SwapResponse,
+        AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse, RingKind,
+        SwapResponse,
     },
-    read_server_pid, AsBytes, Error, IoErr,
+    read_server_pid, IoErr,
 };
+use ringboard_sdk::{connect_to_server, garbage_collect};
 use rustix::{
     event::{poll, PollFd, PollFlags},
     fs::CWD,
-    net::{
-        connect_unix, recvmsg, sendmsg_unix, socket, AddressFamily, RecvAncillaryBuffer, RecvFlags,
-        SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketType,
-    },
+    net::SocketAddrUnix,
     process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
     stdio::stdin,
 };
@@ -249,14 +244,9 @@ struct Dump {
 #[derive(Error, Debug)]
 enum CliError {
     #[error("{0}")]
-    Core(#[from] Error),
-    #[error(
-        "Protocol version mismatch: expected {} but got {actual}",
-        protocol::VERSION
-    )]
-    VersionMismatch { actual: u8 },
-    #[error("The server returned an invalid response.")]
-    InvalidResponse { context: Cow<'static, str> },
+    Core(#[from] ringboard_core::Error),
+    #[error("{0}")]
+    Sdk(#[from] ringboard_sdk::Error),
     #[error("Failed to delete or copy files.")]
     Fuc(fuc_engine::Error),
     #[error("Id not found.")]
@@ -276,16 +266,27 @@ fn main() -> error_stack::Result<(), Wrapper> {
     run().map_err(|e| {
         let wrapper = Wrapper::W(e.to_string());
         match e {
-            CliError::Core(Error::Io { error, context })
-            | CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
+            CliError::Core(e) | CliError::Sdk(ringboard_sdk::Error::Core(e)) => {
+                use ringboard_core::Error;
+                match e {
+                    Error::Io { error, context } => Report::new(error)
+                        .attach_printable(context)
+                        .change_context(wrapper),
+                    Error::NotARingboard { file: _ } => Report::new(wrapper),
+                    Error::InvalidPidError { error, context } => Report::new(error)
+                        .attach_printable(context)
+                        .change_context(wrapper),
+                }
+            }
+            CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
-            CliError::Core(Error::NotARingboard { file: _ })
-            | CliError::VersionMismatch { actual: _ } => Report::new(wrapper),
-            CliError::Core(Error::InvalidPidError { error, context }) => Report::new(error)
-                .attach_printable(context)
-                .change_context(wrapper),
-            CliError::InvalidResponse { context } => Report::new(wrapper).attach_printable(context),
+            CliError::Sdk(ringboard_sdk::Error::InvalidResponse { context }) => {
+                Report::new(wrapper).attach_printable(context)
+            }
+            CliError::Sdk(ringboard_sdk::Error::VersionMismatch { actual: _ }) => {
+                Report::new(wrapper)
+            }
             CliError::IdNotFound(IdNotFoundError::Ring(id)) => {
                 Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
             }
@@ -300,164 +301,45 @@ fn main() -> error_stack::Result<(), Wrapper> {
 fn run() -> Result<(), CliError> {
     let Cli { cmd, help: _ } = Cli::parse();
 
-    let socket_file = socket_file();
-    let server_addr = SocketAddrUnix::new(&socket_file)
-        .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+    let server_addr = {
+        let socket_file = socket_file();
+        SocketAddrUnix::new(&socket_file)
+            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
+    };
     match cmd {
-        Cmd::Add(data) => add(
-            connect_to_server(&server_addr, &socket_file)?,
-            server_addr,
-            data,
-        ),
+        Cmd::Add(data) => add(connect_to_server(&server_addr)?, server_addr, data),
         Cmd::Favorite(data) => move_to_front(
-            connect_to_server(&server_addr, &socket_file)?,
+            connect_to_server(&server_addr)?,
             server_addr,
             data,
             Some(RingKind::Favorites),
         ),
         Cmd::Unfavorite(data) => move_to_front(
-            connect_to_server(&server_addr, &socket_file)?,
+            connect_to_server(&server_addr)?,
             server_addr,
             data,
             Some(RingKind::Main),
         ),
-        Cmd::MoveToFront(data) => move_to_front(
-            connect_to_server(&server_addr, &socket_file)?,
-            server_addr,
-            data,
-            None,
-        ),
-        Cmd::Swap(data) => swap(
-            connect_to_server(&server_addr, &socket_file)?,
-            server_addr,
-            data,
-        ),
-        Cmd::Remove(data) => remove(
-            connect_to_server(&server_addr, &socket_file)?,
-            server_addr,
-            data,
-        ),
+        Cmd::MoveToFront(data) => {
+            move_to_front(connect_to_server(&server_addr)?, server_addr, data, None)
+        }
+        Cmd::Swap(data) => swap(connect_to_server(&server_addr)?, server_addr, data),
+        Cmd::Remove(data) => remove(connect_to_server(&server_addr)?, server_addr, data),
         Cmd::Wipe => wipe(),
-        Cmd::ReloadSettings(data) => reload_settings(
-            connect_to_server(&server_addr, &socket_file)?,
-            server_addr,
-            data,
-        ),
-        Cmd::GarbageCollect => request(
-            connect_to_server(&server_addr, &socket_file)?,
-            &server_addr,
-            Request::GarbageCollect,
-        ),
-        Cmd::Migrate(data) => migrate(
-            connect_to_server(&server_addr, &socket_file)?,
-            server_addr,
-            data,
-        ),
+        Cmd::ReloadSettings(data) => {
+            reload_settings(connect_to_server(&server_addr)?, server_addr, data)
+        }
+        Cmd::GarbageCollect => {
+            garbage_collect(connect_to_server(&server_addr)?, &server_addr).map_err(CliError::from)
+        }
+        Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, server_addr, data),
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump(data)) => dump(data),
-        Cmd::Debug(Dev::Generate(data)) => generate(
-            connect_to_server(&server_addr, &socket_file)?,
-            server_addr,
-            data,
-        ),
-        Cmd::Debug(Dev::Fuzz(data)) => fuzz(
-            connect_to_server(&server_addr, &socket_file)?,
-            server_addr,
-            data,
-        ),
-    }
-}
-
-fn request(server: impl AsFd, addr: &SocketAddrUnix, request: Request) -> Result<(), CliError> {
-    request_with_ancillary(server, addr, request, &mut SendAncillaryBuffer::default())
-}
-
-fn request_with_fd(
-    server: impl AsFd,
-    addr: &SocketAddrUnix,
-    request: Request,
-    fd: BorrowedFd,
-) -> Result<(), CliError> {
-    let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
-    let mut buf = SendAncillaryBuffer::new(&mut space);
-    let fds = [fd];
-    debug_assert!(buf.push(SendAncillaryMessage::ScmRights(&fds)));
-
-    request_with_ancillary(server, addr, request, &mut buf)
-}
-
-fn request_with_ancillary(
-    server: impl AsFd,
-    addr: &SocketAddrUnix,
-    request: Request,
-    ancillary: &mut SendAncillaryBuffer,
-) -> Result<(), CliError> {
-    sendmsg_unix(
-        server,
-        addr,
-        &[IoSlice::new(request.as_bytes())],
-        ancillary,
-        SendFlags::empty(),
-    )
-    .map_io_err(|| format!("Failed to send request: {request:?}"))?;
-    Ok(())
-}
-
-unsafe fn response<T: Copy, const N: usize>(server: impl AsFd) -> Result<T, CliError> {
-    let type_name = || {
-        let name = std::any::type_name::<T>();
-        if let Some((_, name)) = name.rsplit_once(':') {
-            name
-        } else {
-            name
+        Cmd::Debug(Dev::Generate(data)) => {
+            generate(connect_to_server(&server_addr)?, server_addr, data)
         }
-    };
-
-    let mut buf = [0u8; N];
-    let result = recvmsg(
-        server,
-        &mut [IoSliceMut::new(buf.as_mut_slice())],
-        &mut RecvAncillaryBuffer::default(),
-        RecvFlags::TRUNC,
-    )
-    .map_io_err(|| format!("Failed to receive {}.", type_name()))?;
-    if result.bytes != mem::size_of::<T>() {
-        return Err(CliError::InvalidResponse {
-            context: format!("Bad {}.", type_name()).into(),
-        });
+        Cmd::Debug(Dev::Fuzz(data)) => fuzz(connect_to_server(&server_addr)?, server_addr, data),
     }
-    Ok(unsafe { *buf.as_ptr().cast::<T>() })
-}
-
-macro_rules! response {
-    ($t:ty) => {
-        response::<$t, { mem::size_of::<$t>() }>
-    };
-}
-
-fn connect_to_server(addr: &SocketAddrUnix, socket_file: &Path) -> Result<OwnedFd, CliError> {
-    let socket = socket(AddressFamily::UNIX, SocketType::SEQPACKET, None)
-        .map_io_err(|| format!("Failed to create socket: {socket_file:?}"))?;
-    connect_unix(&socket, addr)
-        .map_io_err(|| format!("Failed to connect to server: {socket_file:?}"))?;
-
-    {
-        sendmsg_unix(
-            &socket,
-            addr,
-            &[IoSlice::new(&[protocol::VERSION])],
-            &mut SendAncillaryBuffer::default(),
-            SendFlags::empty(),
-        )
-        .map_io_err(|| "Failed to send version.")?;
-
-        let version = unsafe { response!(u8)(&socket) }?;
-        if version != protocol::VERSION {
-            return Err(CliError::VersionMismatch { actual: version });
-        }
-    }
-
-    Ok(socket)
 }
 
 fn add(
@@ -469,7 +351,7 @@ fn add(
         mime_type,
     }: Add,
 ) -> Result<(), CliError> {
-    {
+    let AddResponse::Success { id } = {
         let file = if data_file == Path::new("-") {
             None
         } else {
@@ -479,18 +361,15 @@ fn add(
             )
         };
 
-        request_with_fd(
-            &server,
+        ringboard_sdk::add(
+            server,
             &addr,
-            Request::Add {
-                to: target.into(),
-                mime_type,
-            },
-            file.as_ref().map(|file| file.as_fd()).unwrap_or(stdin()),
-        )?;
-    }
+            target.into(),
+            mime_type,
+            file.as_ref().map_or(stdin(), |file| file.as_fd()),
+        )?
+    };
 
-    let AddResponse::Success { id } = unsafe { response!(AddResponse)(&server) }?;
     println!("Entry added: {id}");
 
     Ok(())
@@ -502,9 +381,7 @@ fn move_to_front(
     EntryAction { id }: EntryAction,
     to: Option<RingKind>,
 ) -> Result<(), CliError> {
-    request(&server, &addr, Request::MoveToFront { id, to })?;
-
-    match unsafe { response!(MoveToFrontResponse)(&server) }? {
+    match ringboard_sdk::move_to_front(server, &addr, id, to)? {
         MoveToFrontResponse::Success { id } => {
             println!("Entry moved: {id}");
         }
@@ -517,9 +394,7 @@ fn move_to_front(
 }
 
 fn swap(server: OwnedFd, addr: SocketAddrUnix, Swap { id1, id2 }: Swap) -> Result<(), CliError> {
-    request(&server, &addr, Request::Swap { id1, id2 })?;
-
-    let SwapResponse { error1, error2 } = unsafe { response!(SwapResponse)(&server) }?;
+    let SwapResponse { error1, error2 } = ringboard_sdk::swap(server, &addr, id1, id2)?;
     if let Some(e) = error1 {
         return Err(CliError::IdNotFound(e));
     } else if let Some(e) = error2 {
@@ -536,9 +411,7 @@ fn remove(
     addr: SocketAddrUnix,
     EntryAction { id }: EntryAction,
 ) -> Result<(), CliError> {
-    request(&server, &addr, Request::Remove { id })?;
-
-    let RemoveResponse { error } = unsafe { response!(RemoveResponse)(&server) }?;
+    let RemoveResponse { error } = ringboard_sdk::remove(server, &addr, id)?;
     if let Some(e) = error {
         return Err(CliError::IdNotFound(e));
     } else {
@@ -585,7 +458,7 @@ fn wipe() -> Result<(), CliError> {
         let mut fds = [PollFd::new(&fd, PollFlags::IN)];
         poll(&mut fds, -1).map_io_err(|| format!("Failed to wait for server exit: {pid:?}"))?;
         if !fds[0].revents().contains(PollFlags::IN) {
-            return Err(CliError::Core(Error::Io {
+            return Err(CliError::Core(ringboard_core::Error::Io {
                 error: io::Error::new(ErrorKind::InvalidInput, "Bad poll response."),
                 context: "Failed to receive server exit response.".into(),
             }));
