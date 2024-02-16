@@ -2,10 +2,7 @@ use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 
 use error_stack::Report;
 use log::info;
-use ringboard_core::{
-    dirs::{data_dir, socket_file},
-    Error, IoErr,
-};
+use ringboard_core::{dirs::data_dir, Error, IoErr};
 use rustix::process::Pid;
 use thiserror::Error;
 
@@ -122,17 +119,13 @@ fn run() -> Result<(), CliError> {
                 .map_io_err(|| format!("Failed to delete server lock: {lock:?}"))?;
         }
     };
-    let socket_file = socket_file();
     info!("Acquired server lock.");
 
     // TODO max entries
     let mut allocator = Allocator::open(data_dir, 10)?;
     into_result(
         [
-            reactor::run(&mut allocator, &socket_file),
-            fs::remove_file(&socket_file)
-                .map_io_err(|| format!("Failed to delete server socket: {socket_file:?}"))
-                .map_err(CliError::from),
+            reactor::run(&mut allocator),
             allocator.shutdown(),
             server_guard.shutdown(),
         ]

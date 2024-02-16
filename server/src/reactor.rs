@@ -5,7 +5,7 @@ use std::{
     io::{ErrorKind, Read as StdRead, Write},
     mem,
     os::fd::{AsRawFd, OwnedFd},
-    path::{Path, PathBuf},
+    path::PathBuf,
     ptr,
 };
 
@@ -19,7 +19,7 @@ use io_uring::{
     IoUring,
 };
 use log::{debug, info, trace, warn};
-use ringboard_core::IoErr;
+use ringboard_core::{dirs::socket_file, IoErr};
 use rustix::net::{
     bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType,
 };
@@ -61,7 +61,7 @@ impl Clients {
     }
 }
 
-fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
+fn setup_uring() -> Result<(IoUring, BufRing), CliError> {
     let uring = IoUring::<io_uring::squeue::Entry>::builder()
         .setup_coop_taskrun()
         .setup_single_issuer()
@@ -117,14 +117,15 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
     };
 
     let socket = {
+        let socket_file = socket_file();
         let addr = {
-            match fs::remove_file(socket_file) {
+            match fs::remove_file(&socket_file) {
                 Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
                 r => r,
             }
             .map_io_err(|| format!("Failed to remove old socket: {socket_file:?}"))?;
 
-            SocketAddrUnix::new(socket_file)
+            SocketAddrUnix::new(&socket_file)
                 .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))
         }?;
 
@@ -158,7 +159,7 @@ fn setup_uring(socket_file: &Path) -> Result<(IoUring, BufRing), CliError> {
     Ok((uring, buf_ring))
 }
 
-pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError> {
+pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     const REQ_TYPE_ACCEPT: u64 = 0;
     const REQ_TYPE_RECV: u64 = 1;
     const REQ_TYPE_CLOSE: u64 = 2;
@@ -196,7 +197,7 @@ pub fn run(allocator: &mut Allocator, socket_file: &Path) -> Result<(), CliError
         u32::try_from(entry.user_data() >> (u64::BITS - MAX_NUM_CLIENTS_SHIFT)).unwrap()
     };
 
-    let (mut uring, mut buf_ring) = setup_uring(socket_file)?;
+    let (mut uring, mut buf_ring) = setup_uring()?;
 
     {
         let read_signals = Read::new(Fixed(MAX_NUM_CLIENTS + 1), ptr::null_mut(), 0)
