@@ -7,7 +7,7 @@ use crate::AsBytes;
 pub const VERSION: u8 = 0;
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum RingKind {
     Favorites,
     Main,
@@ -30,8 +30,8 @@ const _: () = assert!(mem::size_of::<Request>() == 128);
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-pub struct AddResponse {
-    pub id: u64,
+pub enum AddResponse {
+    Success { id: u64 },
 }
 
 #[repr(u8)]
@@ -41,10 +41,11 @@ pub enum IdNotFoundError {
     Entry(u32),
 }
 
-#[repr(C)]
+#[repr(u8)]
 #[derive(Copy, Clone, Debug)]
-pub struct MoveToFrontResponse {
-    pub error: Option<IdNotFoundError>,
+pub enum MoveToFrontResponse {
+    Success { id: u64 },
+    Error(IdNotFoundError),
 }
 
 #[repr(C)]

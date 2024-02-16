@@ -20,13 +20,15 @@ use std::{
 use arrayvec::ArrayVec;
 use bitcode::{Decode, Encode};
 use clipboard_history_core::{
-    protocol::{MimeType, RingKind},
+    protocol::{
+        composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind,
+    },
     ring::{BucketEntry, Entry, Ring, RingWriter},
     IoErr,
 };
 use log::{debug, info};
 use rustix::fs::{
-    copy_file_range, openat, statx, unlinkat, AtFlags, Mode, OFlags, StatxFlags, CWD,
+    copy_file_range, openat, renameat, statx, unlinkat, AtFlags, Mode, OFlags, StatxFlags, CWD,
 };
 
 use crate::{
@@ -275,21 +277,30 @@ impl Allocator {
 
     pub fn add(
         &mut self,
-        data: OwnedFd,
+        fd: OwnedFd,
         to: RingKind,
         mime_type: &MimeType,
+    ) -> Result<AddResponse, CliError> {
+        let id = self.add_internal(to, |head, data| data.alloc(fd, mime_type, to, head))?;
+        Ok(AddResponse::Success {
+            id: composite_id(to, id),
+        })
+    }
+
+    fn add_internal(
+        &mut self,
+        to: RingKind,
+        alloc: impl FnOnce(u32, &mut AllocatorData) -> Result<Entry, CliError>,
     ) -> Result<u32, CliError> {
         let WritableRing { writer, ring } = &mut self.rings[to];
-
         let head = ring.write_head();
-        debug!("Allocating entry to {to:?} ring at position {head} with mime type {mime_type:?}.");
 
         if let Some(entry) = ring.get(head) {
             // TODO get rid of this write on the happy path
             writer.write(Entry::Uninitialized, head)?;
             self.data.free(entry, to, head)?;
         }
-        let entry = self.data.alloc(data, mime_type, to, head)?;
+        let entry = alloc(head, &mut self.data)?;
 
         writer
             .write(entry, head)
@@ -301,11 +312,7 @@ impl Allocator {
                     e
                 }
             })?;
-        writer.set_write_head(if head == ring.capacity() - 1 {
-            0
-        } else {
-            head + 1
-        })?;
+        writer.set_write_head(ring.next_head(head))?;
         if head > ring.len() {
             debug!("Growing {to:?} ring to length {head}.");
             unsafe {
@@ -314,6 +321,67 @@ impl Allocator {
         }
 
         Ok(head)
+    }
+
+    pub fn move_to_front(
+        &mut self,
+        id: u64,
+        to: Option<RingKind>,
+    ) -> Result<MoveToFrontResponse, CliError> {
+        let (from, from_id) = match decompose_id(id) {
+            Ok(r) => r,
+            Err(e) => return Ok(MoveToFrontResponse::Error(e)),
+        };
+        let to = to.unwrap_or(from);
+
+        let WritableRing { writer, ring } = &mut self.rings[from];
+        let Some(from_entry) = ring.get(from_id) else {
+            return Ok(MoveToFrontResponse::Error(IdNotFoundError::Entry(from_id)));
+        };
+        if from_entry == Entry::Uninitialized {
+            return Ok(MoveToFrontResponse::Error(IdNotFoundError::Entry(from_id)));
+        }
+
+        if from == to && ring.next_head(from_id) == ring.write_head() {
+            return Ok(MoveToFrontResponse::Success {
+                id: composite_id(from, from_id),
+            });
+        }
+        writer.write(Entry::Uninitialized, from_id)?;
+
+        let to_id = self.add_internal(to, |to_id, data| {
+            match from_entry {
+                Entry::Uninitialized => unreachable!(),
+                Entry::Bucketed(_) => {
+                    // Nothing to do, buckets are shared between rings.
+                }
+                Entry::File => {
+                    debug!(
+                        "Moving direct allocation from {from:?} ring at position {from_id} to \
+                         {to:?} ring at position {to_id}."
+                    );
+
+                    let mut from_buf = Default::default();
+                    let from_buf = direct_metadata_file_name(&mut from_buf, from, from_id);
+                    let mut to_buf = Default::default();
+                    let to_buf = direct_metadata_file_name(&mut to_buf, to, to_id);
+
+                    renameat(&data.direct_dir, &*from_buf, &data.direct_dir, &*to_buf)
+                        .map_io_err(|| "Failed to rename direct allocation metadata file.")?;
+                    renameat(
+                        &data.direct_dir,
+                        &*direct_file_name(from_buf),
+                        &data.direct_dir,
+                        &*direct_file_name(to_buf),
+                    )
+                    .map_io_err(|| "Failed to rename direct allocation file.")?;
+                }
+            }
+            Ok(from_entry)
+        })?;
+        Ok(MoveToFrontResponse::Success {
+            id: composite_id(to, to_id),
+        })
     }
 
     pub fn shutdown(mut self) -> Result<(), CliError> {
@@ -329,6 +397,7 @@ impl AllocatorData {
         to: RingKind,
         id: u32,
     ) -> Result<Entry, CliError> {
+        debug!("Allocating entry to {to:?} ring at position {id} with mime type {mime_type:?}.");
         let mut received = File::from(
             openat(
                 &self.direct_dir,
@@ -532,4 +601,13 @@ fn direct_metadata_file_name(
 fn direct_file_name(buf: DirectFileNameToken<()>) -> DirectFileNameToken<Infallible> {
     buf.0[14] = 0;
     DirectFileNameToken(buf.0, PhantomData)
+}
+
+pub fn decompose_id(id: u64) -> Result<(RingKind, u32), IdNotFoundError> {
+    match id >> 32 {
+        0 => Ok(RingKind::Favorites),
+        1 => Ok(RingKind::Main),
+        ring => Err(IdNotFoundError::Ring(u32::try_from(ring).unwrap())),
+    }
+    .map(|ring| (ring, u32::try_from(id & u64::from(u32::MAX)).unwrap()))
 }

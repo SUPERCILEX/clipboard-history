@@ -3,7 +3,7 @@ use std::mem;
 use arrayvec::ArrayVec;
 use clipboard_history_core::{
     protocol,
-    protocol::{composite_id, AddResponse, MimeType, Request, RingKind},
+    protocol::{MimeType, Request, RingKind},
     AsBytes,
 };
 use log::{info, warn};
@@ -75,14 +75,14 @@ fn add(
     kind: RingKind,
     mime_type: &MimeType,
 ) -> Result<SendBufAllocation, CliError> {
-    let mut ids = ArrayVec::<_, 1>::new();
+    let mut responses = ArrayVec::<_, 1>::new();
 
     for message in unsafe { AncillaryDrain::parse(control_data) } {
         if let RecvAncillaryMessage::ScmRights(received_fds) = message {
             for fd in received_fds {
-                let id = composite_id(kind, allocator.add(fd, kind, mime_type)?);
-                info!("Entry added: {id}");
-                ids.push(id);
+                let response = allocator.add(fd, kind, mime_type)?;
+                info!("Add entry response: {response:?}");
+                responses.push(response);
             }
         }
     }
@@ -91,8 +91,8 @@ fn add(
         .alloc(
             |_| (),
             |buf| {
-                for id in ids {
-                    buf.extend_from_slice(AddResponse { id }.as_bytes());
+                for response in responses {
+                    buf.extend_from_slice(response.as_bytes());
                 }
             },
         )
@@ -107,7 +107,19 @@ fn move_to_front(
     id: u64,
     to: Option<RingKind>,
 ) -> Result<SendBufAllocation, CliError> {
-    todo!()
+    let response = allocator.move_to_front(id, to)?;
+    info!("Move entry response: {response:?}");
+
+    send_bufs
+        .alloc(
+            |_| (),
+            |buf| {
+                buf.extend_from_slice(response.as_bytes());
+            },
+        )
+        .map_err(|()| CliError::Internal {
+            context: "Didn't allocate enough send buffers.".into(),
+        })
 }
 
 fn swap(

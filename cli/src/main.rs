@@ -120,6 +120,7 @@ enum Dev {
 }
 
 #[derive(Args, Debug)]
+#[command(arg_required_else_help = true)]
 struct Add {
     /// A file containing the data to be added to the entry.
     ///
@@ -156,6 +157,7 @@ impl From<CliRingKind> for RingKind {
 }
 
 #[derive(Args, Debug)]
+#[command(arg_required_else_help = true)]
 struct EntryAction {
     /// The entry ID.
     #[arg(required = true)]
@@ -163,6 +165,7 @@ struct EntryAction {
 }
 
 #[derive(Args, Debug)]
+#[command(arg_required_else_help = true)]
 struct Swap {
     /// The first entry ID.
     #[arg(required = true)]
@@ -182,6 +185,7 @@ struct ReloadSettings {
 }
 
 #[derive(Args, Debug)]
+#[command(arg_required_else_help = true)]
 struct Migrate {
     /// The existing clipboard to migrate from.
     #[arg(required = true)]
@@ -476,7 +480,7 @@ fn add(
         )?;
     }
 
-    let AddResponse { id } = unsafe { response!(AddResponse)(&server) }?;
+    let AddResponse::Success { id } = unsafe { response!(AddResponse)(&server) }?;
     println!("Entry added: {id}");
 
     Ok(())
@@ -490,11 +494,13 @@ fn move_to_front(
 ) -> Result<(), CliError> {
     request(&server, &addr, Request::MoveToFront { id, to })?;
 
-    let MoveToFrontResponse { error } = unsafe { response!(MoveToFrontResponse)(&server) }?;
-    if let Some(e) = error {
-        return Err(CliError::IdNotFound(e));
-    } else {
-        println!("Done.");
+    match unsafe { response!(MoveToFrontResponse)(&server) }? {
+        MoveToFrontResponse::Success { id } => {
+            println!("Entry moved: {id}");
+        }
+        MoveToFrontResponse::Error(e) => {
+            return Err(CliError::IdNotFound(e));
+        }
     }
 
     Ok(())

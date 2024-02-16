@@ -194,6 +194,14 @@ impl Ring {
         u32::from_le_bytes(bytes.try_into().unwrap())
     }
 
+    pub fn next_head(&self, current: u32) -> u32 {
+        if current == self.capacity() - 1 {
+            0
+        } else {
+            current + 1
+        }
+    }
+
     pub fn get(&self, index: u32) -> Option<Entry> {
         if index >= self.len() {
             return None;
