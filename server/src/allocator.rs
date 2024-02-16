@@ -21,8 +21,8 @@ use arrayvec::ArrayVec;
 use bitcode::{Decode, Encode};
 use clipboard_history_core::{
     protocol::{
-        composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind,
-        SwapResponse,
+        composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse,
+        RingKind, SwapResponse,
     },
     ring::{BucketEntry, Entry, Ring, RingWriter},
     IoErr,
@@ -464,6 +464,24 @@ impl Allocator {
             error1: None,
             error2: None,
         })
+    }
+
+    pub fn remove(&mut self, id: u64) -> Result<RemoveResponse, CliError> {
+        let (ring, id, entry) = match self.get_entry(id) {
+            Err(e) => return Ok(RemoveResponse { error: Some(e) }),
+            Ok((_, id, Entry::Uninitialized)) => {
+                return Ok(RemoveResponse {
+                    error: Some(IdNotFoundError::Entry(id)),
+                });
+            }
+            Ok(r) => r,
+        };
+        debug!("Removing entry {entry:?} in {ring:?} ring at position {id}.");
+
+        self.rings[ring].writer.write(Entry::Uninitialized, id)?;
+        self.data.free(entry, ring, id)?;
+
+        Ok(RemoveResponse { error: None })
     }
 
     pub fn shutdown(mut self) -> Result<(), CliError> {

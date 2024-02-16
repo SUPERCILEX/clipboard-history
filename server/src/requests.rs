@@ -1,4 +1,4 @@
-use std::mem;
+use std::{fmt::Debug, mem};
 
 use arrayvec::ArrayVec;
 use clipboard_history_core::{
@@ -60,15 +60,17 @@ pub fn handle(
         &Request::Add { to, ref mime_type } => {
             add(control_data, send_bufs, allocator, to, mime_type).map(Some)
         }
-        &Request::MoveToFront { id, to } => move_to_front(send_bufs, allocator, id, to).map(Some),
-        &Request::Swap { id1, id2 } => swap(send_bufs, allocator, id1, id2).map(Some),
-        &Request::Remove { id } => remove(send_bufs, allocator, id).map(Some),
+        &Request::MoveToFront { id, to } => {
+            reply(send_bufs, [allocator.move_to_front(id, to)?]).map(Some)
+        }
+        &Request::Swap { id1, id2 } => reply(send_bufs, [allocator.swap(id1, id2)?]).map(Some),
+        &Request::Remove { id } => reply(send_bufs, [allocator.remove(id)?]).map(Some),
         Request::ReloadSettings => reload_settings(control_data, send_bufs, allocator).map(Some),
         Request::GarbageCollect => gc(allocator).map(|()| None),
     }
 }
 
-fn reply<R: AsBytes>(
+fn reply<R: AsBytes + Debug>(
     send_bufs: &mut SendMsgBufs,
     responses: impl IntoIterator<Item = R>,
 ) -> Result<SendBufAllocation, CliError> {
@@ -77,6 +79,7 @@ fn reply<R: AsBytes>(
             |_| (),
             |buf| {
                 for response in responses {
+                    info!("Replying: {response:?}");
                     buf.extend_from_slice(response.as_bytes());
                 }
             },
@@ -98,44 +101,12 @@ fn add(
     for message in unsafe { AncillaryDrain::parse(control_data) } {
         if let RecvAncillaryMessage::ScmRights(received_fds) = message {
             for fd in received_fds {
-                let response = allocator.add(fd, kind, mime_type)?;
-                info!("Add entry response: {response:?}");
-                responses.push(response);
+                responses.push(allocator.add(fd, kind, mime_type)?);
             }
         }
     }
 
     reply(send_bufs, responses)
-}
-
-fn move_to_front(
-    send_bufs: &mut SendMsgBufs,
-    allocator: &mut Allocator,
-    id: u64,
-    to: Option<RingKind>,
-) -> Result<SendBufAllocation, CliError> {
-    let response = allocator.move_to_front(id, to)?;
-    info!("Move entry response: {response:?}");
-    reply(send_bufs, [response])
-}
-
-fn swap(
-    send_bufs: &mut SendMsgBufs,
-    allocator: &mut Allocator,
-    id1: u64,
-    id2: u64,
-) -> Result<SendBufAllocation, CliError> {
-    let response = allocator.swap(id1, id2)?;
-    info!("Swap entry response: {response:?}");
-    reply(send_bufs, [response])
-}
-
-fn remove(
-    send_bufs: &mut SendMsgBufs,
-    allocator: &mut Allocator,
-    id: u64,
-) -> Result<SendBufAllocation, CliError> {
-    todo!()
 }
 
 fn reload_settings(
