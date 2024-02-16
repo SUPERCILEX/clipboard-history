@@ -1,21 +1,26 @@
 use std::{
+    fmt::Debug,
     fs::File,
     io::{BorrowedBuf, ErrorKind::UnexpectedEof, Read},
     mem::{size_of, MaybeUninit},
-    path::Path,
+    os::fd::AsFd,
     ptr, slice,
     str::FromStr,
 };
 
 use rustix::{
-    fs::{openat, Mode, OFlags, CWD},
+    fs::{openat, Mode, OFlags},
     path::Arg,
+    process::Pid,
 };
 
 use crate::{Error, IoErr, Result};
 
-pub fn read_server_pid(lock_file: &Path) -> Result<u32> {
-    let file = openat(CWD, lock_file, OFlags::RDONLY, Mode::empty())
+pub fn read_server_pid<Fd: AsFd, P: Arg + Copy + Debug>(
+    dir: Fd,
+    lock_file: P,
+) -> Result<Option<Pid>> {
+    let file = openat(dir, lock_file, OFlags::RDONLY, Mode::empty())
         .map_io_err(|| format!("Failed to open server lock file: {lock_file:?}"))?;
     let mut file = File::from(file);
 
@@ -33,12 +38,13 @@ pub fn read_server_pid(lock_file: &Path) -> Result<u32> {
         .map_io_err(|| format!("Server lock file corrupted: {pid:?}"))?
         .trim();
     if pid.is_empty() {
-        Ok(0)
+        Ok(None)
     } else {
-        u32::from_str(pid).map_err(|error| Error::InvalidPidError {
+        let pid = i32::from_str(pid).map_err(|error| Error::InvalidPidError {
             error,
             context: format!("Server lock file contains invalid PID: {pid:?}").into(),
-        })
+        })?;
+        Ok(Pid::from_raw(pid))
     }
 }
 

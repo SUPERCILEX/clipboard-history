@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::VecDeque, fs, num::NonZeroU32, path::PathBuf};
+use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 
 use error_stack::Report;
 use log::info;
@@ -23,8 +23,8 @@ mod views;
 enum CliError {
     #[error("{0}")]
     Core(#[from] Error),
-    #[error("The server is already running (PID {pid})")]
-    ServerAlreadyRunning { pid: NonZeroU32, lock_file: PathBuf },
+    #[error("The server is already running: {pid:?}")]
+    ServerAlreadyRunning { pid: Pid, lock_file: PathBuf },
     #[error("Failed to deserialize object.")]
     DeserializeError {
         error: bitcode::Error,
@@ -112,12 +112,12 @@ fn run() -> Result<(), CliError> {
     fs::create_dir_all(&data_dir)
         .map_io_err(|| format!("Failed to create data directory: {data_dir:?}"))?;
     let server_guard = {
-        let lock = PathView::new(&mut data_dir, "server.lock");
         loop {
-            if let Some(g) = claim_server_ownership(&lock)? {
+            if let Some(g) = claim_server_ownership(&data_dir)? {
                 break g;
             }
 
+            let lock = PathView::new(&mut data_dir, "server.lock");
             fs::remove_file(&lock)
                 .map_io_err(|| format!("Failed to delete server lock: {lock:?}"))?;
         }
