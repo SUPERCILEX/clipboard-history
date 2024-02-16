@@ -508,14 +508,10 @@ impl AllocatorData {
             .map_io_err(|| "Failed to create data receiver file.")?,
         );
 
-        io::copy(&mut File::from(data), &mut received)
+        let size = io::copy(&mut File::from(data), &mut received)
             .map_io_err(|| "Failed to copy data to receiver file.")?;
 
         if TEXT_MIMES.contains(&mime_type.as_str()) {
-            let size = statx(&received, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
-                .map_io_err(|| "Failed to statx received data file.")?
-                .stx_size;
-
             if size > 0 && size < 4096 {
                 self.alloc_bucket(received, u32::try_from(size).unwrap())
             } else {
