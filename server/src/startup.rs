@@ -6,7 +6,7 @@ use std::{
     process,
 };
 
-use clipboard_history_core::{read_server_pid, IoErr};
+use ringboard_core::{read_server_pid, IoErr};
 use rustix::{
     fs::{openat, unlinkat, AtFlags, Mode, OFlags, CWD},
     io::Errno,

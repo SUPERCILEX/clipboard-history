@@ -1,11 +1,12 @@
 use std::{borrow::Cow, collections::VecDeque, fs, num::NonZeroU32, path::PathBuf};
 
-use clipboard_history_core::{
+use error_stack::Report;
+use log::info;
+use ringboard_core::{
     dirs::{data_dir, socket_file},
     Error, IoErr,
 };
-use error_stack::Report;
-use log::info;
+use rustix::process::Pid;
 use thiserror::Error;
 
 use crate::{allocator::Allocator, startup::claim_server_ownership, views::PathView};

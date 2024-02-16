@@ -19,7 +19,8 @@ use std::{
 
 use arrayvec::ArrayVec;
 use bitcode::{Decode, Encode};
-use clipboard_history_core::{
+use log::{debug, info};
+use ringboard_core::{
     protocol::{
         composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse,
         RingKind, SwapResponse,
@@ -27,7 +28,6 @@ use clipboard_history_core::{
     ring::{BucketEntry, Entry, Ring, RingWriter},
     IoErr,
 };
-use log::{debug, info};
 use rustix::fs::{
     copy_file_range, openat, renameat, renameat_with, statx, unlinkat, AtFlags, Mode, OFlags,
     RenameFlags, StatxFlags, CWD,
@@ -47,12 +47,12 @@ struct WritableRing {
 struct LoggingRingWriter(RingWriter);
 
 impl LoggingRingWriter {
-    pub fn write(&mut self, entry: Entry, at: u32) -> clipboard_history_core::Result<()> {
+    pub fn write(&mut self, entry: Entry, at: u32) -> ringboard_core::Result<()> {
         debug!("Writing entry to position {at}: {entry:?}");
         self.0.write(entry, at)
     }
 
-    pub fn set_write_head(&mut self, head: u32) -> clipboard_history_core::Result<()> {
+    pub fn set_write_head(&mut self, head: u32) -> ringboard_core::Result<()> {
         debug!("Setting write head to {head}.");
         self.0.set_write_head(head)
     }

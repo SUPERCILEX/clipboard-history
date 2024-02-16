@@ -1,12 +1,12 @@
 use std::{fmt::Debug, mem};
 
 use arrayvec::ArrayVec;
-use clipboard_history_core::{
+use log::{info, warn};
+use ringboard_core::{
     protocol,
     protocol::{MimeType, Request, RingKind},
     AsBytes,
 };
-use log::{info, warn};
 use rustix::net::{AncillaryDrain, RecvAncillaryMessage};
 
 use crate::{

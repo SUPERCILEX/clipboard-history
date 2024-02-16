@@ -10,7 +10,6 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
-use clipboard_history_core::IoErr;
 use io_uring::{
     buf_ring::BufRing,
     cqueue::{buffer_select, more, Entry},
@@ -20,6 +19,7 @@ use io_uring::{
     IoUring,
 };
 use log::{debug, info, trace, warn};
+use ringboard_core::IoErr;
 use rustix::net::{
     bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType,
 };
