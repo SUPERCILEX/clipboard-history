@@ -540,8 +540,6 @@ fn remove(
 
 fn wipe() -> Result<(), CliError> {
     // TODO move directory, shut down server if running, then delete
-    // TODO server needs to only use paths on startup and use relative FDs
-    // otherwise
     todo!()
 }
 
