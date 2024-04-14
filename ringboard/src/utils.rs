@@ -9,7 +9,7 @@ use std::{
 };
 
 use rustix::{
-    fs::{openat, Mode, OFlags},
+    fs::{copy_file_range, openat, Mode, OFlags},
     path::Arg,
     process::Pid,
 };
@@ -52,4 +52,29 @@ pub trait AsBytes: Sized {
     fn as_bytes(&self) -> &[u8] {
         unsafe { slice::from_raw_parts(ptr::from_ref::<Self>(self).cast(), size_of::<Self>()) }
     }
+}
+
+pub fn copy_file_range_all<InFd: AsFd, OutFd: AsFd>(
+    fd_in: InFd,
+    mut off_in: Option<&mut u64>,
+    fd_out: OutFd,
+    mut off_out: Option<&mut u64>,
+    len: usize,
+) -> rustix::io::Result<usize> {
+    let mut total_copied = 0;
+    loop {
+        let byte_copied = copy_file_range(
+            &fd_in,
+            off_in.as_deref_mut(),
+            &fd_out,
+            off_out.as_deref_mut(),
+            len - total_copied,
+        )?;
+
+        if byte_copied == 0 {
+            break;
+        }
+        total_copied += byte_copied;
+    }
+    Ok(total_copied)
 }

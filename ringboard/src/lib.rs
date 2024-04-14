@@ -5,7 +5,7 @@
 use std::{borrow::Cow, io, num::ParseIntError, path::PathBuf};
 
 use thiserror::Error;
-pub use utils::{read_server_pid, AsBytes};
+pub use utils::{copy_file_range_all, read_server_pid, AsBytes};
 
 pub mod dirs;
 pub mod protocol;

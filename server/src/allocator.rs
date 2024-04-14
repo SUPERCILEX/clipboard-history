@@ -10,10 +10,7 @@ use std::{
     mem,
     mem::ManuallyDrop,
     ops::{Deref, Index, IndexMut},
-    os::{
-        fd::{AsFd, OwnedFd},
-        unix::fs::FileExt,
-    },
+    os::{fd::OwnedFd, unix::fs::FileExt},
     path::{Path, PathBuf},
 };
 
@@ -21,6 +18,7 @@ use arrayvec::ArrayVec;
 use bitcode::{Decode, Encode};
 use log::{debug, info};
 use ringboard_core::{
+    copy_file_range_all,
     protocol::{
         composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse,
         RingKind, SwapResponse,
@@ -29,8 +27,8 @@ use ringboard_core::{
     IoErr,
 };
 use rustix::fs::{
-    copy_file_range, openat, renameat, renameat_with, statx, unlinkat, AtFlags, Mode, OFlags,
-    RenameFlags, StatxFlags, CWD,
+    openat, renameat, renameat_with, statx, unlinkat, AtFlags, Mode, OFlags, RenameFlags,
+    StatxFlags, CWD,
 };
 
 use crate::{
@@ -648,31 +646,6 @@ impl AllocatorData {
 
 fn size_to_bucket(size: u32) -> usize {
     usize::try_from(max(1, size.saturating_sub(1)).ilog2().saturating_sub(1)).unwrap()
-}
-
-fn copy_file_range_all<InFd: AsFd, OutFd: AsFd>(
-    fd_in: InFd,
-    mut off_in: Option<&mut u64>,
-    fd_out: OutFd,
-    mut off_out: Option<&mut u64>,
-    len: usize,
-) -> rustix::io::Result<usize> {
-    let mut total_copied = 0;
-    loop {
-        let byte_copied = copy_file_range(
-            &fd_in,
-            off_in.as_deref_mut(),
-            &fd_out,
-            off_out.as_deref_mut(),
-            len - total_copied,
-        )?;
-
-        if byte_copied == 0 {
-            break;
-        }
-        total_copied += byte_copied;
-    }
-    Ok(total_copied)
 }
 
 struct DirectFileNameToken<'a, T>(&'a mut [u8], PhantomData<T>);
