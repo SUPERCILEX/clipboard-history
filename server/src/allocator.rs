@@ -509,6 +509,7 @@ impl AllocatorData {
 
         let size = io::copy(&mut File::from(data), &mut received)
             .map_io_err(|| "Failed to copy data to receiver file.")?;
+        debug!("Received {size} bytes.");
 
         if TEXT_MIMES.contains(&mime_type.as_str()) {
             if size > 0 && size < 4096 {
