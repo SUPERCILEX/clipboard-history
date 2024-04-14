@@ -259,7 +259,7 @@ impl Allocator {
         let free_lists = FreeLists::load(PathView::new(&mut data_dir, "free-lists"))?;
 
         Ok(Self {
-            rings: Rings([main_ring, favorites_ring]),
+            rings: Rings([favorites_ring, main_ring]),
             data: AllocatorData {
                 buckets: Buckets {
                     files: buckets,
