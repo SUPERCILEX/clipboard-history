@@ -358,7 +358,12 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
 
                     let fd = restore_fd(&entry);
                     match result {
-                        Err(e) if e.kind() == ErrorKind::BrokenPipe => {
+                        Err(e)
+                            if matches!(
+                                e.kind(),
+                                ErrorKind::BrokenPipe | ErrorKind::ConnectionReset
+                            ) =>
+                        {
                             warn!("Client {fd} forcefully disconnected: {e:?}");
                         }
                         r => {
