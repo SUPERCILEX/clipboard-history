@@ -3,23 +3,25 @@ use std::{mem, mem::MaybeUninit, ptr};
 use arrayvec::ArrayVec;
 use log::trace;
 
+const CAP: usize = u64::BITS as usize;
+
 pub struct SendMsgBufs {
     allocated_mask: u64,
-    bufs: [MaybeUninit<Vec<u8>>; 64],
-    pool: ArrayVec<Vec<u8>, 64>,
+    bufs: [MaybeUninit<Vec<u8>>; CAP],
+    pool: ArrayVec<Vec<u8>, CAP>,
 }
 
 pub type Token = u8;
 pub type SendBufAllocation = (Token, *const libc::msghdr);
 
 impl SendMsgBufs {
-    const TOKEN_MASK: u64 = 64 - 1;
+    const TOKEN_MASK: u64 = CAP as u64 - 1;
 
     pub const fn new() -> Self {
         const INIT: MaybeUninit<Vec<u8>> = MaybeUninit::uninit();
         Self {
             allocated_mask: 0,
-            bufs: [INIT; 64],
+            bufs: [INIT; CAP],
             pool: ArrayVec::new_const(),
         }
     }
@@ -31,7 +33,7 @@ impl SendMsgBufs {
     ) -> Result<SendBufAllocation, ()> {
         let token = u8::try_from(self.allocated_mask.trailing_ones()).unwrap();
         trace!("Allocating send buffer {token}.");
-        if u32::from(token) == u64::BITS {
+        if usize::from(token) == CAP {
             return Err(());
         }
         let mut buf = self.pool.pop().unwrap_or_default();
@@ -95,10 +97,9 @@ impl SendMsgBufs {
     }
 
     pub unsafe fn free(&mut self, token: u64) {
-        debug_assert!(token < u64::BITS.into());
+        let token = u8::try_from(token & Self::TOKEN_MASK).unwrap();
         trace!("Freeing send buffer {token}.");
 
-        let token = u8::try_from(token & Self::TOKEN_MASK).unwrap();
         self.allocated_mask &= !(1 << token);
 
         let mut v = unsafe { self.bufs[usize::from(token)].assume_init_read() };
@@ -113,10 +114,10 @@ impl SendMsgBufs {
 
 impl Drop for SendMsgBufs {
     fn drop(&mut self) {
-        for i in 0..u64::BITS {
+        for i in 0..CAP {
             if (self.allocated_mask >> i) & 1 == 1 {
                 unsafe {
-                    self.bufs[usize::try_from(i).unwrap()].assume_init_drop();
+                    self.bufs[i].assume_init_drop();
                 }
             }
         }
@@ -125,12 +126,12 @@ impl Drop for SendMsgBufs {
 
 #[cfg(test)]
 mod tests {
-    use crate::send_msg_bufs::SendMsgBufs;
+    use crate::send_msg_bufs::{SendMsgBufs, CAP};
 
     #[test]
     fn fill() {
         let mut bufs = SendMsgBufs::new();
-        for _ in 0..u64::BITS {
+        for _ in 0..CAP {
             bufs.alloc(
                 |control| control.extend(1..=69),
                 |data| data.extend((0..420).map(|_| 0xDE)),
