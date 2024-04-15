@@ -1,6 +1,7 @@
 use std::{mem, mem::MaybeUninit, ptr};
 
 use arrayvec::ArrayVec;
+use log::trace;
 
 pub struct SendMsgBufs {
     allocated_mask: u64,
@@ -29,6 +30,7 @@ impl SendMsgBufs {
         data: Data,
     ) -> Result<SendBufAllocation, ()> {
         let token = u8::try_from(self.allocated_mask.trailing_ones()).unwrap();
+        trace!("Allocating send buffer {token}.");
         if u32::from(token) == u64::BITS {
             return Err(());
         }
@@ -93,6 +95,9 @@ impl SendMsgBufs {
     }
 
     pub unsafe fn free(&mut self, token: u64) {
+        debug_assert!(token < u64::BITS.into());
+        trace!("Freeing send buffer {token}.");
+
         let token = u8::try_from(token & Self::TOKEN_MASK).unwrap();
         self.allocated_mask &= !(1 << token);
 

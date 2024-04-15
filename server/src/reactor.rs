@@ -38,24 +38,29 @@ struct Clients {
 
 impl Clients {
     const fn is_connected(&self, id: u32) -> bool {
+        debug_assert!(id < u32::BITS);
         (self.connections & (1 << id)) != 0
     }
 
     const fn is_closing(&self, id: u32) -> bool {
+        debug_assert!(id < u32::BITS);
         (self.pending_closes & (1 << id)) != 0
     }
 
     fn set_connected(&mut self, id: u32) {
+        debug_assert!(id < u32::BITS);
         self.connections |= 1 << id;
         self.pending_closes &= !(1 << id);
     }
 
     fn set_disconnected(&mut self, id: u32) {
+        debug_assert!(id < u32::BITS);
         self.connections &= !(1 << id);
         self.pending_closes |= 1 << id;
     }
 
     fn set_closed(&mut self, id: u32) {
+        debug_assert!(id < u32::BITS);
         self.connections &= !(1 << id);
         self.pending_closes &= !(1 << id);
     }
