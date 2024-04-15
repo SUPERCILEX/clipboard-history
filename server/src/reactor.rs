@@ -278,6 +278,13 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             clients.add_dropped(fd, entry.user_data());
                             break 'recv;
                         }
+                        Err(e) if e.kind() == ErrorKind::ConnectionReset => {
+                            warn!("Client {fd} reset the connection.");
+                            pending_entries.push(close(fd));
+
+                            clients.set_closed(fd);
+                            break 'recv;
+                        }
                         r => r.map_io_err(|| format!("Failed to recv from client {fd}."))?,
                     };
 
