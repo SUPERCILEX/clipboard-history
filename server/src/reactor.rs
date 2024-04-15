@@ -203,6 +203,13 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         u32::try_from(entry.user_data() >> (u64::BITS - MAX_NUM_CLIENTS_SHIFT)).unwrap()
     };
 
+    let close = |fd| {
+        Close::new(Fixed(fd))
+            .build()
+            .flags(Flags::SKIP_SUCCESS)
+            .user_data(REQ_TYPE_CLOSE | store_fd(fd))
+    };
+
     let (mut uring, mut buf_ring) = setup_uring()?;
 
     {
@@ -279,12 +286,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             info!("Client {fd} shut down.");
                         } else {
                             info!("Client {fd} closed the connection.");
-                            pending_entries.push(
-                                Close::new(Fixed(fd))
-                                    .build()
-                                    .flags(Flags::SKIP_SUCCESS)
-                                    .user_data(REQ_TYPE_CLOSE | store_fd(fd)),
-                            );
+                            pending_entries.push(close(fd));
                         }
 
                         clients.set_closed(fd);
@@ -340,12 +342,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                     .flags(Flags::IO_LINK | Flags::SKIP_SUCCESS)
                                     .user_data(REQ_TYPE_SHUTDOWN_CONN | store_fd(fd)),
                             );
-                            pending_entries.push(
-                                Close::new(Fixed(fd))
-                                    .build()
-                                    .flags(Flags::SKIP_SUCCESS)
-                                    .user_data(REQ_TYPE_CLOSE | store_fd(fd)),
-                            );
+                            pending_entries.push(close(fd));
                         }
                     }
                 }
