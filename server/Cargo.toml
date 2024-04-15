@@ -10,16 +10,16 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
-arrayvec = { version = "0.7.4", features = ["serde"] }
-bitcode = { version = "0.5.1", features = ["serde"] }
-ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
-env_logger = "0.11.1"
+arrayvec = { version = "0.7.4" }
+bitcode = { version = "0.6.0", features = ["arrayvec"] }
+env_logger = "0.11.3"
 error-stack = "0.4.1"
 io-uring = { version = "0.6.2", path = "/home/asaveau/Desktop/wip/io-uring" }
-libc = "0.2.152"
-log = { version = "0.4.20", features = ["release_max_level_info"] }
+libc = "0.2.153"
+log = { version = "0.4.21", features = ["release_max_level_info"] }
+ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
 rustix = { version = "0.38.30", features = ["fs", "process", "net"], path = "/home/asaveau/Desktop/wip/rustix" }
-thiserror = "1.0.56"
+thiserror = "1.0.58"
 
 [[bin]]
 name = "ringboard-server"

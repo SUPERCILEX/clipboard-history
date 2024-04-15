@@ -13,7 +13,7 @@ license.workspace = true
 arrayvec = "0.7.4"
 dirs = "5.0.1"
 rustix = { version = "0.38.30", features = ["fs", "mm", "process"], path = "/home/asaveau/Desktop/wip/rustix" }
-thiserror = "1.0.56"
+thiserror = "1.0.58"
 
 [dev-dependencies]
 supercilex-tests = { version = "0.4.4", default-features = false, features = ["api"] }

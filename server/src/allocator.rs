@@ -157,10 +157,7 @@ impl FreeLists {
 
     fn save(&mut self) -> Result<(), CliError> {
         info!("Saving allocator free list to disk.");
-        let bytes = bitcode::encode(&self.lists).map_err(|error| CliError::SerializeError {
-            error,
-            context: "Free lists internal error".into(),
-        })?;
+        let bytes = bitcode::encode(&self.lists);
         self.file
             .write_all_at(&bytes, 0)
             .map_io_err(|| "Failed to write free lists.")?;
@@ -266,7 +263,7 @@ impl Allocator {
                 },
                 direct_dir,
 
-                cache: bitcode::Buffer::with_capacity(32),
+                cache: bitcode::Buffer::new(),
             },
         })
     }
@@ -601,17 +598,10 @@ impl AllocatorData {
             // TODO write the API for this
             #[derive(Encode, Decode)]
             struct Metadata {
-                #[bitcode(with_serde)]
                 mime_type: MimeType,
             }
 
-            let bytes = self
-                .cache
-                .encode(&Metadata { mime_type })
-                .map_err(|error| CliError::SerializeError {
-                    error,
-                    context: "Direct allocation metadata internal error.".into(),
-                })?;
+            let bytes = self.cache.encode(&Metadata { mime_type });
             file.write_all(bytes)
                 .map_io_err(|| "Failed to write to direct metadata file.")?;
         }
