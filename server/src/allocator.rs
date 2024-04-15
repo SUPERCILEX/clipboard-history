@@ -313,10 +313,13 @@ impl Allocator {
                 }
             })?;
         writer.set_write_head(ring.next_head(head))?;
-        if head > ring.len() {
-            debug!("Growing {to:?} ring to length {head}.");
-            unsafe {
-                ring.set_len(head);
+        {
+            let len = head + 1;
+            if len > ring.len() {
+                debug!("Growing {to:?} ring to length {len}.");
+                unsafe {
+                    ring.set_len(len);
+                }
             }
         }
 
