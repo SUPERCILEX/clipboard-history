@@ -263,7 +263,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     }
                     pending_entries
                         .push(recvmsg(result).user_data(REQ_TYPE_RECV | store_fd(result)));
-                    debug_assert_eq!(0, result & !MAX_NUM_CLIENTS_SHIFT);
+                    debug_assert_eq!(0, result >> MAX_NUM_CLIENTS_SHIFT);
                 }
                 REQ_TYPE_RECV => 'recv: {
                     debug!("Handling recv completion.");
