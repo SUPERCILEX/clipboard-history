@@ -30,6 +30,7 @@ const _: () = assert!(mem::size_of::<Request>() == 128);
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+#[must_use]
 pub enum AddResponse {
     Success { id: u64 },
 }
@@ -43,6 +44,7 @@ pub enum IdNotFoundError {
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
+#[must_use]
 pub enum MoveToFrontResponse {
     Success { id: u64 },
     Error(IdNotFoundError),
@@ -50,6 +52,7 @@ pub enum MoveToFrontResponse {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+#[must_use]
 pub struct SwapResponse {
     pub error1: Option<IdNotFoundError>,
     pub error2: Option<IdNotFoundError>,
@@ -57,12 +60,14 @@ pub struct SwapResponse {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+#[must_use]
 pub struct RemoveResponse {
     pub error: Option<IdNotFoundError>,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+#[must_use]
 pub struct ReloadSettingsResponse {
     // TODO add invalid config errors
     pub error: Option<()>,
