@@ -20,8 +20,9 @@ use io_uring::{
 };
 use log::{debug, info, trace, warn};
 use ringboard_core::{dirs::socket_file, IoErr};
-use rustix::net::{
-    bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType,
+use rustix::{
+    io::Errno,
+    net::{bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType},
 };
 
 use crate::{allocator::Allocator, requests, send_msg_bufs::SendMsgBufs, CliError};
@@ -34,6 +35,7 @@ const URING_ENTRIES: u32 = MAX_NUM_CLIENTS * 3;
 struct Clients {
     connections: u32,
     pending_closes: u32,
+    dropped: ArrayVec<(u32, u64), { MAX_NUM_CLIENTS as usize }>,
 }
 
 impl Clients {
@@ -63,6 +65,15 @@ impl Clients {
         debug_assert!(id < u32::BITS);
         self.connections &= !(1 << id);
         self.pending_closes &= !(1 << id);
+    }
+
+    fn add_dropped(&mut self, id: u32, data: u64) {
+        debug_assert!(id < u32::BITS);
+        self.dropped.push((id, data));
+    }
+
+    fn pop_dropped(&mut self) -> Option<(u32, u64)> {
+        self.dropped.pop()
     }
 }
 
@@ -257,8 +268,18 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                 REQ_TYPE_RECV => 'recv: {
                     debug!("Handling recv completion.");
                     let fd = restore_fd(&entry);
-                    let result =
-                        result.map_io_err(|| format!("Failed to recv from client {fd}."))?;
+                    match result {
+                        Err(e)
+                            if [Errno::MSGSIZE, Errno::NOBUFS]
+                                .iter()
+                                .any(|kind| e.raw_os_error() == Some(kind.raw_os_error())) =>
+                        {
+                            warn!("No buffers available to receive client {fd}'s message.");
+                            clients.add_dropped(fd, entry.user_data());
+                            break 'recv;
+                        }
+                        r => r.map_io_err(|| format!("Failed to recv from client {fd}."))?,
+                    };
 
                     debug_assert!(buffer_select(entry.flags()).is_some());
                     let msg = RecvMsgOutMut::parse(
@@ -361,6 +382,11 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         unsafe {
                             bufs.recycle_by_index(index);
                         }
+                    }
+
+                    if let Some((fd, data)) = clients.pop_dropped() {
+                        info!("Restoring client {fd}'s connection.");
+                        pending_entries.push(recvmsg(fd).user_data(data));
                     }
 
                     let fd = restore_fd(&entry);
