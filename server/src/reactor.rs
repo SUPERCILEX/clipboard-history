@@ -234,6 +234,13 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         let mut pending_entries = ArrayVec::<_, { URING_ENTRIES as usize }>::new();
 
         for entry in uring.completion() {
+            macro_rules! recycle_buf {
+                () => {{
+                    debug_assert!(buffer_select(entry.flags()).is_some());
+                    unsafe { bufs.recycle(entry.flags(), usize::try_from(entry.result()).unwrap()) }
+                }};
+            }
+
             let result = u32::try_from(entry.result())
                 .map_err(|_| io::Error::from_raw_os_error(-entry.result()));
             match entry.user_data() & REQ_TYPE_MASK {
@@ -253,13 +260,10 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     let result =
                         result.map_io_err(|| format!("Failed to recv from client {fd}."))?;
 
-                    debug_assert!(buffer_select(entry.flags()).is_some());
-                    let msg = RecvMsgOutMut::parse(
-                        unsafe { bufs.recycle(entry.flags(), usize::try_from(result).unwrap()) },
-                        &receive_hdr,
-                    )
-                    .map_err(|()| CliError::Internal {
-                        context: "Didn't allocate enough large enough buffers.".into(),
+                    let msg = RecvMsgOutMut::parse(recycle_buf!(), &receive_hdr).map_err(|()| {
+                        CliError::Internal {
+                            context: "Didn't allocate enough large enough buffers.".into(),
+                        }
                     })?;
                     if msg.is_name_data_truncated()
                         || msg.is_control_data_truncated()
@@ -375,8 +379,8 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                 REQ_TYPE_READ_SIGNALS => {
                     debug!("Handling read_signals completion.");
                     debug_assert!(buffer_select(entry.flags()).is_some());
-                    unsafe { bufs.recycle(entry.flags(), 0) };
                     result.map_io_err(|| "Failed to read signal.")?;
+                    recycle_buf!();
 
                     break 'outer;
                 }
