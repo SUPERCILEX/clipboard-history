@@ -349,9 +349,11 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                 }
                 REQ_TYPE_SENDMSG => {
                     debug!("Handling sendmsg completion.");
-                    let token = entry.user_data() >> REQ_TYPE_SHIFT;
-                    unsafe {
-                        send_bufs.free(token);
+                    {
+                        let token = entry.user_data() >> REQ_TYPE_SHIFT;
+                        unsafe {
+                            send_bufs.free(token);
+                        }
                     }
                     {
                         let index = entry.user_data() >> (REQ_TYPE_SHIFT + u8::BITS);
