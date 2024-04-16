@@ -430,12 +430,19 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                 }
                 REQ_TYPE_READ_SIGNALS => {
                     debug!("Handling read_signals completion.");
-                    debug_assert!(buffer_select(entry.flags()).is_some());
-                    result.map_io_err(|| "Failed to read signal.")?;
+                    match result {
+                        Err(e) if e.raw_os_error() == Some(Errno::NOBUFS.raw_os_error()) => {
+                            // We don't actually care about what's in the
+                            // buffer, so carry on.
+                        }
+                        r => {
+                            r.map_io_err(|| "Failed to read signal.")?;
 
-                    debug_assert!(buffer_select(entry.flags()).is_some());
-                    unsafe {
-                        bufs.recycle(entry.flags());
+                            debug_assert!(buffer_select(entry.flags()).is_some());
+                            unsafe {
+                                bufs.recycle(entry.flags());
+                            }
+                        }
                     }
 
                     break 'outer;
