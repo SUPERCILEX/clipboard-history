@@ -73,6 +73,13 @@ pub struct ReloadSettingsResponse {
     pub error: Option<()>,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+#[must_use]
+pub struct GarbageCollectResponse {
+    pub bytes_freed: u64,
+}
+
 #[must_use]
 pub fn composite_id(kind: RingKind, id: u32) -> u64 {
     ((kind as u64) << 32) | u64::from(id)

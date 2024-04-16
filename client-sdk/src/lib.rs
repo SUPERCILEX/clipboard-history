@@ -10,7 +10,8 @@ use std::{
 use ringboard_core::{
     protocol,
     protocol::{
-        AddResponse, MimeType, MoveToFrontResponse, RemoveResponse, Request, RingKind, SwapResponse,
+        AddResponse, GarbageCollectResponse, MimeType, MoveToFrontResponse, RemoveResponse,
+        Request, RingKind, SwapResponse,
     },
     AsBytes, IoErr,
 };
@@ -131,8 +132,12 @@ pub fn remove<Server: AsFd>(
     unsafe { response!(RemoveResponse)(&server, RecvFlags::empty()) }
 }
 
-pub fn garbage_collect<Server: AsFd>(server: Server, addr: &SocketAddrUnix) -> Result<(), Error> {
-    request(server, addr, Request::GarbageCollect, SendFlags::empty())
+pub fn garbage_collect<Server: AsFd>(
+    server: Server,
+    addr: &SocketAddrUnix,
+) -> Result<GarbageCollectResponse, Error> {
+    request(&server, addr, Request::GarbageCollect, SendFlags::empty())?;
+    unsafe { response!(GarbageCollectResponse)(&server, RecvFlags::empty()) }
 }
 
 fn request(

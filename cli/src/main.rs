@@ -17,12 +17,12 @@ use ringboard_core::{
     copy_file_range_all,
     dirs::{data_dir, socket_file},
     protocol::{
-        AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse, RingKind,
-        SwapResponse,
+        AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
+        RemoveResponse, RingKind, SwapResponse,
     },
     read_server_pid, IoErr,
 };
-use ringboard_sdk::{connect_to_server, garbage_collect};
+use ringboard_sdk::connect_to_server;
 use rustix::{
     event::{poll, PollFd, PollFlags},
     fs::{openat, Mode, OFlags, CWD},
@@ -342,9 +342,7 @@ fn run() -> Result<(), CliError> {
         Cmd::ReloadSettings(data) => {
             reload_settings(connect_to_server(&server_addr)?, server_addr, data)
         }
-        Cmd::GarbageCollect => {
-            garbage_collect(connect_to_server(&server_addr)?, &server_addr).map_err(CliError::from)
-        }
+        Cmd::GarbageCollect => garbage_collect(connect_to_server(&server_addr)?, &server_addr),
         Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump(data)) => dump(data),
@@ -491,6 +489,12 @@ fn reload_settings(
     // TODO make config not an option by computing its default location at runtime
     // (if possible)
     todo!()
+}
+
+fn garbage_collect(server: OwnedFd, addr: &SocketAddrUnix) -> Result<(), CliError> {
+    let GarbageCollectResponse { bytes_freed } = ringboard_sdk::garbage_collect(server, addr)?;
+    println!("{bytes_freed} bytes of garbage freed.");
+    Ok(())
 }
 
 fn migrate(
