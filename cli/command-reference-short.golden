@@ -31,7 +31,7 @@ Arguments:
 
 Options:
   -t, --target <TARGET>        The target ring [default: main] [possible values: favorites, main]
-  -m, --mime-type <MIME_TYPE>  The entry mime type [default: text/plain]
+  -m, --mime-type <MIME_TYPE>  The entry mime type [default: ]
   -h, --help                   Print help (use `--help` for more detail)
 
 ---
@@ -170,6 +170,8 @@ Usage: clipboard-history debug dump [OPTIONS]
 
 Options:
   -c, --contents  Include the plain-text contents of each entry
+  -w, --watch     Instead of dumping the existing database contents, watch for new entries as they
+                  come in
   -h, --help      Print help (use `--help` for more detail)
 
 ---
@@ -179,20 +181,19 @@ Generate a pseudo-random database for testing and performance tuning purposes
 Usage: clipboard-history debug generate [OPTIONS]
 
 Options:
-  -n, --entries <NUM_ENTRIES>      The number of random entries to generate [default: 1_000_000]
-  -m, --mean-size <MEAN_SIZE>      The mean entry size [default: 128]
-  -s, --stddev-size <STDDEV_SIZE>  The standard deviation of the entry size [default: 100]
-  -h, --help                       Print help (use `--help` for more detail)
+  -n, --entries <NUM_ENTRIES>  The number of random entries to generate [default: 1_000_000]
+  -m, --mean-size <MEAN_SIZE>  The mean entry size [default: 512]
+  -c, --cv-size <CV_SIZE>      The coefficient of variation of the entry size [default: 10]
+  -h, --help                   Print help (use `--help` for more detail)
 
 ---
 
 Spam the server with random commands
 
-Usage: clipboard-history debug fuzz [OPTIONS]
+Usage: clipboard-history debug fuzz
 
 Options:
-  -c, --clients <NUM_CLIENTS>  The number of random entries to generate [default: 3]
-  -h, --help                   Print help (use `--help` for more detail)
+  -h, --help  Print help (use `--help` for more detail)
 
 ---
 

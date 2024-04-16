@@ -339,7 +339,7 @@ fn run() -> Result<(), CliError> {
         Cmd::Remove(data) => remove(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Wipe => wipe(),
         Cmd::ReloadSettings(data) => {
-            reload_settings(connect_to_server(&server_addr)?, server_addr, data)
+            reload_settings(connect_to_server(&server_addr)?, &server_addr, data)
         }
         Cmd::GarbageCollect => garbage_collect(connect_to_server(&server_addr)?, &server_addr),
         Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, &server_addr, data),
@@ -481,7 +481,7 @@ fn wipe() -> Result<(), CliError> {
 
 fn reload_settings(
     server: OwnedFd,
-    addr: SocketAddrUnix,
+    addr: &SocketAddrUnix,
     ReloadSettings { config }: ReloadSettings,
 ) -> Result<(), CliError> {
     // TODO send config as ancillary data
@@ -671,6 +671,7 @@ fn generate(
                 .map_io_err(|| "Failed to create data entry file.")?,
         );
 
+        #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
         let len = len_distr.sample(rng).round().max(1.) as usize;
         cache.clear();
         cache.extend(Uniform::new(u8::MIN, u8::MAX).sample_iter(rng).take(len));
@@ -681,7 +682,7 @@ fn generate(
     }
 
     let distr = LogNormal::from_mean_cv(f64::from(mean_size), f64::from(cv_size)).unwrap();
-    let mut rng = Xoshiro256PlusPlus::seed_from_u64(num_entries as u64);
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(u64::from(num_entries));
     let mut buf = Vec::new();
     let mut pending_adds = 0;
 

@@ -194,6 +194,39 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::RingKin
 pub fn clipboard_history_core::protocol::RingKind::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_core::protocol::RingKind::from(t: T) -> T
+#[repr(C)] pub struct clipboard_history_core::protocol::GarbageCollectResponse
+pub clipboard_history_core::protocol::GarbageCollectResponse::bytes_freed: u64
+impl core::clone::Clone for clipboard_history_core::protocol::GarbageCollectResponse
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::clone(&self) -> clipboard_history_core::protocol::GarbageCollectResponse
+impl core::fmt::Debug for clipboard_history_core::protocol::GarbageCollectResponse
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for clipboard_history_core::protocol::GarbageCollectResponse
+impl core::marker::Freeze for clipboard_history_core::protocol::GarbageCollectResponse
+impl core::marker::Send for clipboard_history_core::protocol::GarbageCollectResponse
+impl core::marker::Sync for clipboard_history_core::protocol::GarbageCollectResponse
+impl core::marker::Unpin for clipboard_history_core::protocol::GarbageCollectResponse
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::GarbageCollectResponse
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::GarbageCollectResponse
+impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::GarbageCollectResponse where U: core::convert::From<T>
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::GarbageCollectResponse where U: core::convert::Into<T>
+pub type clipboard_history_core::protocol::GarbageCollectResponse::Error = core::convert::Infallible
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::protocol::GarbageCollectResponse where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::protocol::GarbageCollectResponse::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_core::protocol::GarbageCollectResponse where T: core::clone::Clone
+pub type clipboard_history_core::protocol::GarbageCollectResponse::Owned = T
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::clone_into(&self, target: &mut T)
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_core::protocol::GarbageCollectResponse where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::GarbageCollectResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::GarbageCollectResponse where T: core::marker::Sized
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::protocol::GarbageCollectResponse
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::from(t: T) -> T
 #[repr(C)] pub struct clipboard_history_core::protocol::ReloadSettingsResponse
 pub clipboard_history_core::protocol::ReloadSettingsResponse::error: core::option::Option<()>
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::ReloadSettingsResponse
