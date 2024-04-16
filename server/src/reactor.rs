@@ -25,7 +25,12 @@ use rustix::{
     net::{bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType},
 };
 
-use crate::{allocator::Allocator, requests, send_msg_bufs::SendMsgBufs, CliError};
+use crate::{
+    allocator::Allocator,
+    requests,
+    send_msg_bufs::{SendMsgBufs, Token},
+    CliError,
+};
 
 const MAX_NUM_CLIENTS_SHIFT: u32 = 5;
 const MAX_NUM_CLIENTS: u32 = 1 << MAX_NUM_CLIENTS_SHIFT;
@@ -364,7 +369,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                             | (u64::from(token) << REQ_TYPE_SHIFT)
                                             | (u64::from(BufRingSubmissions::flags_to_index(
                                                 entry.flags(),
-                                            )) << (REQ_TYPE_SHIFT + u8::BITS))
+                                            )) << (REQ_TYPE_SHIFT + Token::BITS))
                                             | store_fd(fd),
                                     ),
                             );
