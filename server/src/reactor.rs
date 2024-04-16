@@ -11,7 +11,7 @@ use std::{
 
 use arrayvec::ArrayVec;
 use io_uring::{
-    buf_ring::{BufRing, BufRingSubmissions},
+    buf_ring::BufRing,
     cqueue::{buffer_select, more, Entry},
     opcode::{AcceptMulti, Close, PollAdd, Read, RecvMsgMulti, SendMsg, Shutdown},
     squeue::Flags,
@@ -300,14 +300,13 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     };
 
                     debug_assert!(buffer_select(entry.flags()).is_some());
-                    let msg = RecvMsgOutMut::parse(
-                        unsafe {
-                            bufs.get(entry.flags(), usize::try_from(entry.result()).unwrap())
-                        },
-                        &receive_hdr,
-                    )
-                    .map_err(|()| CliError::Internal {
-                        context: "Didn't allocate enough large enough buffers.".into(),
+                    let mut buf = unsafe {
+                        bufs.get(entry.flags(), usize::try_from(entry.result()).unwrap())
+                    };
+                    let msg = RecvMsgOutMut::parse(&mut buf, &receive_hdr).map_err(|()| {
+                        CliError::Internal {
+                            context: "Didn't allocate enough large enough buffers.".into(),
+                        }
                     })?;
                     if msg.is_name_data_truncated()
                         || msg.is_control_data_truncated()
@@ -367,9 +366,8 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                     .user_data(
                                         REQ_TYPE_SENDMSG
                                             | (u64::from(token) << REQ_TYPE_SHIFT)
-                                            | (u64::from(BufRingSubmissions::flags_to_index(
-                                                entry.flags(),
-                                            )) << (REQ_TYPE_SHIFT + Token::BITS))
+                                            | (u64::from(buf.into_index())
+                                                << (REQ_TYPE_SHIFT + Token::BITS))
                                             | store_fd(fd),
                                     ),
                             );
