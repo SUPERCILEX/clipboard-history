@@ -250,6 +250,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         }
         .map_io_err(|| "Failed to wait for io_uring.")?;
         let mut pending_entries = ArrayVec::<_, { URING_ENTRIES as usize }>::new();
+        let mut freed_bufs = 0;
 
         for entry in uring.completion() {
             let result = u32::try_from(entry.result())
@@ -274,8 +275,13 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                 .iter()
                                 .any(|kind| e.raw_os_error() == Some(kind.raw_os_error())) =>
                         {
-                            warn!("No buffers available to receive client {fd}'s message.");
-                            clients.add_dropped(fd, entry.user_data());
+                            if freed_bufs > 0 {
+                                pending_entries.push(recvmsg(fd).user_data(entry.user_data()));
+                                freed_bufs -= 1;
+                            } else {
+                                warn!("No buffers available to receive client {fd}'s message.");
+                                clients.add_dropped(fd, entry.user_data());
+                            }
                             break 'recv;
                         }
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
@@ -389,6 +395,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         unsafe {
                             bufs.recycle_by_index(index);
                         }
+                        freed_bufs += 1;
                     }
 
                     if let Some((fd, data)) = clients.pop_dropped() {
@@ -430,6 +437,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     unsafe {
                         bufs.recycle(entry.flags());
                     }
+                    freed_bufs += 1;
 
                     break 'outer;
                 }
