@@ -17,6 +17,8 @@ dirs = "5.0.1"
 error-stack = "0.4.1"
 fuc_engine = "2.1.0"
 memmap2 = "0.9.4"
+rand_distr = "0.4.3"
+rand_xoshiro = "0.6.0"
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
 rustix = { version = "0.38.30", features = ["stdio", "event"], path = "/home/asaveau/Desktop/wip/rustix" }

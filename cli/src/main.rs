@@ -3,7 +3,10 @@ use std::{
     fs::File,
     io,
     io::ErrorKind,
-    os::fd::{AsFd, OwnedFd},
+    os::{
+        fd::{AsFd, OwnedFd},
+        unix::fs::FileExt,
+    },
     path::{Path, PathBuf},
     str,
 };
@@ -13,6 +16,11 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
 use error_stack::Report;
 use memmap2::Mmap;
+use rand_distr::{Distribution, LogNormal, Uniform};
+use rand_xoshiro::{
+    rand_core::{RngCore, SeedableRng},
+    Xoshiro256PlusPlus,
+};
 use ringboard_core::{
     copy_file_range_all,
     dirs::{data_dir, socket_file},
@@ -25,7 +33,7 @@ use ringboard_core::{
 use ringboard_sdk::connect_to_server;
 use rustix::{
     event::{poll, PollFd, PollFlags},
-    fs::{openat, Mode, OFlags, CWD},
+    fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
     net::{RecvFlags, SendFlags, SocketAddrUnix},
     process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
     stdio::stdin,
@@ -119,7 +127,7 @@ enum Dev {
     Generate(Generate),
 
     /// Spam the server with random commands.
-    Fuzz(Fuzz),
+    Fuzz,
 }
 
 #[derive(Args, Debug)]
@@ -222,24 +230,15 @@ struct Generate {
 
     /// The mean entry size.
     #[clap(short, long)]
-    #[clap(value_parser = si_number::< usize >)]
-    #[clap(default_value = "128")]
-    mean_size: usize,
+    #[clap(value_parser = si_number::< u32 >)]
+    #[clap(default_value = "512")]
+    mean_size: u32,
 
-    /// The standard deviation of the entry size.
+    /// The coefficient of variation of the entry size.
     #[clap(short, long)]
-    #[clap(value_parser = si_number::< usize >)]
-    #[clap(default_value = "100")]
-    stddev_size: usize,
-}
-
-#[derive(Args, Debug)]
-struct Fuzz {
-    /// The number of random entries to generate.
-    #[clap(short = 'c', long = "clients", alias = "num-clients")]
-    #[clap(value_parser = si_number::< usize >)]
-    #[clap(default_value = "3")]
-    num_clients: usize,
+    #[clap(value_parser = si_number::< u32 >)]
+    #[clap(default_value = "10")]
+    cv_size: u32,
 }
 
 #[derive(Args, Debug)]
@@ -347,9 +346,9 @@ fn run() -> Result<(), CliError> {
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump(data)) => dump(data),
         Cmd::Debug(Dev::Generate(data)) => {
-            generate(connect_to_server(&server_addr)?, server_addr, data)
+            generate(connect_to_server(&server_addr)?, &server_addr, data)
         }
-        Cmd::Debug(Dev::Fuzz(data)) => fuzz(connect_to_server(&server_addr)?, server_addr, data),
+        Cmd::Debug(Dev::Fuzz) => fuzz(connect_to_server(&server_addr)?, &server_addr),
     }
 }
 
@@ -532,38 +531,6 @@ fn migrate_from_gch(
         Ok(File::from(file))
     }
 
-    fn drain_add_requests(
-        server: impl AsFd,
-        all: bool,
-        translation: &mut Vec<u64>,
-        pending_adds: &mut u32,
-    ) -> Result<(), CliError> {
-        while *pending_adds > 0 {
-            let AddResponse::Success { id } = match unsafe {
-                ringboard_sdk::add_recv(
-                    &server,
-                    if all {
-                        RecvFlags::empty()
-                    } else {
-                        RecvFlags::DONTWAIT
-                    },
-                )
-            } {
-                Err(ringboard_sdk::Error::Core(ringboard_core::Error::Io { error: e, .. }))
-                    if e.kind() == ErrorKind::WouldBlock =>
-                {
-                    debug_assert!(!all);
-                    break;
-                }
-                r => r?,
-            };
-
-            *pending_adds -= 1;
-            translation.push(id);
-        }
-        Ok(())
-    }
-
     let (bytes, database) = {
         let database = database
             .or_else(|| {
@@ -588,7 +555,7 @@ fn migrate_from_gch(
     let mut pending_adds = 0;
     let mut i = 0;
     while i < bytes.len() {
-        drain_add_requests(&server, false, &mut translation, &mut pending_adds)?;
+        drain_add_requests(&server, false, Some(&mut translation), &mut pending_adds)?;
         macro_rules! gch_id {
             () => {{
                 let gch_id = u32::from_le_bytes(bytes[i..i + 4].try_into().unwrap());
@@ -600,7 +567,7 @@ fn migrate_from_gch(
             () => {{
                 let gch_id = gch_id!();
                 if translation.len() <= gch_id {
-                    drain_add_requests(&server, true, &mut translation, &mut pending_adds)?;
+                    drain_add_requests(&server, true, Some(&mut translation), &mut pending_adds)?;
                 }
                 translation[gch_id]
             }};
@@ -628,33 +595,13 @@ fn migrate_from_gch(
                 let data = generate_entry_file(&database, u64::try_from(i).unwrap(), raw_len)?;
                 i += 1 + raw_len;
 
-                loop {
-                    match ringboard_sdk::add_send(
-                        &server,
-                        addr,
-                        RingKind::Main,
-                        MimeType::new(),
-                        &data,
-                        if pending_adds == 0 {
-                            SendFlags::empty()
-                        } else {
-                            SendFlags::DONTWAIT
-                        },
-                    ) {
-                        Err(ringboard_sdk::Error::Core(ringboard_core::Error::Io {
-                            error: e,
-                            ..
-                        })) if e.kind() == ErrorKind::WouldBlock => {
-                            debug_assert!(pending_adds > 0);
-                            drain_add_requests(&server, true, &mut translation, &mut pending_adds)?;
-                        }
-                        r => {
-                            r?;
-                            pending_adds += 1;
-                            break;
-                        }
-                    };
-                }
+                pipeline_add_request(
+                    &server,
+                    addr,
+                    data,
+                    Some(&mut translation),
+                    &mut pending_adds,
+                )?;
             }
             OP_TYPE_DELETE_TEXT => {
                 if let RemoveResponse { error: Some(e) } =
@@ -694,7 +641,7 @@ fn migrate_from_gch(
         }
     }
 
-    drain_add_requests(server, true, &mut translation, &mut pending_adds)
+    drain_add_requests(server, true, None, &mut pending_adds)
 }
 
 fn stats() -> Result<(), CliError> {
@@ -707,18 +654,117 @@ fn dump(Dump { contents, watch }: Dump) -> Result<(), CliError> {
 
 fn generate(
     server: OwnedFd,
-    addr: SocketAddrUnix,
+    addr: &SocketAddrUnix,
     Generate {
         num_entries,
         mean_size,
-        stddev_size,
+        cv_size,
     }: Generate,
 ) -> Result<(), CliError> {
+    fn generate_entry_file(
+        rng: &mut impl RngCore,
+        len_distr: LogNormal<f64>,
+        cache: &mut Vec<u8>,
+    ) -> Result<File, CliError> {
+        let file = File::from(
+            memfd_create("ringboard_gen", MemfdFlags::empty())
+                .map_io_err(|| "Failed to create data entry file.")?,
+        );
+
+        let len = len_distr.sample(rng).round().max(1.) as usize;
+        cache.clear();
+        cache.extend(Uniform::new(u8::MIN, u8::MAX).sample_iter(rng).take(len));
+        file.write_all_at(cache, 0)
+            .map_io_err(|| "Failed to write bytes to entry file.")?;
+
+        Ok(file)
+    }
+
+    let distr = LogNormal::from_mean_cv(f64::from(mean_size), f64::from(cv_size)).unwrap();
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(num_entries as u64);
+    let mut buf = Vec::new();
+    let mut pending_adds = 0;
+
+    for _ in 0..num_entries {
+        let data = generate_entry_file(&mut rng, distr, &mut buf)?;
+        pipeline_add_request(&server, addr, data, None, &mut pending_adds)?;
+    }
+
+    drain_add_requests(server, true, None, &mut pending_adds)
+}
+
+fn fuzz(server: OwnedFd, addr: &SocketAddrUnix) -> Result<(), CliError> {
     todo!()
 }
 
-fn fuzz(server: OwnedFd, addr: SocketAddrUnix, Fuzz { num_clients }: Fuzz) -> Result<(), CliError> {
-    todo!()
+fn pipeline_add_request(
+    server: impl AsFd,
+    addr: &SocketAddrUnix,
+    data: impl AsFd,
+    mut translation: Option<&mut Vec<u64>>,
+    pending_adds: &mut u32,
+) -> Result<(), CliError> {
+    loop {
+        match ringboard_sdk::add_send(
+            &server,
+            addr,
+            RingKind::Main,
+            MimeType::new(),
+            &data,
+            if *pending_adds == 0 {
+                SendFlags::empty()
+            } else {
+                SendFlags::DONTWAIT
+            },
+        ) {
+            Err(ringboard_sdk::Error::Core(ringboard_core::Error::Io { error: e, .. }))
+                if e.kind() == ErrorKind::WouldBlock =>
+            {
+                debug_assert!(*pending_adds > 0);
+                drain_add_requests(&server, true, translation.as_deref_mut(), pending_adds)?;
+            }
+            r => {
+                r?;
+                *pending_adds += 1;
+                break;
+            }
+        };
+    }
+    Ok(())
+}
+
+fn drain_add_requests(
+    server: impl AsFd,
+    all: bool,
+    mut translation: Option<&mut Vec<u64>>,
+    pending_adds: &mut u32,
+) -> Result<(), CliError> {
+    while *pending_adds > 0 {
+        let AddResponse::Success { id } = match unsafe {
+            ringboard_sdk::add_recv(
+                &server,
+                if all {
+                    RecvFlags::empty()
+                } else {
+                    RecvFlags::DONTWAIT
+                },
+            )
+        } {
+            Err(ringboard_sdk::Error::Core(ringboard_core::Error::Io { error: e, .. }))
+                if e.kind() == ErrorKind::WouldBlock =>
+            {
+                debug_assert!(!all);
+                break;
+            }
+            r => r?,
+        };
+
+        *pending_adds -= 1;
+        if let Some(translation) = translation.as_deref_mut() {
+            translation.push(id);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
