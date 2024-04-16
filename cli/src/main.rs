@@ -12,7 +12,9 @@ use ask::Answer;
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
 use error_stack::Report;
+use memmap2::Mmap;
 use ringboard_core::{
+    copy_file_range_all,
     dirs::{data_dir, socket_file},
     protocol::{
         AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse, RingKind,
@@ -23,8 +25,8 @@ use ringboard_core::{
 use ringboard_sdk::{connect_to_server, garbage_collect};
 use rustix::{
     event::{poll, PollFd, PollFlags},
-    fs::CWD,
-    net::SocketAddrUnix,
+    fs::{openat, Mode, OFlags, CWD},
+    net::{RecvFlags, SendFlags, SocketAddrUnix},
     process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
     stdio::stdin,
 };
@@ -191,6 +193,12 @@ struct Migrate {
     /// The existing clipboard to migrate from.
     #[arg(required = true)]
     from: MigrateFromClipboard,
+
+    /// The existing clipboard's database location.
+    ///
+    /// This will be automatically inferred by default.
+    #[clap(value_hint = ValueHint::AnyPath)]
+    database: Option<PathBuf>,
 }
 
 #[derive(ValueEnum, Copy, Clone, Debug)]
@@ -332,7 +340,7 @@ fn run() -> Result<(), CliError> {
         Cmd::GarbageCollect => {
             garbage_collect(connect_to_server(&server_addr)?, &server_addr).map_err(CliError::from)
         }
-        Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, server_addr, data),
+        Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump(data)) => dump(data),
         Cmd::Debug(Dev::Generate(data)) => {
@@ -482,10 +490,202 @@ fn reload_settings(
 
 fn migrate(
     server: OwnedFd,
-    addr: SocketAddrUnix,
-    Migrate { from }: Migrate,
+    addr: &SocketAddrUnix,
+    Migrate { from, database }: Migrate,
 ) -> Result<(), CliError> {
-    todo!()
+    match from {
+        MigrateFromClipboard::GnomeClipboardHistory => migrate_from_gch(server, addr, database),
+        MigrateFromClipboard::ClipboardIndicator => todo!(),
+    }
+}
+
+fn migrate_from_gch(
+    server: OwnedFd,
+    addr: &SocketAddrUnix,
+    database: Option<PathBuf>,
+) -> Result<(), CliError> {
+    const OP_TYPE_SAVE_TEXT: u8 = 1;
+    const OP_TYPE_DELETE_TEXT: u8 = 2;
+    const OP_TYPE_FAVORITE_ITEM: u8 = 3;
+    const OP_TYPE_UNFAVORITE_ITEM: u8 = 4;
+    const OP_TYPE_MOVE_ITEM_TO_END: u8 = 5;
+
+    fn generate_entry_file(database: impl AsFd, start: u64, len: usize) -> Result<File, CliError> {
+        let file = openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
+            .map_io_err(|| "Failed to create data entry file.")?;
+
+        debug_assert_eq!(
+            len,
+            copy_file_range_all(database, Some(&mut start.clone()), &file, Some(&mut 0), len)
+                .map_io_err(|| "Failed to copy data to entry file.")?
+        );
+
+        Ok(File::from(file))
+    }
+
+    fn drain_add_requests(
+        server: impl AsFd,
+        all: bool,
+        translation: &mut Vec<u64>,
+        pending_adds: &mut u32,
+    ) -> Result<(), CliError> {
+        while *pending_adds > 0 {
+            let AddResponse::Success { id } = match unsafe {
+                ringboard_sdk::add_recv(
+                    &server,
+                    if all {
+                        RecvFlags::empty()
+                    } else {
+                        RecvFlags::DONTWAIT
+                    },
+                )
+            } {
+                Err(ringboard_sdk::Error::Core(ringboard_core::Error::Io { error: e, .. }))
+                    if e.kind() == ErrorKind::WouldBlock =>
+                {
+                    debug_assert!(!all);
+                    break;
+                }
+                r => r?,
+            };
+
+            *pending_adds -= 1;
+            translation.push(id);
+        }
+        Ok(())
+    }
+
+    let (bytes, database) = {
+        let database = database
+            .or_else(|| {
+                dirs::cache_dir().map(|mut f| {
+                    f.push("clipboard-history@alexsaveau.dev/database.log");
+                    f
+                })
+            })
+            .ok_or_else(|| io::Error::from(ErrorKind::NotFound))
+            .map_io_err(|| "Failed to find Gnome Clipboard History database file")?;
+
+        let file =
+            File::open(&database).map_io_err(|| format!("Failed to open file: {database:?}"))?;
+        (
+            unsafe { Mmap::map(&file) }
+                .map_io_err(|| format!("Failed to mmap file: {database:?}"))?,
+            file,
+        )
+    };
+
+    let mut translation = Vec::new();
+    let mut pending_adds = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        drain_add_requests(&server, false, &mut translation, &mut pending_adds)?;
+        macro_rules! gch_id {
+            () => {{
+                let gch_id = u32::from_le_bytes(bytes[i..i + 4].try_into().unwrap());
+                // GCH uses one indexing
+                usize::try_from(gch_id - 1).unwrap()
+            }};
+        }
+        macro_rules! get_translation {
+            () => {{
+                let gch_id = gch_id!();
+                if translation.len() <= gch_id {
+                    drain_add_requests(&server, true, &mut translation, &mut pending_adds)?;
+                }
+                translation[gch_id]
+            }};
+        }
+        macro_rules! api_error {
+            ($e:expr) => {
+                println!(
+                    "GCH database may be corrupted or ringboard database may be too small (so \
+                     there were collisions)."
+                );
+                return Err(CliError::IdNotFound($e));
+            };
+        }
+
+        let op = bytes[i];
+        i += 1;
+        match op {
+            OP_TYPE_SAVE_TEXT => {
+                let raw_len = bytes[i..]
+                    .iter()
+                    .position(|&b| b == 0)
+                    .ok_or_else(|| io::Error::from(ErrorKind::InvalidData))
+                    .map_io_err(|| "GCH database corrupted: data was not NUL terminated")?;
+
+                let data = generate_entry_file(&database, u64::try_from(i).unwrap(), raw_len)?;
+                i += 1 + raw_len;
+
+                loop {
+                    match ringboard_sdk::add_send(
+                        &server,
+                        addr,
+                        RingKind::Main,
+                        MimeType::new(),
+                        &data,
+                        if pending_adds == 0 {
+                            SendFlags::empty()
+                        } else {
+                            SendFlags::DONTWAIT
+                        },
+                    ) {
+                        Err(ringboard_sdk::Error::Core(ringboard_core::Error::Io {
+                            error: e,
+                            ..
+                        })) if e.kind() == ErrorKind::WouldBlock => {
+                            debug_assert!(pending_adds > 0);
+                            drain_add_requests(&server, true, &mut translation, &mut pending_adds)?;
+                        }
+                        r => {
+                            r?;
+                            pending_adds += 1;
+                            break;
+                        }
+                    };
+                }
+            }
+            OP_TYPE_DELETE_TEXT => {
+                if let RemoveResponse { error: Some(e) } =
+                    ringboard_sdk::remove(&server, addr, get_translation!())?
+                {
+                    api_error!(e);
+                }
+                i += 4;
+            }
+            OP_TYPE_FAVORITE_ITEM | OP_TYPE_UNFAVORITE_ITEM | OP_TYPE_MOVE_ITEM_TO_END => {
+                match ringboard_sdk::move_to_front(
+                    &server,
+                    addr,
+                    get_translation!(),
+                    match op {
+                        OP_TYPE_FAVORITE_ITEM => Some(RingKind::Favorites),
+                        OP_TYPE_UNFAVORITE_ITEM => Some(RingKind::Main),
+                        OP_TYPE_MOVE_ITEM_TO_END => None,
+                        _ => unreachable!(),
+                    },
+                )? {
+                    MoveToFrontResponse::Success { id } => {
+                        translation[gch_id!()] = id;
+                    }
+                    MoveToFrontResponse::Error(e) => {
+                        api_error!(e);
+                    }
+                }
+                i += 4;
+            }
+            _ => {
+                Err(io::Error::from(ErrorKind::InvalidData)).map_io_err(|| {
+                    format!("GCH database corrupted: unknown operation {:?}", bytes[i])
+                })?;
+                unreachable!();
+            }
+        }
+    }
+
+    drain_add_requests(&server, true, &mut translation, &mut pending_adds)
 }
 
 fn stats() -> Result<(), CliError> {

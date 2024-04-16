@@ -13,8 +13,10 @@ license.workspace = true
 ask = { package = "ask-cli", version = "0.3.0" }
 clap = { version = "4.5.4", features = ["derive", "wrap_help"] }
 clap-num = "1.1.1"
+dirs = "5.0.1"
 error-stack = "0.4.1"
 fuc_engine = "2.1.0"
+memmap2 = "0.9.4"
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
 rustix = { version = "0.38.30", features = ["stdio", "event"], path = "/home/asaveau/Desktop/wip/rustix" }
