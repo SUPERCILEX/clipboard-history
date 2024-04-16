@@ -247,6 +247,11 @@ struct Dump {
     /// Include the plain-text contents of each entry.
     #[arg(short, long)]
     contents: bool,
+
+    /// Instead of dumping the existing database contents, watch for new entries
+    /// as they come in.
+    #[arg(short, long)]
+    watch: bool,
 }
 
 #[derive(Error, Debug)]
@@ -692,7 +697,7 @@ fn stats() -> Result<(), CliError> {
     todo!()
 }
 
-fn dump(Dump { contents }: Dump) -> Result<(), CliError> {
+fn dump(Dump { contents, watch }: Dump) -> Result<(), CliError> {
     todo!()
 }
 
