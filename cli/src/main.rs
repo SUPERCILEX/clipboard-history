@@ -499,6 +499,7 @@ fn migrate(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn migrate_from_gch(
     server: OwnedFd,
     addr: &SocketAddrUnix,
@@ -514,11 +515,10 @@ fn migrate_from_gch(
         let file = openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
             .map_io_err(|| "Failed to create data entry file.")?;
 
-        debug_assert_eq!(
-            len,
+        let result =
             copy_file_range_all(database, Some(&mut start.clone()), &file, Some(&mut 0), len)
-                .map_io_err(|| "Failed to copy data to entry file.")?
-        );
+                .map_io_err(|| "Failed to copy data to entry file.")?;
+        debug_assert_eq!(len, result);
 
         Ok(File::from(file))
     }
@@ -685,7 +685,7 @@ fn migrate_from_gch(
         }
     }
 
-    drain_add_requests(&server, true, &mut translation, &mut pending_adds)
+    drain_add_requests(server, true, &mut translation, &mut pending_adds)
 }
 
 fn stats() -> Result<(), CliError> {

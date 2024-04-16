@@ -579,8 +579,9 @@ impl AllocatorData {
         to: RingKind,
         id: u32,
     ) -> Result<Entry, CliError> {
-        debug!("Allocating direct entry.");
         const _: () = assert!(mem::size_of::<RingKind>() <= u8::BITS as usize);
+
+        debug!("Allocating direct entry.");
         let mut buf = Default::default();
         let buf = direct_metadata_file_name(&mut buf, to, id);
 

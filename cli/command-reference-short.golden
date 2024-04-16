@@ -118,11 +118,12 @@ Options:
 
 Migrate from other clipboard managers to Ringboard
 
-Usage: clipboard-history migrate <FROM>
+Usage: clipboard-history migrate <FROM> [DATABASE]
 
 Arguments:
-  <FROM>  The existing clipboard to migrate from [possible values: gnome-clipboard-history,
-          clipboard-indicator]
+  <FROM>      The existing clipboard to migrate from [possible values: gnome-clipboard-history,
+              clipboard-indicator]
+  [DATABASE]  The existing clipboard's database location
 
 Options:
   -h, --help  Print help (use `--help` for more detail)

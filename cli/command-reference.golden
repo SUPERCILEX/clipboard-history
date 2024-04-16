@@ -158,7 +158,7 @@ Options:
 
 Migrate from other clipboard managers to Ringboard
 
-Usage: clipboard-history migrate <FROM>
+Usage: clipboard-history migrate <FROM> [DATABASE]
 
 Arguments:
   <FROM>
@@ -169,6 +169,11 @@ Arguments:
             History](https://extensions.gnome.org/extension/4839/clipboard-history/)
           - clipboard-indicator:     [Clipboard
             Indicator](https://extensions.gnome.org/extension/779/clipboard-indicator/)
+
+  [DATABASE]
+          The existing clipboard's database location.
+          
+          This will be automatically inferred by default.
 
 Options:
   -h, --help

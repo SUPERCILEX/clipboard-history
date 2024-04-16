@@ -437,7 +437,6 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     unsafe {
                         bufs.recycle(entry.flags());
                     }
-                    freed_bufs += 1;
 
                     break 'outer;
                 }

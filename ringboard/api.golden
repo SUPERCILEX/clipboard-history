@@ -12,6 +12,7 @@ pub fn clipboard_history_core::protocol::AddResponse::clone(&self) -> clipboard_
 impl core::fmt::Debug for clipboard_history_core::protocol::AddResponse
 pub fn clipboard_history_core::protocol::AddResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for clipboard_history_core::protocol::AddResponse
+impl core::marker::Freeze for clipboard_history_core::protocol::AddResponse
 impl core::marker::Send for clipboard_history_core::protocol::AddResponse
 impl core::marker::Sync for clipboard_history_core::protocol::AddResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::AddResponse
@@ -45,6 +46,7 @@ pub fn clipboard_history_core::protocol::IdNotFoundError::clone(&self) -> clipbo
 impl core::fmt::Debug for clipboard_history_core::protocol::IdNotFoundError
 pub fn clipboard_history_core::protocol::IdNotFoundError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for clipboard_history_core::protocol::IdNotFoundError
+impl core::marker::Freeze for clipboard_history_core::protocol::IdNotFoundError
 impl core::marker::Send for clipboard_history_core::protocol::IdNotFoundError
 impl core::marker::Sync for clipboard_history_core::protocol::IdNotFoundError
 impl core::marker::Unpin for clipboard_history_core::protocol::IdNotFoundError
@@ -80,6 +82,7 @@ pub fn clipboard_history_core::protocol::MoveToFrontResponse::clone(&self) -> cl
 impl core::fmt::Debug for clipboard_history_core::protocol::MoveToFrontResponse
 pub fn clipboard_history_core::protocol::MoveToFrontResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for clipboard_history_core::protocol::MoveToFrontResponse
+impl core::marker::Freeze for clipboard_history_core::protocol::MoveToFrontResponse
 impl core::marker::Send for clipboard_history_core::protocol::MoveToFrontResponse
 impl core::marker::Sync for clipboard_history_core::protocol::MoveToFrontResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::MoveToFrontResponse
@@ -125,6 +128,7 @@ pub fn clipboard_history_core::protocol::Request::clone(&self) -> clipboard_hist
 impl core::fmt::Debug for clipboard_history_core::protocol::Request
 pub fn clipboard_history_core::protocol::Request::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for clipboard_history_core::protocol::Request
+impl core::marker::Freeze for clipboard_history_core::protocol::Request
 impl core::marker::Send for clipboard_history_core::protocol::Request
 impl core::marker::Sync for clipboard_history_core::protocol::Request
 impl core::marker::Unpin for clipboard_history_core::protocol::Request
@@ -164,6 +168,7 @@ impl core::hash::Hash for clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_core::protocol::RingKind::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
 impl core::marker::Copy for clipboard_history_core::protocol::RingKind
 impl core::marker::StructuralPartialEq for clipboard_history_core::protocol::RingKind
+impl core::marker::Freeze for clipboard_history_core::protocol::RingKind
 impl core::marker::Send for clipboard_history_core::protocol::RingKind
 impl core::marker::Sync for clipboard_history_core::protocol::RingKind
 impl core::marker::Unpin for clipboard_history_core::protocol::RingKind
@@ -197,6 +202,7 @@ pub fn clipboard_history_core::protocol::ReloadSettingsResponse::clone(&self) ->
 impl core::fmt::Debug for clipboard_history_core::protocol::ReloadSettingsResponse
 pub fn clipboard_history_core::protocol::ReloadSettingsResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for clipboard_history_core::protocol::ReloadSettingsResponse
+impl core::marker::Freeze for clipboard_history_core::protocol::ReloadSettingsResponse
 impl core::marker::Send for clipboard_history_core::protocol::ReloadSettingsResponse
 impl core::marker::Sync for clipboard_history_core::protocol::ReloadSettingsResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::ReloadSettingsResponse
@@ -230,6 +236,7 @@ pub fn clipboard_history_core::protocol::RemoveResponse::clone(&self) -> clipboa
 impl core::fmt::Debug for clipboard_history_core::protocol::RemoveResponse
 pub fn clipboard_history_core::protocol::RemoveResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for clipboard_history_core::protocol::RemoveResponse
+impl core::marker::Freeze for clipboard_history_core::protocol::RemoveResponse
 impl core::marker::Send for clipboard_history_core::protocol::RemoveResponse
 impl core::marker::Sync for clipboard_history_core::protocol::RemoveResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::RemoveResponse
@@ -264,6 +271,7 @@ pub fn clipboard_history_core::protocol::SwapResponse::clone(&self) -> clipboard
 impl core::fmt::Debug for clipboard_history_core::protocol::SwapResponse
 pub fn clipboard_history_core::protocol::SwapResponse::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for clipboard_history_core::protocol::SwapResponse
+impl core::marker::Freeze for clipboard_history_core::protocol::SwapResponse
 impl core::marker::Send for clipboard_history_core::protocol::SwapResponse
 impl core::marker::Sync for clipboard_history_core::protocol::SwapResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::SwapResponse
@@ -308,6 +316,7 @@ impl core::hash::Hash for clipboard_history_core::ring::Entry
 pub fn clipboard_history_core::ring::Entry::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
 impl core::marker::Copy for clipboard_history_core::ring::Entry
 impl core::marker::StructuralPartialEq for clipboard_history_core::ring::Entry
+impl core::marker::Freeze for clipboard_history_core::ring::Entry
 impl core::marker::Send for clipboard_history_core::ring::Entry
 impl core::marker::Sync for clipboard_history_core::ring::Entry
 impl core::marker::Unpin for clipboard_history_core::ring::Entry
@@ -349,6 +358,7 @@ impl core::hash::Hash for clipboard_history_core::ring::BucketEntry
 pub fn clipboard_history_core::ring::BucketEntry::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
 impl core::marker::Copy for clipboard_history_core::ring::BucketEntry
 impl core::marker::StructuralPartialEq for clipboard_history_core::ring::BucketEntry
+impl core::marker::Freeze for clipboard_history_core::ring::BucketEntry
 impl core::marker::Send for clipboard_history_core::ring::BucketEntry
 impl core::marker::Sync for clipboard_history_core::ring::BucketEntry
 impl core::marker::Unpin for clipboard_history_core::ring::BucketEntry
@@ -384,6 +394,7 @@ pub const fn clipboard_history_core::ring::Ring::next_head(&self, current: u32) 
 pub fn clipboard_history_core::ring::Ring::open<P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(max_entries: u32, path: P) -> clipboard_history_core::Result<Self>
 pub unsafe fn clipboard_history_core::ring::Ring::set_len(&mut self, len: u32)
 pub fn clipboard_history_core::ring::Ring::write_head(&self) -> u32
+impl core::marker::Freeze for clipboard_history_core::ring::Ring
 impl !core::marker::Send for clipboard_history_core::ring::Ring
 impl !core::marker::Sync for clipboard_history_core::ring::Ring
 impl core::marker::Unpin for clipboard_history_core::ring::Ring
@@ -410,6 +421,7 @@ impl clipboard_history_core::ring::RingWriter
 pub fn clipboard_history_core::ring::RingWriter::open<P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(path: P) -> clipboard_history_core::Result<Self>
 pub fn clipboard_history_core::ring::RingWriter::set_write_head(&mut self, head: u32) -> clipboard_history_core::Result<()>
 pub fn clipboard_history_core::ring::RingWriter::write(&mut self, entry: clipboard_history_core::ring::Entry, at: u32) -> clipboard_history_core::Result<()>
+impl core::marker::Freeze for clipboard_history_core::ring::RingWriter
 impl core::marker::Send for clipboard_history_core::ring::RingWriter
 impl core::marker::Sync for clipboard_history_core::ring::RingWriter
 impl core::marker::Unpin for clipboard_history_core::ring::RingWriter
@@ -446,6 +458,7 @@ impl core::fmt::Debug for clipboard_history_core::Error
 pub fn clipboard_history_core::Error::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for clipboard_history_core::Error
 pub fn clipboard_history_core::Error::fmt(&self, __formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_core::Error
 impl core::marker::Send for clipboard_history_core::Error
 impl core::marker::Sync for clipboard_history_core::Error
 impl core::marker::Unpin for clipboard_history_core::Error
@@ -483,5 +496,6 @@ impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_
 pub fn core::result::Result<T, std::io::error::Error>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
 impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_core::Error>> for rustix::io::errno::Result<T>
 pub fn rustix::io::errno::Result<T>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
+pub fn clipboard_history_core::copy_file_range_all<InFd: std::os::fd::owned::AsFd, OutFd: std::os::fd::owned::AsFd>(fd_in: InFd, off_in: core::option::Option<&mut u64>, fd_out: OutFd, off_out: core::option::Option<&mut u64>, len: usize) -> rustix::io::errno::Result<usize>
 pub fn clipboard_history_core::read_server_pid<Fd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(dir: Fd, lock_file: P) -> clipboard_history_core::Result<core::option::Option<rustix::pid::Pid>>
 pub type clipboard_history_core::Result<T> = core::result::Result<T, clipboard_history_core::Error>
