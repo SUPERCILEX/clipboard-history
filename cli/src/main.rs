@@ -148,7 +148,7 @@ struct Add {
 
     /// The entry mime type.
     #[clap(short, long)]
-    #[clap(default_value = "text/plain")]
+    #[clap(default_value = "")]
     mime_type: MimeType,
 }
 

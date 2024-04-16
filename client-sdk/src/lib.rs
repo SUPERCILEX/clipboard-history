@@ -71,6 +71,9 @@ pub fn add<Server: AsFd, Data: AsFd>(
     mime_type: MimeType,
     data: Data,
 ) -> Result<AddResponse, Error> {
+    // TODO figure out if we need to make a copy of the file for X11/Wayland.
+    //  As in can you copy from stdin to clipboard and will that be routed directly
+    //  to the server.
     add_send(&server, addr, to, mime_type, data, SendFlags::empty())?;
     unsafe { add_recv(&server, RecvFlags::empty()) }
 }
