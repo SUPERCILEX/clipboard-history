@@ -39,6 +39,17 @@ enum Wrapper {
     W(String),
 }
 
+// TODO implement configuration file/settings
+// TODO implement ring resizing
+// TODO add tracing
+// TODO figure out broadcasting
+// TODO add search CLI command
+// TODO implement X11 client
+// TODO implement Wayland client
+// TODO implement TUI
+// TODO implement egui
+// TODO implement COSMIC applet
+// TODO figure out de-duplication
 fn main() -> error_stack::Result<(), Wrapper> {
     #[cfg(not(debug_assertions))]
     error_stack::Report::install_debug_hook::<std::panic::Location>(|_, _| {});
@@ -113,8 +124,7 @@ fn run() -> Result<(), CliError> {
     };
     info!("Acquired server lock.");
 
-    // TODO max entries
-    let mut allocator = Allocator::open(data_dir, 10)?;
+    let mut allocator = Allocator::open(data_dir, 100_000)?;
     into_result(
         [
             reactor::run(&mut allocator),
