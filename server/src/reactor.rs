@@ -246,6 +246,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     info!("Server event loop started.");
 
     let mut bufs = buf_ring.submissions();
+    let mut freed_bufs = false;
     let mut send_bufs = SendMsgBufs::new();
     let mut clients = Clients::default();
     'outer: loop {
@@ -255,7 +256,6 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         }
         .map_io_err(|| "Failed to wait for io_uring.")?;
         let mut pending_entries = ArrayVec::<_, { URING_ENTRIES as usize }>::new();
-        let mut freed_bufs = 0;
 
         for entry in uring.completion() {
             let result = u32::try_from(entry.result())
@@ -280,9 +280,9 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                 .iter()
                                 .any(|kind| e.raw_os_error() == Some(kind.raw_os_error())) =>
                         {
-                            if freed_bufs > 0 {
+                            if freed_bufs {
                                 pending_entries.push(recvmsg(fd).user_data(entry.user_data()));
-                                freed_bufs -= 1;
+                                freed_bufs = false;
                             } else {
                                 warn!("No buffers available to receive client {fd}'s message.");
                                 clients.add_dropped(fd, entry.user_data());
@@ -398,7 +398,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         unsafe {
                             bufs.recycle_by_index(index);
                         }
-                        freed_bufs += 1;
+                        freed_bufs = true;
                     }
 
                     if let Some((fd, data)) = clients.pop_dropped() {
