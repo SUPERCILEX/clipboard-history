@@ -555,7 +555,6 @@ fn migrate_from_gch(
     let mut pending_adds = 0;
     let mut i = 0;
     while i < bytes.len() {
-        drain_add_requests(&server, false, Some(&mut translation), &mut pending_adds)?;
         macro_rules! gch_id {
             () => {{
                 let gch_id = u32::from_le_bytes(bytes[i..i + 4].try_into().unwrap());
@@ -705,6 +704,7 @@ fn pipeline_add_request(
     mut translation: Option<&mut Vec<u64>>,
     pending_adds: &mut u32,
 ) -> Result<(), CliError> {
+    let mut retry = false;
     loop {
         match ringboard_sdk::add_send(
             &server,
@@ -722,7 +722,8 @@ fn pipeline_add_request(
                 if e.kind() == ErrorKind::WouldBlock =>
             {
                 debug_assert!(*pending_adds > 0);
-                drain_add_requests(&server, true, translation.as_deref_mut(), pending_adds)?;
+                drain_add_requests(&server, retry, translation.as_deref_mut(), pending_adds)?;
+                retry = true;
             }
             r => {
                 r?;
