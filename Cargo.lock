@@ -253,6 +253,7 @@ dependencies = [
  "error-stack",
  "fuc_engine",
  "memmap2",
+ "rand",
  "rand_distr",
  "rand_xoshiro",
  "rustix 0.38.31",

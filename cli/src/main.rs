@@ -2,11 +2,8 @@ use std::{
     fs,
     fs::File,
     io,
-    io::ErrorKind,
-    os::{
-        fd::{AsFd, OwnedFd},
-        unix::fs::FileExt,
-    },
+    io::{ErrorKind, Read, Seek, SeekFrom},
+    os::fd::{AsFd, OwnedFd},
     path::{Path, PathBuf},
     str,
 };
@@ -16,7 +13,7 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
 use error_stack::Report;
 use memmap2::Mmap;
-use rand_distr::{Distribution, LogNormal, Uniform};
+use rand_distr::{Distribution, LogNormal};
 use rand_xoshiro::{
     rand_core::{RngCore, SeedableRng},
     Xoshiro256PlusPlus,
@@ -660,33 +657,12 @@ fn generate(
         cv_size,
     }: Generate,
 ) -> Result<(), CliError> {
-    fn generate_entry_file(
-        rng: &mut impl RngCore,
-        len_distr: LogNormal<f64>,
-        cache: &mut Vec<u8>,
-    ) -> Result<File, CliError> {
-        let file = File::from(
-            memfd_create("ringboard_gen", MemfdFlags::empty())
-                .map_io_err(|| "Failed to create data entry file.")?,
-        );
-
-        #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-        let len = len_distr.sample(rng).round().max(1.) as usize;
-        cache.clear();
-        cache.extend(Uniform::new(u8::MIN, u8::MAX).sample_iter(rng).take(len));
-        file.write_all_at(cache, 0)
-            .map_io_err(|| "Failed to write bytes to entry file.")?;
-
-        Ok(file)
-    }
-
     let distr = LogNormal::from_mean_cv(f64::from(mean_size), f64::from(cv_size)).unwrap();
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(u64::from(num_entries));
-    let mut buf = Vec::new();
     let mut pending_adds = 0;
 
     for _ in 0..num_entries {
-        let data = generate_entry_file(&mut rng, distr, &mut buf)?;
+        let data = generate_random_entry_file(&mut rng, distr)?;
         pipeline_add_request(&server, addr, data, None, &mut pending_adds)?;
     }
 
@@ -767,6 +743,27 @@ fn drain_add_requests(
         }
     }
     Ok(())
+}
+
+fn generate_random_entry_file(
+    rng: &mut (impl RngCore + 'static),
+    len_distr: LogNormal<f64>,
+) -> Result<File, CliError> {
+    let mut file = File::from(
+        memfd_create("ringboard_gen", MemfdFlags::empty())
+            .map_io_err(|| "Failed to create data entry file.")?,
+    );
+
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    let len = len_distr.sample(rng).round().max(1.) as u64;
+    // TODO use adapter when it's available
+    let result = io::copy(&mut (rng as &mut dyn RngCore).take(len), &mut file)
+        .map_io_err(|| "Failed to write bytes to entry file.")?;
+    debug_assert_eq!(len, result);
+    file.seek(SeekFrom::Start(0))
+        .map_io_err(|| "Failed to reset entry file offset.")?;
+
+    Ok(file)
 }
 
 #[cfg(test)]
