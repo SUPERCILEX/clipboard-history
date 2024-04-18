@@ -11,7 +11,7 @@ license.workspace = true
 
 [dependencies]
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
-rustix = { version = "0.38.30", features = ["net"], path = "/home/asaveau/Desktop/wip/rustix" }
+rustix = { version = "0.38.30", features = ["net"] }
 thiserror = "1.0.58"
 
 [dev-dependencies]
