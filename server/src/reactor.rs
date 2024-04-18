@@ -13,7 +13,7 @@ use arrayvec::ArrayVec;
 use io_uring::{
     buf_ring::BufRing,
     cqueue::{buffer_select, more, Entry},
-    opcode::{AcceptMulti, Close, PollAdd, Read, RecvMsgMulti, SendMsg, Shutdown},
+    opcode::{AcceptMulti, Close, PollAdd, RecvMsgMulti, SendMsg, Shutdown},
     squeue::Flags,
     types::{Fixed, RecvMsgOutMut},
     IoUring,
@@ -229,11 +229,12 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     let (mut uring, mut buf_ring) = setup_uring()?;
 
     {
-        let read_signals = Read::new(Fixed(MAX_NUM_CLIENTS + 1), ptr::null_mut(), 0)
-            .buf_group(0)
-            .build()
-            .flags(Flags::BUFFER_SELECT)
-            .user_data(REQ_TYPE_READ_SIGNALS);
+        let read_signals = PollAdd::new(
+            Fixed(MAX_NUM_CLIENTS + 1),
+            u32::try_from(libc::POLLIN).unwrap(),
+        )
+        .build()
+        .user_data(REQ_TYPE_READ_SIGNALS);
 
         let mut submission = uring.submission();
         unsafe {
@@ -433,26 +434,18 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                 }
                 REQ_TYPE_READ_SIGNALS => {
                     debug!("Handling read_signals completion.");
-                    match result {
-                        Err(e) if e.raw_os_error() == Some(Errno::NOBUFS.raw_os_error()) => {
-                            // We don't actually care about what's in the
-                            // buffer, so carry on.
-                        }
-                        r => {
-                            r.map_io_err(|| "Failed to read signal.")?;
-
-                            debug_assert!(buffer_select(entry.flags()).is_some());
-                            unsafe {
-                                bufs.recycle(entry.flags());
-                            }
-                        }
+                    let result = result.map_io_err(|| "Failed to poll for signals.")?;
+                    if (result & u32::try_from(libc::POLLIN).unwrap()) != 0 {
+                        break 'outer;
+                    } else {
+                        return Err(CliError::Internal {
+                            context: format!("Unknown signal poll event received: {result}").into(),
+                        });
                     }
-
-                    break 'outer;
                 }
                 REQ_TYPE_LOW_MEM => {
                     debug!("Handling low memory completion.");
-                    let result = result.map_io_err(|| "Failed to poll.")?;
+                    let result = result.map_io_err(|| "Failed to poll for low memory events.")?;
 
                     if !more(entry.flags()) {
                         pending_entries.push(poll_low_mem.clone());
