@@ -1,6 +1,5 @@
 use std::{
     cmp::max,
-    convert::Infallible,
     ffi::CStr,
     fs,
     fs::File,
@@ -27,8 +26,8 @@ use ringboard_core::{
     IoErr,
 };
 use rustix::fs::{
-    openat, renameat, renameat_with, statx, unlinkat, AtFlags, Mode, OFlags, RenameFlags,
-    StatxFlags, CWD,
+    fsetxattr, openat, renameat, renameat_with, statx, unlinkat, AtFlags, Mode, OFlags,
+    RenameFlags, StatxFlags, XattrFlags, CWD,
 };
 
 use crate::{
@@ -366,19 +365,12 @@ impl Allocator {
                 }
                 Entry::File => {
                     let mut from_buf = Default::default();
-                    let from_buf = direct_metadata_file_name(&mut from_buf, from, from_id);
+                    let from_buf = direct_file_name(&mut from_buf, from, from_id);
                     let mut to_buf = Default::default();
-                    let to_buf = direct_metadata_file_name(&mut to_buf, to, to_id);
+                    let to_buf = direct_file_name(&mut to_buf, to, to_id);
 
                     renameat(direct_dir, &*from_buf, direct_dir, &*to_buf)
-                        .map_io_err(|| "Failed to rename direct allocation metadata file.")?;
-                    renameat(
-                        direct_dir,
-                        &*direct_file_name(from_buf),
-                        direct_dir,
-                        &*direct_file_name(to_buf),
-                    )
-                    .map_io_err(|| "Failed to rename direct allocation file.")?;
+                        .map_io_err(|| "Failed to rename direct allocation file.")?;
                 }
             }
             Ok(from_entry)
@@ -430,10 +422,9 @@ impl Allocator {
                 let to_idx = usize::from(entry1 == Entry::File);
 
                 let mut from_buf = Default::default();
-                let from_buf =
-                    direct_metadata_file_name(&mut from_buf, rings[from_idx], ids[from_idx]);
+                let from_buf = direct_file_name(&mut from_buf, rings[from_idx], ids[from_idx]);
                 let mut to_buf = Default::default();
-                let to_buf = direct_metadata_file_name(&mut to_buf, rings[to_idx], ids[to_idx]);
+                let to_buf = direct_file_name(&mut to_buf, rings[to_idx], ids[to_idx]);
 
                 let direct_dir = &self.data.direct_dir;
                 let flags = if entry1 == entry2 {
@@ -442,15 +433,7 @@ impl Allocator {
                     RenameFlags::empty()
                 };
                 renameat_with(direct_dir, &*from_buf, direct_dir, &*to_buf, flags)
-                    .map_io_err(|| "Failed to rename direct allocation metadata file.")?;
-                renameat_with(
-                    direct_dir,
-                    &*direct_file_name(from_buf),
-                    direct_dir,
-                    &*direct_file_name(to_buf),
-                    flags,
-                )
-                .map_io_err(|| "Failed to rename direct allocation file.")?;
+                    .map_io_err(|| "Failed to rename direct allocation file.")?;
             }
             (Entry::Bucketed(_), Entry::Bucketed(_) | Entry::Uninitialized)
             | (Entry::Uninitialized, Entry::Bucketed(_)) => {
@@ -502,7 +485,7 @@ impl AllocatorData {
                 &self.direct_dir,
                 c".",
                 OFlags::RDWR | OFlags::TMPFILE,
-                Mode::RUSR,
+                Mode::RUSR | Mode::WUSR,
             )
             .map_io_err(|| "Failed to create data receiver file.")?,
         );
@@ -580,34 +563,21 @@ impl AllocatorData {
         id: u32,
     ) -> Result<Entry, CliError> {
         const _: () = assert!(mem::size_of::<RingKind>() <= u8::BITS as usize);
-
         debug!("Allocating direct entry.");
-        let mut buf = Default::default();
-        let buf = direct_metadata_file_name(&mut buf, to, id);
 
-        {
-            let mut file = File::from(
-                openat(
-                    &self.direct_dir,
-                    &*buf,
-                    OFlags::WRONLY | OFlags::CREATE,
-                    Mode::RUSR,
-                )
-                .map_io_err(|| "Failed to create direct metadata.")?,
-            );
-
-            // TODO write the API for this
-            #[derive(Encode, Decode)]
-            struct Metadata {
-                mime_type: MimeType,
-            }
-
-            let bytes = self.cache.encode(&Metadata { mime_type });
-            file.write_all(bytes)
-                .map_io_err(|| "Failed to write to direct metadata file.")?;
+        if !mime_type.is_empty() {
+            fsetxattr(
+                &data,
+                c"user.mime_type",
+                mime_type.as_bytes(),
+                XattrFlags::CREATE,
+            )
+            .map_io_err(|| "Failed to create mime type attribute.")?;
         }
 
-        link_tmp_file(data, &self.direct_dir, &*direct_file_name(buf))
+        let mut buf = Default::default();
+        let buf = direct_file_name(&mut buf, to, id);
+        link_tmp_file(data, &self.direct_dir, &*buf)
             .map_io_err(|| "Failed to materialize direct allocation.")?;
 
         Ok(Entry::File)
@@ -630,10 +600,8 @@ impl AllocatorData {
     fn free_direct(&mut self, to: RingKind, id: u32) -> Result<(), CliError> {
         debug!("Freeing direct allocation.");
         let mut buf = Default::default();
-        let buf = direct_metadata_file_name(&mut buf, to, id);
+        let buf = direct_file_name(&mut buf, to, id);
         unlinkat(&self.direct_dir, &*buf, AtFlags::empty())
-            .map_io_err(|| "Failed to remove direct metadata file.")?;
-        unlinkat(&self.direct_dir, &*direct_file_name(buf), AtFlags::empty())
             .map_io_err(|| "Failed to remove direct allocation file.")?;
         Ok(())
     }
@@ -653,19 +621,13 @@ impl<T> Deref for DirectFileNameToken<'_, T> {
     }
 }
 
-fn direct_metadata_file_name(
-    buf: &mut [u8; "256".len() + 1 + "4294967296".len() + ".metadata".len() + 1],
+fn direct_file_name(
+    buf: &mut [u8; "256".len() + 1 + "4294967296".len() + 1],
     to: RingKind,
     id: u32,
 ) -> DirectFileNameToken<()> {
-    write!(buf.as_mut_slice(), "{:0>3}_{id:0>10}.metadata", to as u8).unwrap();
+    write!(buf.as_mut_slice(), "{:0>3}_{id:0>10}\0", to as u8).unwrap();
     DirectFileNameToken(buf.as_mut_slice(), PhantomData)
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn direct_file_name(buf: DirectFileNameToken<()>) -> DirectFileNameToken<Infallible> {
-    buf.0[14] = 0;
-    DirectFileNameToken(buf.0, PhantomData)
 }
 
 pub fn decompose_id(id: u64) -> Result<(RingKind, u32), IdNotFoundError> {
