@@ -13,7 +13,11 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
 use error_stack::Report;
 use memmap2::Mmap;
-use rand_distr::{Distribution, LogNormal};
+use rand::{
+    distributions::{Alphanumeric, DistString, Standard},
+    Rng,
+};
+use rand_distr::{Distribution, LogNormal, WeightedAliasIndex};
 use rand_xoshiro::{
     rand_core::{RngCore, SeedableRng},
     Xoshiro256PlusPlus,
@@ -27,11 +31,11 @@ use ringboard_core::{
     },
     read_server_pid, IoErr,
 };
-use ringboard_sdk::connect_to_server;
+use ringboard_sdk::{connect_to_server, connect_to_server_with};
 use rustix::{
     event::{poll, PollFd, PollFlags},
     fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
-    net::{RecvFlags, SendFlags, SocketAddrUnix},
+    net::{RecvFlags, SendFlags, SocketAddrUnix, SocketFlags},
     process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
     stdio::stdin,
 };
@@ -124,7 +128,7 @@ enum Dev {
     Generate(Generate),
 
     /// Spam the server with random commands.
-    Fuzz,
+    Fuzz(Fuzz),
 }
 
 #[derive(Args, Debug)]
@@ -224,6 +228,26 @@ struct Generate {
     #[clap(value_parser = si_number::< u32 >)]
     #[clap(default_value = "1_000_000")]
     num_entries: u32,
+
+    /// The mean entry size.
+    #[clap(short, long)]
+    #[clap(value_parser = si_number::< u32 >)]
+    #[clap(default_value = "512")]
+    mean_size: u32,
+
+    /// The coefficient of variation of the entry size.
+    #[clap(short, long)]
+    #[clap(value_parser = si_number::< u32 >)]
+    #[clap(default_value = "10")]
+    cv_size: u32,
+}
+
+#[derive(Args, Debug)]
+struct Fuzz {
+    /// The RNG seed.
+    #[clap(short, long)]
+    #[clap(default_value = "42")]
+    seed: u64,
 
     /// The mean entry size.
     #[clap(short, long)]
@@ -345,7 +369,7 @@ fn run() -> Result<(), CliError> {
         Cmd::Debug(Dev::Generate(data)) => {
             generate(connect_to_server(&server_addr)?, &server_addr, data)
         }
-        Cmd::Debug(Dev::Fuzz) => fuzz(connect_to_server(&server_addr)?, &server_addr),
+        Cmd::Debug(Dev::Fuzz(data)) => fuzz(&server_addr, data),
     }
 }
 
@@ -669,8 +693,137 @@ fn generate(
     drain_add_requests(server, true, None, &mut pending_adds)
 }
 
-fn fuzz(server: OwnedFd, addr: &SocketAddrUnix) -> Result<(), CliError> {
-    todo!()
+fn fuzz(
+    addr: &SocketAddrUnix,
+    Fuzz {
+        seed,
+        mean_size,
+        cv_size,
+    }: Fuzz,
+) -> Result<(), CliError> {
+    struct FuzzRingKind(RingKind);
+
+    impl Distribution<FuzzRingKind> for Standard {
+        fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> FuzzRingKind {
+            match rng.gen_range(0..=2) {
+                0 | 1 => FuzzRingKind(RingKind::Main),
+                2 => FuzzRingKind(RingKind::Favorites),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    let distr = WeightedAliasIndex::new(vec![55u16, 45, 4000, 2000, 2000, 1000, 1]).unwrap();
+    let entry_size_distr =
+        LogNormal::from_mean_cv(f64::from(mean_size), f64::from(cv_size)).unwrap();
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
+    let mut buf = String::new();
+
+    let mut clients = Vec::new();
+    let mut ids = Vec::new();
+
+    loop {
+        match distr.sample(&mut rng) {
+            0 => {
+                println!("Connecting.");
+                if let Ok(client) = if clients.len() == 32 {
+                    connect_to_server_with(addr, SocketFlags::NONBLOCK)
+                } else {
+                    connect_to_server(addr)
+                } {
+                    clients.push(client);
+                }
+            }
+            1 => {
+                println!("Closing.");
+                if !clients.is_empty() {
+                    clients.swap_remove(rng.gen_range(0..clients.len()));
+                }
+            }
+            action @ 2..=5 => {
+                let server = if clients.is_empty() {
+                    clients.push(connect_to_server(addr)?);
+                    &clients[0]
+                } else {
+                    &clients[rng.gen_range(0..clients.len())]
+                };
+
+                macro_rules! gen_id_index {
+                    () => {{
+                        if ids.is_empty() {
+                            None
+                        } else {
+                            Some(rng.gen_range(0..ids.len()))
+                        }
+                    }};
+                }
+
+                match action {
+                    2 => {
+                        println!("Adding.");
+                        let mime_type = if rng.gen() {
+                            MimeType::new()
+                        } else {
+                            let len = rng.gen_range(1..=MimeType::new().capacity());
+                            Alphanumeric.append_string(&mut rng, &mut buf, len);
+
+                            let mime = MimeType::from(&buf).unwrap();
+                            buf.clear();
+                            mime
+                        };
+
+                        let AddResponse::Success { id } = ringboard_sdk::add(
+                            server,
+                            addr,
+                            rng.gen::<FuzzRingKind>().0,
+                            mime_type,
+                            generate_random_entry_file(&mut rng, entry_size_distr)?,
+                        )?;
+                        ids.push(id);
+                    }
+                    3 => {
+                        println!("Moving.");
+                        let idx = gen_id_index!();
+                        if let MoveToFrontResponse::Success { id } = ringboard_sdk::move_to_front(
+                            server,
+                            addr,
+                            idx.map(|idx| ids[idx]).unwrap_or_else(|| rng.gen()),
+                            rng.gen::<Option<FuzzRingKind>>().map(|r| r.0),
+                        )? {
+                            ids[idx.unwrap()] = id;
+                        }
+                    }
+                    4 => {
+                        println!("Swapping.");
+                        let idx1 = gen_id_index!();
+                        let idx2 = gen_id_index!();
+                        let _ = ringboard_sdk::swap(
+                            server,
+                            addr,
+                            idx1.map(|idx| ids[idx]).unwrap_or_else(|| rng.gen()),
+                            idx2.map(|idx| ids[idx]).unwrap_or_else(|| rng.gen()),
+                        )?;
+                    }
+                    5 => {
+                        println!("Removing.");
+                        let idx = gen_id_index!();
+                        if let RemoveResponse { error: None } = ringboard_sdk::remove(
+                            server,
+                            addr,
+                            idx.map(|idx| ids[idx]).unwrap_or_else(|| rng.gen()),
+                        )? {
+                            ids.swap_remove(idx.unwrap());
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            6 => {
+                // TODO Integrity checks
+            }
+            _ => unreachable!(),
+        }
+    }
 }
 
 fn pipeline_add_request(

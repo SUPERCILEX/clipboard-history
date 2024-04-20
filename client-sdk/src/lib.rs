@@ -16,8 +16,9 @@ use ringboard_core::{
     AsBytes, IoErr,
 };
 use rustix::net::{
-    connect_unix, recvmsg, sendmsg_unix, socket, AddressFamily, RecvAncillaryBuffer, RecvFlags,
-    SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketType,
+    connect_unix, recvmsg, sendmsg_unix, socket_with, AddressFamily, RecvAncillaryBuffer,
+    RecvFlags, SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketFlags,
+    SocketType,
 };
 use thiserror::Error;
 
@@ -41,7 +42,11 @@ pub enum Error {
 }
 
 pub fn connect_to_server(addr: &SocketAddrUnix) -> Result<OwnedFd, Error> {
-    let socket = socket(AddressFamily::UNIX, SocketType::SEQPACKET, None)
+    connect_to_server_with(addr, SocketFlags::empty())
+}
+
+pub fn connect_to_server_with(addr: &SocketAddrUnix, flags: SocketFlags) -> Result<OwnedFd, Error> {
+    let socket = socket_with(AddressFamily::UNIX, SocketType::SEQPACKET, flags, None)
         .map_io_err(|| format!("Failed to create socket: {addr:?}"))?;
     connect_unix(&socket, addr).map_io_err(|| format!("Failed to connect to server: {addr:?}"))?;
 
