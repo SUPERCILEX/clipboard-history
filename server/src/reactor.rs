@@ -222,7 +222,6 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     let close = |fd| {
         Close::new(Fixed(fd))
             .build()
-            .flags(Flags::SKIP_SUCCESS)
             .user_data(REQ_TYPE_CLOSE | store_fd(fd))
     };
 
@@ -250,6 +249,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     let mut freed_bufs = false;
     let mut send_bufs = SendMsgBufs::new();
     let mut clients = Clients::default();
+    let mut pending_accept = false;
     'outer: loop {
         match uring.submit_and_wait(1) {
             Err(e) if e.kind() == ErrorKind::Interrupted => continue,
@@ -262,9 +262,16 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
             let result = u32::try_from(entry.result())
                 .map_err(|_| io::Error::from_raw_os_error(-entry.result()));
             match entry.user_data() & REQ_TYPE_MASK {
-                REQ_TYPE_ACCEPT => {
+                REQ_TYPE_ACCEPT => 'accept: {
                     debug!("Handling accept completion.");
-                    let result = result.map_io_err(|| "Failed to accept socket connection.")?;
+                    let result = match result {
+                        Err(e) if e.raw_os_error() == Some(Errno::NFILE.raw_os_error()) => {
+                            warn!("Too many clients clients connected, dropping connection.");
+                            pending_accept = true;
+                            break 'accept;
+                        }
+                        r => r.map_io_err(|| "Failed to accept socket connection.")?,
+                    };
                     if !more(entry.flags()) {
                         pending_entries.push(accept.clone());
                     }
@@ -431,6 +438,12 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     debug!("Handling close completion.");
                     let fd = restore_fd(&entry);
                     result.map_io_err(|| format!("Failed to close client {fd}."))?;
+
+                    if pending_accept {
+                        info!("Restoring ability to accept new clients.");
+                        pending_entries.push(accept.clone());
+                        pending_accept = false;
+                    }
                 }
                 REQ_TYPE_READ_SIGNALS => {
                     debug!("Handling read_signals completion.");
