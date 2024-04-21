@@ -4,11 +4,11 @@ use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 
 use error_stack::Report;
 use log::info;
-use ringboard_core::{dirs::data_dir, Error, IoErr};
+use ringboard_core::{dirs::data_dir, Error, IoErr, PathView};
 use rustix::process::Pid;
 use thiserror::Error;
 
-use crate::{allocator::Allocator, startup::claim_server_ownership, views::PathView};
+use crate::{allocator::Allocator, startup::claim_server_ownership};
 
 mod allocator;
 mod reactor;
@@ -16,7 +16,6 @@ mod requests;
 mod send_msg_bufs;
 mod startup;
 mod utils;
-mod views;
 
 #[derive(Error, Debug)]
 enum CliError {

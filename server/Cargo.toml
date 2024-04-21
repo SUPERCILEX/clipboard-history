@@ -10,7 +10,7 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
-arrayvec = { version = "0.7.4" }
+arrayvec = "0.7.4"
 bitcode = { version = "0.6.0", features = ["arrayvec"] }
 env_logger = "0.11.3"
 error-stack = "0.4.1"

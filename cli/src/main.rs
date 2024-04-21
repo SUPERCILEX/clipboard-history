@@ -279,7 +279,7 @@ enum CliError {
     #[error("{0}")]
     Core(#[from] ringboard_core::Error),
     #[error("{0}")]
-    Sdk(#[from] ringboard_sdk::Error),
+    Sdk(#[from] ringboard_sdk::ClientError),
     #[error("Failed to delete or copy files.")]
     Fuc(fuc_engine::Error),
     #[error("Id not found.")]
@@ -299,7 +299,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
     run().map_err(|e| {
         let wrapper = Wrapper::W(e.to_string());
         match e {
-            CliError::Core(e) | CliError::Sdk(ringboard_sdk::Error::Core(e)) => {
+            CliError::Core(e) | CliError::Sdk(ringboard_sdk::ClientError::Core(e)) => {
                 use ringboard_core::Error;
                 match e {
                     Error::Io { error, context } => Report::new(error)
@@ -314,10 +314,10 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
-            CliError::Sdk(ringboard_sdk::Error::InvalidResponse { context }) => {
+            CliError::Sdk(ringboard_sdk::ClientError::InvalidResponse { context }) => {
                 Report::new(wrapper).attach_printable(context)
             }
-            CliError::Sdk(ringboard_sdk::Error::VersionMismatch { actual: _ }) => {
+            CliError::Sdk(ringboard_sdk::ClientError::VersionMismatch { actual: _ }) => {
                 Report::new(wrapper)
             }
             CliError::IdNotFound(IdNotFoundError::Ring(id)) => {
@@ -847,9 +847,9 @@ fn pipeline_add_request(
                 SendFlags::DONTWAIT
             },
         ) {
-            Err(ringboard_sdk::Error::Core(ringboard_core::Error::Io { error: e, .. }))
-                if e.kind() == ErrorKind::WouldBlock =>
-            {
+            Err(ringboard_sdk::ClientError::Core(ringboard_core::Error::Io {
+                error: e, ..
+            })) if e.kind() == ErrorKind::WouldBlock => {
                 debug_assert!(*pending_adds > 0);
                 drain_add_requests(&server, retry, translation.as_deref_mut(), pending_adds)?;
                 retry = true;
@@ -881,9 +881,9 @@ fn drain_add_requests(
                 },
             )
         } {
-            Err(ringboard_sdk::Error::Core(ringboard_core::Error::Io { error: e, .. }))
-                if e.kind() == ErrorKind::WouldBlock =>
-            {
+            Err(ringboard_sdk::ClientError::Core(ringboard_core::Error::Io {
+                error: e, ..
+            })) if e.kind() == ErrorKind::WouldBlock => {
                 debug_assert!(!all);
                 break;
             }

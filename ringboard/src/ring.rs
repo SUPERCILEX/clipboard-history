@@ -110,13 +110,13 @@ impl BucketEntry {
     }
 }
 
-struct Mmap {
+pub struct Mmap {
     ptr: NonNull<u8>,
     len: usize,
 }
 
 impl Mmap {
-    fn new<Fd: AsFd>(fd: Fd, len: usize) -> rustix::io::Result<Self> {
+    pub fn new<Fd: AsFd>(fd: Fd, len: usize) -> rustix::io::Result<Self> {
         Ok(Self {
             ptr: unsafe {
                 NonNull::new_unchecked(mmap(
@@ -131,6 +131,15 @@ impl Mmap {
             .cast(),
             len,
         })
+    }
+
+    pub fn ptr(&self) -> NonNull<u8> {
+        self.ptr
+    }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> usize {
+        self.len
     }
 }
 
@@ -157,7 +166,7 @@ impl Ring {
             .map_io_err(|| "Failed to map memory.")?;
 
         if len < MAGIC.len()
-            || unsafe { slice::from_raw_parts(mem.ptr.as_ptr(), MAGIC.len()) } != MAGIC
+            || unsafe { slice::from_raw_parts(mem.ptr().as_ptr(), MAGIC.len()) } != MAGIC
         {
             return Err(Error::NotARingboard {
                 file: path.to_string_lossy().into_owned().into(),
@@ -199,7 +208,7 @@ impl Ring {
         let bytes = unsafe {
             slice::from_raw_parts(
                 self.mem
-                    .ptr
+                    .ptr()
                     .as_ptr()
                     .add(MAGIC.len() + mem::size_of_val(&VERSION)),
                 mem::size_of::<u32>(),
@@ -245,7 +254,7 @@ impl Ring {
         let bytes = unsafe {
             slice::from_raw_parts(
                 self.mem
-                    .ptr
+                    .ptr()
                     .as_ptr()
                     .add(usize::try_from(entries_to_offset(index)).unwrap()),
                 mem::size_of::<u32>(),

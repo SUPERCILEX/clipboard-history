@@ -5,11 +5,13 @@ use std::{borrow::Cow, io, num::ParseIntError, path::PathBuf};
 
 use thiserror::Error;
 pub use utils::{copy_file_range_all, read_server_pid, AsBytes};
+pub use views::{PathView, StringView};
 
 pub mod dirs;
 pub mod protocol;
 pub mod ring;
 mod utils;
+mod views;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

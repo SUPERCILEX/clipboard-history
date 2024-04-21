@@ -29,7 +29,7 @@ macro_rules! response {
 }
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum ClientError {
     #[error("{0}")]
     Core(#[from] ringboard_core::Error),
     #[error(
@@ -41,11 +41,14 @@ pub enum Error {
     InvalidResponse { context: Cow<'static, str> },
 }
 
-pub fn connect_to_server(addr: &SocketAddrUnix) -> Result<OwnedFd, Error> {
+pub fn connect_to_server(addr: &SocketAddrUnix) -> Result<OwnedFd, ClientError> {
     connect_to_server_with(addr, SocketFlags::empty())
 }
 
-pub fn connect_to_server_with(addr: &SocketAddrUnix, flags: SocketFlags) -> Result<OwnedFd, Error> {
+pub fn connect_to_server_with(
+    addr: &SocketAddrUnix,
+    flags: SocketFlags,
+) -> Result<OwnedFd, ClientError> {
     let socket = socket_with(AddressFamily::UNIX, SocketType::SEQPACKET, flags, None)
         .map_io_err(|| format!("Failed to create socket: {addr:?}"))?;
     connect_unix(&socket, addr).map_io_err(|| format!("Failed to connect to server: {addr:?}"))?;
@@ -62,7 +65,7 @@ pub fn connect_to_server_with(addr: &SocketAddrUnix, flags: SocketFlags) -> Resu
 
         let version = unsafe { response!(u8)(&socket, RecvFlags::empty()) }?;
         if version != protocol::VERSION {
-            return Err(Error::VersionMismatch { actual: version });
+            return Err(ClientError::VersionMismatch { actual: version });
         }
     }
 
@@ -75,7 +78,7 @@ pub fn add<Server: AsFd, Data: AsFd>(
     to: RingKind,
     mime_type: MimeType,
     data: Data,
-) -> Result<AddResponse, Error> {
+) -> Result<AddResponse, ClientError> {
     // TODO figure out if we need to make a copy of the file for X11/Wayland.
     //  As in can you copy from stdin to clipboard and will that be routed directly
     //  to the server.
@@ -90,14 +93,14 @@ pub fn add_send<Server: AsFd, Data: AsFd>(
     mime_type: MimeType,
     data: Data,
     flags: SendFlags,
-) -> Result<(), Error> {
+) -> Result<(), ClientError> {
     request_with_fd(&server, addr, Request::Add { to, mime_type }, data, flags)
 }
 
 pub unsafe fn add_recv<Server: AsFd>(
     server: Server,
     flags: RecvFlags,
-) -> Result<AddResponse, Error> {
+) -> Result<AddResponse, ClientError> {
     response!(AddResponse)(&server, flags)
 }
 
@@ -106,7 +109,7 @@ pub fn move_to_front<Server: AsFd>(
     addr: &SocketAddrUnix,
     id: u64,
     to: Option<RingKind>,
-) -> Result<MoveToFrontResponse, Error> {
+) -> Result<MoveToFrontResponse, ClientError> {
     request(
         &server,
         addr,
@@ -121,7 +124,7 @@ pub fn swap<Server: AsFd>(
     addr: &SocketAddrUnix,
     id1: u64,
     id2: u64,
-) -> Result<SwapResponse, Error> {
+) -> Result<SwapResponse, ClientError> {
     request(
         &server,
         addr,
@@ -135,7 +138,7 @@ pub fn remove<Server: AsFd>(
     server: Server,
     addr: &SocketAddrUnix,
     id: u64,
-) -> Result<RemoveResponse, Error> {
+) -> Result<RemoveResponse, ClientError> {
     request(&server, addr, Request::Remove { id }, SendFlags::empty())?;
     unsafe { response!(RemoveResponse)(&server, RecvFlags::empty()) }
 }
@@ -143,7 +146,7 @@ pub fn remove<Server: AsFd>(
 pub fn garbage_collect<Server: AsFd>(
     server: Server,
     addr: &SocketAddrUnix,
-) -> Result<GarbageCollectResponse, Error> {
+) -> Result<GarbageCollectResponse, ClientError> {
     request(&server, addr, Request::GarbageCollect, SendFlags::empty())?;
     unsafe { response!(GarbageCollectResponse)(&server, RecvFlags::empty()) }
 }
@@ -153,7 +156,7 @@ fn request(
     addr: &SocketAddrUnix,
     request: Request,
     flags: SendFlags,
-) -> Result<(), Error> {
+) -> Result<(), ClientError> {
     request_with_ancillary(
         server,
         addr,
@@ -169,7 +172,7 @@ fn request_with_fd(
     request: Request,
     fd: impl AsFd,
     flags: SendFlags,
-) -> Result<(), Error> {
+) -> Result<(), ClientError> {
     let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
     let mut buf = SendAncillaryBuffer::new(&mut space);
     let fds = [fd.as_fd()];
@@ -187,7 +190,7 @@ fn request_with_ancillary(
     request: Request,
     ancillary: &mut SendAncillaryBuffer,
     flags: SendFlags,
-) -> Result<(), Error> {
+) -> Result<(), ClientError> {
     sendmsg_unix(
         server,
         addr,
@@ -202,7 +205,7 @@ fn request_with_ancillary(
 unsafe fn response<T: Copy, const N: usize>(
     server: impl AsFd,
     flags: RecvFlags,
-) -> Result<T, Error> {
+) -> Result<T, ClientError> {
     let type_name = || {
         let name = std::any::type_name::<T>();
         if let Some((_, name)) = name.rsplit_once(':') {
@@ -221,7 +224,7 @@ unsafe fn response<T: Copy, const N: usize>(
     )
     .map_io_err(|| format!("Failed to receive {}.", type_name()))?;
     if result.bytes != mem::size_of::<T>() {
-        return Err(Error::InvalidResponse {
+        return Err(ClientError::InvalidResponse {
             context: format!("Bad {}.", type_name()).into(),
         });
     }

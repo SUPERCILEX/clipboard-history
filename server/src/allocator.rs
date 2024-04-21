@@ -26,7 +26,7 @@ use ringboard_core::{
     },
     ring,
     ring::{entries_to_offset, BucketEntry, Entry, Header, RawEntry, Ring},
-    IoErr,
+    IoErr, PathView, StringView,
 };
 use rustix::{
     fs::{
@@ -38,7 +38,6 @@ use rustix::{
 
 use crate::{
     utils::{link_tmp_file, TEXT_MIMES},
-    views::{PathView, StringView},
     CliError,
 };
 
