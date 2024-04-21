@@ -1,5 +1,4 @@
 #![feature(core_io_borrowed_buf, read_buf)]
-#![feature(write_all_vectored)]
 #![allow(clippy::missing_errors_doc)]
 
 use std::{borrow::Cow, io, num::ParseIntError, path::PathBuf};

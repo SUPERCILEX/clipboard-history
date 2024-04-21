@@ -1,16 +1,18 @@
 use std::{
     cmp::max,
     ffi::CStr,
+    fmt::Debug,
     fs,
     fs::File,
     io,
-    io::{ErrorKind, Read, Write},
+    io::{ErrorKind, IoSlice, Read, Write},
     marker::PhantomData,
     mem,
     mem::ManuallyDrop,
     ops::{Deref, Index, IndexMut},
     os::{fd::OwnedFd, unix::fs::FileExt},
     path::{Path, PathBuf},
+    slice,
 };
 
 use arrayvec::ArrayVec;
@@ -22,12 +24,16 @@ use ringboard_core::{
         composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse,
         RingKind, SwapResponse,
     },
-    ring::{BucketEntry, Entry, Ring, RingWriter},
+    ring,
+    ring::{entries_to_offset, BucketEntry, Entry, Header, RawEntry, Ring},
     IoErr,
 };
-use rustix::fs::{
-    fsetxattr, openat, renameat, renameat_with, statx, unlinkat, AtFlags, Mode, OFlags,
-    RenameFlags, StatxFlags, XattrFlags, CWD,
+use rustix::{
+    fs::{
+        fsetxattr, openat, renameat, renameat_with, statx, unlinkat, AtFlags, Mode, OFlags,
+        RenameFlags, StatxFlags, XattrFlags, CWD,
+    },
+    path::Arg,
 };
 
 use crate::{
@@ -36,23 +42,70 @@ use crate::{
     CliError,
 };
 
-struct WritableRing {
-    writer: LoggingRingWriter,
-    ring: Ring,
+struct RingWriter {
+    ring: File,
 }
 
-struct LoggingRingWriter(RingWriter);
+impl RingWriter {
+    fn open<P: Arg + Copy + Debug>(path: P) -> Result<Self, CliError> {
+        let ring = match openat(CWD, path, OFlags::WRONLY, Mode::empty()) {
+            Err(e) if e.kind() == ErrorKind::NotFound => {
+                let fd = openat(
+                    CWD,
+                    path,
+                    OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL,
+                    Mode::RUSR | Mode::WUSR,
+                )
+                .map_io_err(|| format!("Failed to create Ringboard database: {path:?}"))?;
+                let mut f = File::from(fd);
 
-impl LoggingRingWriter {
-    pub fn write(&mut self, entry: Entry, at: u32) -> ringboard_core::Result<()> {
+                {
+                    let Header {
+                        magic,
+                        version,
+                        write_head,
+                    } = &Header::default();
+                    f.write_all_vectored(&mut [
+                        IoSlice::new(magic),
+                        IoSlice::new(slice::from_ref(version)),
+                        IoSlice::new(&write_head.to_le_bytes()),
+                    ])
+                    .map_io_err(|| {
+                        format!("Failed to write header to Ringboard database: {path:?}")
+                    })?;
+                }
+
+                f
+            }
+            r => File::from(r.map_io_err(|| {
+                format!("Failed to open Ringboard database for writing: {path:?}")
+            })?),
+        };
+
+        Ok(Self { ring })
+    }
+
+    fn write(&mut self, entry: Entry, at: u32) -> ringboard_core::Result<()> {
         debug!("Writing entry to position {at}: {entry:?}");
-        self.0.write(entry, at)
+        self.ring
+            .write_all_at(&RawEntry::from(entry).to_le_bytes(), entries_to_offset(at))
+            .map_io_err(|| format!("Failed to write entry to Ringboard database: {entry:?}"))
     }
 
-    pub fn set_write_head(&mut self, head: u32) -> ringboard_core::Result<()> {
+    fn set_write_head(&mut self, head: u32) -> ringboard_core::Result<()> {
         debug!("Setting write head to {head}.");
-        self.0.set_write_head(head)
+        self.ring
+            .write_all_at(
+                &head.to_le_bytes(),
+                u64::try_from(ring::MAGIC.len() + mem::size_of_val(&ring::VERSION)).unwrap(),
+            )
+            .map_io_err(|| format!("Failed to update Ringboard write head: {head}"))
     }
+}
+
+struct WritableRing {
+    writer: RingWriter,
+    ring: Ring,
 }
 
 struct Rings([WritableRing; 2]);
@@ -179,7 +232,7 @@ impl Allocator {
         let mut open_ring = |name| -> Result<_, CliError> {
             let main = PathView::new(&mut data_dir, name);
             Ok(WritableRing {
-                writer: LoggingRingWriter(RingWriter::open(&*main)?),
+                writer: RingWriter::open(&*main)?,
                 ring: Ring::open(max_entries, &*main)?,
             })
         };

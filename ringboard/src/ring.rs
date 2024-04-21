@@ -1,13 +1,4 @@
-use std::{
-    fmt::Debug,
-    fs::File,
-    io::{ErrorKind, IoSlice, Write},
-    mem,
-    os::{fd::AsFd, unix::fs::FileExt},
-    ptr,
-    ptr::NonNull,
-    slice,
-};
+use std::{fmt::Debug, mem, ops::Deref, os::fd::AsFd, ptr, ptr::NonNull, slice};
 
 use rustix::{
     fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
@@ -25,14 +16,14 @@ pub struct Ring {
     capacity: u32,
 }
 
-const MAGIC: [u8; 3] = [0x4D, 0x18, 0x32];
-const VERSION: u8 = 0;
+pub const MAGIC: [u8; 3] = [0x4D, 0x18, 0x32];
+pub const VERSION: u8 = 0;
 
 #[repr(C)]
-struct Header {
-    magic: [u8; 3],
-    version: u8,
-    write_head: u32,
+pub struct Header {
+    pub magic: [u8; 3],
+    pub version: u8,
+    pub write_head: u32,
 }
 
 impl Default for Header {
@@ -48,7 +39,15 @@ impl Default for Header {
 const _: () = assert!(mem::size_of::<Header>() == 8);
 
 #[repr(transparent)]
-struct RawEntry(u32);
+pub struct RawEntry(u32);
+
+impl Deref for RawEntry {
+    type Target = u32;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl From<Entry> for RawEntry {
     fn from(value: Entry) -> Self {
@@ -219,6 +218,24 @@ impl Ring {
     }
 
     #[must_use]
+    pub const fn next_entry(&self, current: u32) -> u32 {
+        if current == self.len() - 1 {
+            0
+        } else {
+            current + 1
+        }
+    }
+
+    #[must_use]
+    pub const fn prev_entry(&self, current: u32) -> u32 {
+        if current == 0 {
+            self.len() - 1
+        } else {
+            current - 1
+        }
+    }
+
+    #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn get(&self, index: u32) -> Option<Entry> {
         if index >= self.len() {
@@ -239,75 +256,12 @@ impl Ring {
     }
 }
 
-pub struct RingWriter {
-    ring: File,
-}
-
-impl RingWriter {
-    pub fn open<P: Arg + Copy + Debug>(path: P) -> Result<Self> {
-        let ring = match openat(CWD, path, OFlags::WRONLY, Mode::empty()) {
-            Err(e) if e.kind() == ErrorKind::NotFound => {
-                let fd = openat(
-                    CWD,
-                    path,
-                    OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL,
-                    Mode::RUSR | Mode::WUSR,
-                )
-                .map_io_err(|| format!("Failed to create Ringboard database: {path:?}"))?;
-                let mut f = File::from(fd);
-
-                {
-                    let Header {
-                        magic,
-                        version,
-                        write_head,
-                    } = &Header::default();
-                    f.write_all_vectored(&mut [
-                        IoSlice::new(magic),
-                        IoSlice::new(slice::from_ref(version)),
-                        IoSlice::new(&write_head.to_le_bytes()),
-                    ])
-                    .map_io_err(|| {
-                        format!("Failed to write header to Ringboard database: {path:?}")
-                    })?;
-                }
-
-                f
-            }
-            r => File::from(r.map_io_err(|| {
-                format!("Failed to open Ringboard database for writing: {path:?}")
-            })?),
-        };
-
-        Ok(Self { ring })
-    }
-
-    pub fn write(&mut self, entry: Entry, at: u32) -> Result<()> {
-        self.ring
-            .write_all_at(
-                &RawEntry::from(entry).0.to_le_bytes(),
-                entries_to_offset(at),
-            )
-            .map_io_err(|| format!("Failed to write entry to Ringboard database: {entry:?}"))
-    }
-
-    #[allow(clippy::missing_panics_doc)]
-    pub fn set_write_head(&mut self, head: u32) -> Result<()> {
-        self.ring
-            .write_all_at(
-                &head.to_le_bytes(),
-                u64::try_from(MAGIC.len() + mem::size_of_val(&VERSION)).unwrap(),
-            )
-            .map_io_err(|| format!("Failed to update Ringboard write head: {head}"))
-    }
-}
-
-fn entries_to_offset(entries: u32) -> u64 {
+pub fn entries_to_offset(entries: u32) -> u64 {
     u64::from(entries) * u64::try_from(mem::size_of::<RawEntry>()).unwrap()
         + u64::try_from(mem::size_of::<Header>()).unwrap()
 }
 
-fn offset_to_entries(offset: usize) -> u32 {
+pub fn offset_to_entries(offset: usize) -> u32 {
     u32::try_from(offset.saturating_sub(mem::size_of::<Header>()) / mem::size_of::<RawEntry>())
         .unwrap()
 }
