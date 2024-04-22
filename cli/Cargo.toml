@@ -10,7 +10,10 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
+arrayvec = { version = "0.7.4", features = ["serde"] }
 ask = { package = "ask-cli", version = "0.3.0" }
+base64 = "0.22.0"
+base64-serde = "0.7.0"
 clap = { version = "4.5.4", features = ["derive", "wrap_help"] }
 clap-num = "1.1.1"
 dirs = "5.0.1"
@@ -23,6 +26,8 @@ rand_xoshiro = "0.6.0"
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
 rustix = { version = "0.38.30", features = ["stdio", "event"] }
+serde = { version = "1.0.198", features = ["derive"] }
+serde_json = "1.0.116"
 thiserror = "1.0.58"
 
 [dev-dependencies]

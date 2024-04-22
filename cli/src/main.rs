@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fs,
     fs::File,
     io,
@@ -29,9 +30,11 @@ use ringboard_core::{
         AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
         RemoveResponse, RingKind, SwapResponse,
     },
-    read_server_pid, IoErr,
+    read_server_pid,
+    ring::Ring,
+    IoErr, PathView,
 };
-use ringboard_sdk::{connect_to_server, connect_to_server_with};
+use ringboard_sdk::{connect_to_server, connect_to_server_with, EntryReader, RingReader};
 use rustix::{
     event::{poll, PollFd, PollFlags},
     fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
@@ -39,6 +42,7 @@ use rustix::{
     process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
     stdio::stdin,
 };
+use serde::{ser::SerializeSeq, Serialize, Serializer};
 use thiserror::Error;
 
 /// The Ringboard (clipboard history) CLI.
@@ -121,6 +125,7 @@ enum Dev {
     Stats,
 
     /// Dump the contents of the database for analysis.
+    #[command(alias = "export")]
     Dump(Dump),
 
     /// Generate a pseudo-random database for testing and performance tuning
@@ -264,10 +269,6 @@ struct Fuzz {
 
 #[derive(Args, Debug)]
 struct Dump {
-    /// Include the plain-text contents of each entry.
-    #[arg(short, long)]
-    contents: bool,
-
     /// Instead of dumping the existing database contents, watch for new entries
     /// as they come in.
     #[arg(short, long)]
@@ -284,6 +285,8 @@ enum CliError {
     Fuc(fuc_engine::Error),
     #[error("Id not found.")]
     IdNotFound(IdNotFoundError),
+    #[error("{0}")]
+    SerdeJson(#[from] serde_json::Error),
 }
 
 #[derive(Error, Debug)]
@@ -327,6 +330,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
                 Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
             }
             CliError::Fuc(e) => Report::new(e).change_context(wrapper),
+            CliError::SerdeJson(e) => Report::new(e).change_context(wrapper),
         }
     })
 }
@@ -365,7 +369,8 @@ fn run() -> Result<(), CliError> {
         Cmd::GarbageCollect => garbage_collect(connect_to_server(&server_addr)?, &server_addr),
         Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Debug(Dev::Stats) => stats(),
-        Cmd::Debug(Dev::Dump(data)) => dump(data),
+        Cmd::Debug(Dev::Dump(Dump { watch: false })) => dump(),
+        Cmd::Debug(Dev::Dump(Dump { watch: true })) => watch(),
         Cmd::Debug(Dev::Generate(data)) => {
             generate(connect_to_server(&server_addr)?, &server_addr, data)
         }
@@ -668,7 +673,81 @@ fn stats() -> Result<(), CliError> {
     todo!()
 }
 
-fn dump(Dump { contents, watch }: Dump) -> Result<(), CliError> {
+fn dump() -> Result<(), CliError> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64_serde::base64_serde_type;
+
+    base64_serde_type!(Base64Standard, STANDARD);
+
+    #[derive(Serialize)]
+    #[serde(tag = "kind")]
+    enum Entry<'a> {
+        Human {
+            data: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            mime_type: Option<MimeType>,
+        },
+        Bytes {
+            #[serde(with = "Base64Standard")]
+            data: Cow<'a, [u8]>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            mime_type: Option<MimeType>,
+        },
+    }
+
+    let mut database = data_dir();
+    if !database
+        .try_exists()
+        .map_io_err(|| format!("Failed to check that database exists: {database:?}"))?
+    {
+        eprintln!(
+            "Database not found. Make sure to run the ringboard server or match the XDG_DATA_HOME \
+             value."
+        );
+        println!("[]");
+        return Ok(());
+    }
+
+    let mut seq = serde_json::Serializer::new(io::stdout().lock());
+    let mut seq = seq.serialize_seq(None)?;
+    let mut dump_ring = |kind| -> Result<(), CliError> {
+        let ring = {
+            let ring = PathView::new(
+                &mut database,
+                match kind {
+                    RingKind::Main => "main.ring",
+                    RingKind::Favorites => "favorites.ring",
+                },
+            );
+            Ring::open(0, &*ring)?
+        };
+        let reader = EntryReader::open(&mut database)?;
+
+        for entry in RingReader::new(&ring, kind) {
+            let loaded = entry.to_slice(&reader)?;
+            let mime_type = loaded.mime_type()?;
+            let mime_type = (!mime_type.is_empty()).then_some(mime_type);
+            seq.serialize_element(&if let Ok(data) = str::from_utf8(&loaded) {
+                Entry::Human { data, mime_type }
+            } else {
+                Entry::Bytes {
+                    mime_type,
+                    data: loaded.into_inner(),
+                }
+            })?;
+        }
+
+        Ok(())
+    };
+
+    dump_ring(RingKind::Favorites)?;
+    dump_ring(RingKind::Main)?;
+
+    SerializeSeq::end(seq)?;
+    Ok(())
+}
+
+fn watch() -> Result<(), CliError> {
     todo!()
 }
 
@@ -717,9 +796,11 @@ fn fuzz(
     let entry_size_distr =
         LogNormal::from_mean_cv(f64::from(mean_size), f64::from(cv_size)).unwrap();
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
-    let mut buf = String::new();
+    let mut buf = String::with_capacity(MimeType::new_const().capacity());
 
-    let mut clients = Vec::new();
+    let mut clients = Vec::with_capacity(32);
+    // TODO need map so adds that overlap IDs can get replaced and vec so random is
+    //  efficient
     let mut ids = Vec::new();
 
     loop {
@@ -764,7 +845,7 @@ fn fuzz(
                         let mime_type = if rng.gen() {
                             MimeType::new()
                         } else {
-                            let len = rng.gen_range(1..=MimeType::new().capacity());
+                            let len = rng.gen_range(1..=MimeType::new_const().capacity());
                             Alphanumeric.append_string(&mut rng, &mut buf, len);
 
                             let mime = MimeType::from(&buf).unwrap();
