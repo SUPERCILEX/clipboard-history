@@ -678,19 +678,18 @@ fn dump() -> Result<(), CliError> {
     base64_serde_type!(Base64Standard, STANDARD);
 
     #[derive(Serialize)]
-    #[serde(tag = "kind")]
-    enum Entry<'a> {
-        Human {
-            data: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            mime_type: Option<MimeType>,
-        },
-        Bytes {
-            #[serde(with = "Base64Standard")]
-            data: Cow<'a, [u8]>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            mime_type: Option<MimeType>,
-        },
+    struct Entry<'a> {
+        #[serde(flatten)]
+        data: Data<'a>,
+        #[serde(skip_serializing_if = "MimeType::is_empty")]
+        mime_type: MimeType,
+    }
+
+    #[derive(Serialize)]
+    #[serde(tag = "kind", content = "data")]
+    enum Data<'a> {
+        Human(&'a str),
+        Bytes(#[serde(with = "Base64Standard")] Cow<'a, [u8]>),
     }
 
     let mut database = data_dir();
@@ -714,14 +713,13 @@ fn dump() -> Result<(), CliError> {
         for entry in RingReader::from_ring(&ring, kind) {
             let loaded = entry.to_slice(&reader)?;
             let mime_type = loaded.mime_type()?;
-            let mime_type = (!mime_type.is_empty()).then_some(mime_type);
-            seq.serialize_element(&if let Ok(data) = str::from_utf8(&loaded) {
-                Entry::Human { data, mime_type }
-            } else {
-                Entry::Bytes {
-                    mime_type,
-                    data: loaded.into_inner(),
-                }
+            seq.serialize_element(&Entry {
+                data: if let Ok(data) = str::from_utf8(&loaded) {
+                    Data::Human(data)
+                } else {
+                    Data::Bytes(loaded.into_inner())
+                },
+                mime_type,
             })?;
         }
 
