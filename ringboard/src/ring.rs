@@ -10,6 +10,7 @@ use crate::{Error, IoErr, Result};
 
 pub const MAX_ENTRIES: u32 = (1 << 20) - 1;
 
+#[derive(Debug)]
 pub struct Ring {
     mem: Mmap,
     len: u32,
@@ -154,8 +155,6 @@ impl Ring {
     /// Open a Ringboard database.
     #[allow(clippy::missing_panics_doc)]
     pub fn open<P: Arg + Copy + Debug>(max_entries: u32, path: P) -> Result<Self> {
-        let max_entries = max_entries.clamp(1, MAX_ENTRIES);
-
         let fd = openat(CWD, path, OFlags::RDONLY, Mode::empty())
             .map_io_err(|| format!("Failed to open Ringboard database for reading: {path:?}"))?;
 
@@ -163,6 +162,7 @@ impl Ring {
             .map_io_err(|| "Failed to statx Ringboard database file.")?
             .stx_size;
         let len = usize::try_from(len).unwrap();
+        let max_entries = max_entries.clamp(offset_to_entries(len), MAX_ENTRIES);
         let mem = Mmap::new(fd, usize::try_from(entries_to_offset(max_entries)).unwrap())
             .map_io_err(|| "Failed to map memory.")?;
 
@@ -229,6 +229,10 @@ impl Ring {
 
     #[must_use]
     pub const fn next_entry(&self, current: u32) -> u32 {
+        if self.is_empty() {
+            return current;
+        }
+
         if current == self.len() - 1 {
             0
         } else {
@@ -238,6 +242,10 @@ impl Ring {
 
     #[must_use]
     pub const fn prev_entry(&self, current: u32) -> u32 {
+        if self.is_empty() {
+            return current;
+        }
+
         if current == 0 {
             self.len() - 1
         } else {

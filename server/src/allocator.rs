@@ -15,7 +15,7 @@ use std::{
 use bitcode::{Decode, Encode};
 use log::{debug, info};
 use ringboard_core::{
-    copy_file_range_all, direct_file_name, open_buckets,
+    bucket_to_length, copy_file_range_all, direct_file_name, open_buckets,
     protocol::{
         composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse,
         RingKind, SwapResponse,
@@ -225,10 +225,10 @@ impl FreeLists {
 impl Allocator {
     pub fn open(mut data_dir: PathBuf, max_entries: u32) -> Result<Self, CliError> {
         let mut open_ring = |name| -> Result<_, CliError> {
-            let main = PathView::new(&mut data_dir, name);
+            let ring = PathView::new(&mut data_dir, name);
             Ok(WritableRing {
-                writer: RingWriter::open(&*main)?,
-                ring: Ring::open(max_entries, &*main)?,
+                writer: RingWriter::open(&*ring)?,
+                ring: Ring::open(max_entries, &*ring)?,
             })
         };
         let main_ring = open_ring("main.ring")?;
@@ -537,7 +537,7 @@ impl AllocatorData {
         let bucket_index = free_bucket
             .as_ref()
             .map_or_else(|| bucket_lengths[bucket], |g| g.id);
-        let bucket_len = 1 << (bucket + 2);
+        let bucket_len = bucket_to_length(bucket);
 
         debug!("Writing to bucket {bucket} at slot {bucket_index}.");
         {

@@ -117,6 +117,10 @@ pub fn size_to_bucket(bytes: u32) -> usize {
     usize::try_from(max(1, bytes.saturating_sub(1)).ilog2().saturating_sub(1)).unwrap()
 }
 
+pub fn bucket_to_length(bucket: usize) -> u32 {
+    1 << (bucket + 2)
+}
+
 pub struct DirectFileNameToken<'a, T>(&'a mut [u8], PhantomData<T>);
 
 impl<T> Deref for DirectFileNameToken<'_, T> {

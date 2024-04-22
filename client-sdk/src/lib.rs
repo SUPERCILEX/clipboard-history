@@ -7,6 +7,7 @@ use std::{
     os::fd::{AsFd, OwnedFd},
 };
 
+pub use ring_reader::{Entry, EntryReader, LoadedEntry, RingReader};
 use ringboard_core::{
     protocol,
     protocol::{
@@ -21,6 +22,8 @@ use rustix::net::{
     SocketType,
 };
 use thiserror::Error;
+
+mod ring_reader;
 
 macro_rules! response {
     ($t:ty) => {
