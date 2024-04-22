@@ -121,13 +121,15 @@ impl DoubleEndedIterator for RingReader<'_> {
     }
 }
 
+#[derive(Debug)]
 pub struct Entry {
     id: u32,
     ring: RingKind,
     kind: Kind,
 }
 
-enum Kind {
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum Kind {
     Bucket(BucketEntry),
     File,
 }
@@ -148,19 +150,12 @@ impl<T> LoadedEntry<T> {
     }
 
     pub fn mime_type(&self) -> Result<MimeType, ringboard_core::Error> {
-        let Some(fd) = &self.fd else {
+        let Some(fd) = self.backing_file() else {
             return Ok(MimeType::new());
         };
 
         let mut mime_type = [0u8; MimeType::new_const().capacity()];
-        let len = match fgetxattr(
-            match fd {
-                LoadedEntryFd::Owned(o) => o.as_fd(),
-                LoadedEntryFd::HackySelfReference(b) => *b,
-            },
-            c"user.mime_type",
-            &mut mime_type,
-        ) {
+        let len = match fgetxattr(fd, c"user.mime_type", &mut mime_type) {
             Err(Errno::NODATA) => {
                 return Ok(MimeType::new());
             }
@@ -173,6 +168,13 @@ impl<T> LoadedEntry<T> {
             })?;
 
         Ok(MimeType::from(mime_type).unwrap())
+    }
+
+    pub fn backing_file(&self) -> Option<BorrowedFd> {
+        self.fd.as_ref().map(|fd| match fd {
+            LoadedEntryFd::Owned(o) => o.as_fd(),
+            LoadedEntryFd::HackySelfReference(b) => *b,
+        })
     }
 }
 
@@ -191,6 +193,11 @@ impl<T> DerefMut for LoadedEntry<T> {
 }
 
 impl Entry {
+    #[must_use]
+    pub const fn kind(&self) -> Kind {
+        self.kind
+    }
+
     pub fn to_slice<'a>(
         &self,
         reader: &'a EntryReader,
@@ -293,6 +300,15 @@ impl EntryReader {
             buckets,
             direct: direct_dir,
         })
+    }
+
+    #[must_use]
+    pub fn buckets(&self) -> [&Mmap; 11] {
+        let mut buckets = ArrayVec::new_const();
+        for bucket in &self.buckets {
+            buckets.push(bucket);
+        }
+        buckets.into_inner().unwrap()
     }
 }
 

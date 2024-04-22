@@ -1,7 +1,12 @@
+#![feature(debug_closure_helpers)]
+
 use std::{
     borrow::Cow,
+    collections::{BTreeMap, BTreeSet, HashMap},
+    fmt::{Debug, Display, Formatter},
     fs,
     fs::File,
+    hash::BuildHasherDefault,
     io,
     io::{ErrorKind, Read, Seek, SeekFrom},
     os::fd::{AsFd, OwnedFd},
@@ -24,18 +29,19 @@ use rand_xoshiro::{
     Xoshiro256PlusPlus,
 };
 use ringboard_core::{
-    copy_file_range_all,
+    bucket_to_length, copy_file_range_all,
     dirs::{data_dir, socket_file},
     protocol::{
         AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
         RemoveResponse, RingKind, SwapResponse,
     },
-    read_server_pid, IoErr,
+    read_server_pid, size_to_bucket, IoErr,
 };
-use ringboard_sdk::{connect_to_server, connect_to_server_with, EntryReader, RingReader};
+use ringboard_sdk::{connect_to_server, connect_to_server_with, EntryReader, Kind, RingReader};
+use rustc_hash::FxHasher;
 use rustix::{
     event::{poll, PollFd, PollFlags},
-    fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
+    fs::{memfd_create, openat, statx, AtFlags, MemfdFlags, Mode, OFlags, StatxFlags, CWD},
     net::{RecvFlags, SendFlags, SocketAddrUnix, SocketFlags},
     process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
     stdio::stdin,
@@ -667,8 +673,242 @@ fn migrate_from_gch(
     drain_add_requests(server, true, None, &mut pending_adds)
 }
 
+#[allow(clippy::too_many_lines, clippy::cast_precision_loss)]
 fn stats() -> Result<(), CliError> {
-    todo!()
+    #[derive(Default)]
+    struct RingStats<'a> {
+        capacity: u32,
+        bucketed_entry_count: u32,
+        file_entry_count: u32,
+
+        entries: BTreeSet<Cow<'a, [u8]>>,
+        num_duplicates: u32,
+    }
+
+    impl Debug for RingStats<'_> {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            let Self {
+                capacity,
+                bucketed_entry_count,
+                file_entry_count,
+                entries: _,
+                num_duplicates,
+            } = self;
+            f.debug_struct("RingStats")
+                .field("capacity", capacity)
+                .field("bucketed_entry_count", bucketed_entry_count)
+                .field("file_entry_count", file_entry_count)
+                .field("num_duplicates", num_duplicates)
+                .finish()
+        }
+    }
+
+    #[derive(Default, Debug)]
+    struct BucketStats {
+        size_class: usize,
+
+        num_slots: u32,
+        used_slots: u32,
+        owned_bytes: u64,
+    }
+
+    #[derive(Default, Debug)]
+    struct DirectFileStats {
+        owned_bytes: usize,
+        allocated_bytes: u64,
+        mime_types: BTreeMap<MimeType, u32>,
+    }
+
+    #[derive(Default, Debug)]
+    struct Stats<'a> {
+        rings: HashMap<RingKind, RingStats<'a>, BuildHasherDefault<FxHasher>>,
+        buckets: [BucketStats; 11],
+        direct_files: DirectFileStats,
+    }
+
+    impl Display for Stats<'_> {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            let mut s = f.debug_struct("Stats");
+
+            s.field_with("raw", |f| {
+                f.debug_struct("Raw")
+                    .field("rings", &self.rings)
+                    .field("buckets", &self.buckets)
+                    .field("direct_files", &self.direct_files)
+                    .finish()
+            });
+            s.field_with("computed", |f| {
+                f.debug_struct("Computed")
+                    .field_with("rings", |f| {
+                        let mut rings = f.debug_map();
+                        for (
+                            kind,
+                            &RingStats {
+                                capacity,
+                                bucketed_entry_count,
+                                file_entry_count,
+                                ref entries,
+                                num_duplicates: _,
+                            },
+                        ) in &self.rings
+                        {
+                            rings.key(kind).value_with(|f| {
+                                let num_entries = bucketed_entry_count + file_entry_count;
+                                let owned_bytes = entries.iter().map(|b| b.len()).sum::<usize>();
+                                let mut s = f.debug_struct("Ring");
+                                s.field("num_entries", &num_entries)
+                                    .field("uninitialized_entry_count", &(capacity - num_entries))
+                                    .field("owned_bytes", &owned_bytes)
+                                    .field(
+                                        "mean_entry_size",
+                                        &(owned_bytes as f64 / f64::from(num_entries)),
+                                    );
+                                if !entries.is_empty() {
+                                    s.field(
+                                        "min_entry_size",
+                                        &entries.iter().map(|b| b.len()).min().unwrap(),
+                                    )
+                                    .field(
+                                        "max_entry_size",
+                                        &entries.iter().map(|b| b.len()).max().unwrap(),
+                                    );
+                                }
+                                s.finish()
+                            });
+                        }
+                        rings.finish()
+                    })
+                    .field_with("buckets", |f| {
+                        let mut buckets = f.debug_map();
+                        for &BucketStats {
+                            size_class,
+                            num_slots,
+                            used_slots,
+                            owned_bytes,
+                        } in &self.buckets
+                        {
+                            let length = bucket_to_length(size_class - 2);
+                            let used_bytes = u64::from(length) * u64::from(used_slots);
+                            let fragmentation = used_bytes - owned_bytes;
+                            buckets.key(&length).value_with(|f| {
+                                f.debug_struct("Bucket")
+                                    .field("free_slots", &(num_slots - used_slots))
+                                    .field("fragmentation_bytes", &fragmentation)
+                                    .field(
+                                        "fragmentation_ratio",
+                                        &(fragmentation as f64 / used_bytes as f64),
+                                    )
+                                    .finish()
+                            });
+                        }
+                        buckets.finish()
+                    })
+                    .field_with("direct_files", |f| {
+                        let &DirectFileStats {
+                            owned_bytes,
+                            allocated_bytes,
+                            mime_types: _,
+                        } = &self.direct_files;
+                        f.debug_struct("DirectFiles")
+                            .field(
+                                "fragmentation_ratio",
+                                &((allocated_bytes - u64::try_from(owned_bytes).unwrap()) as f64
+                                    / allocated_bytes as f64),
+                            )
+                            .finish()
+                    })
+                    .finish()
+            });
+
+            s.finish()
+        }
+    }
+
+    let mut stats = Stats::default();
+    let Stats {
+        rings,
+        buckets,
+        direct_files:
+            DirectFileStats {
+                owned_bytes,
+                allocated_bytes,
+                mime_types,
+            },
+    } = &mut stats;
+
+    let mut database = data_dir();
+    let reader = EntryReader::open(&mut database)?;
+
+    for (
+        i,
+        (
+            BucketStats {
+                size_class,
+                num_slots,
+                used_slots: _,
+                owned_bytes: _,
+            },
+            mem,
+        ),
+    ) in buckets.iter_mut().zip(reader.buckets()).enumerate()
+    {
+        *size_class = i + 2;
+        *num_slots =
+            u32::try_from(mem.len() / usize::try_from(bucket_to_length(i)).unwrap()).unwrap();
+    }
+
+    for kind in [RingKind::Main, RingKind::Favorites] {
+        let ring = RingReader::prepare_ring(&mut database, kind)?;
+        let mut ring_stats = RingStats::default();
+        let RingStats {
+            capacity,
+            bucketed_entry_count,
+            file_entry_count,
+            entries,
+            num_duplicates,
+        } = &mut ring_stats;
+        *capacity = ring.capacity();
+
+        for entry in RingReader::from_ring(&ring, kind) {
+            match entry.kind() {
+                Kind::Bucket(entry) => {
+                    *bucketed_entry_count += 1;
+
+                    let bucket = size_to_bucket(entry.size());
+                    let BucketStats {
+                        size_class: _,
+                        num_slots: _,
+                        used_slots,
+                        owned_bytes,
+                    } = &mut buckets[bucket];
+                    *used_slots += 1;
+                    *owned_bytes += u64::from(entry.size());
+                }
+                Kind::File => {
+                    *file_entry_count += 1;
+                }
+            }
+
+            let data = entry.to_slice(&reader)?;
+            if let Some(fd) = data.backing_file() {
+                *owned_bytes += data.len();
+                *mime_types.entry(data.mime_type()?).or_default() += 1;
+                *allocated_bytes += statx(fd, c"", AtFlags::EMPTY_PATH, StatxFlags::BLOCKS)
+                    .map_io_err(|| format!("Failed to statx entry: {entry:?}"))?
+                    .stx_blocks
+                    * 512;
+            }
+            if !entries.insert(data.into_inner()) {
+                *num_duplicates += 1;
+            }
+        }
+
+        rings.insert(kind, ring_stats);
+    }
+
+    println!("{stats:#}");
+
+    Ok(())
 }
 
 fn dump() -> Result<(), CliError> {
