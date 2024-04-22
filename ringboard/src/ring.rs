@@ -110,6 +110,7 @@ impl BucketEntry {
     }
 }
 
+#[derive(Debug)]
 pub struct Mmap {
     ptr: NonNull<u8>,
     len: usize,

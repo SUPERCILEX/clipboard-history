@@ -1,37 +1,33 @@
 use std::{
-    cmp::max,
-    ffi::CStr,
     fmt::Debug,
     fs,
     fs::File,
     io,
     io::{ErrorKind, IoSlice, Read, Write},
-    marker::PhantomData,
     mem,
     mem::ManuallyDrop,
-    ops::{Deref, Index, IndexMut},
+    ops::{Index, IndexMut},
     os::{fd::OwnedFd, unix::fs::FileExt},
     path::{Path, PathBuf},
     slice,
 };
 
-use arrayvec::ArrayVec;
 use bitcode::{Decode, Encode};
 use log::{debug, info};
 use ringboard_core::{
-    copy_file_range_all,
+    copy_file_range_all, direct_file_name, open_buckets,
     protocol::{
         composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse,
         RingKind, SwapResponse,
     },
     ring,
     ring::{entries_to_offset, BucketEntry, Entry, Header, RawEntry, Ring},
-    IoErr, PathView, StringView,
+    size_to_bucket, IoErr, PathView,
 };
 use rustix::{
     fs::{
-        fsetxattr, openat, renameat, renameat_with, statx, unlinkat, AtFlags, Mode, OFlags,
-        RenameFlags, StatxFlags, XattrFlags, CWD,
+        fsetxattr, openat, renameat, renameat_with, unlinkat, AtFlags, Mode, OFlags, RenameFlags,
+        XattrFlags, CWD,
     },
     path::Arg,
 };
@@ -245,55 +241,26 @@ impl Allocator {
         create_dir("direct")?;
         create_dir("buckets")?;
 
-        let buckets = {
+        let (buckets, slot_counts) = {
             let mut buckets = PathView::new(&mut data_dir, "buckets");
-            let mut fds = ArrayVec::new_const();
-            let mut buf = String::with_capacity("(1024, 2048]".len());
-
-            let mut open = |name: &str| -> Result<_, CliError> {
+            open_buckets(|name| {
                 let file = PathView::new(&mut buckets, name);
-                fds.push(File::from(
-                    openat(
-                        CWD,
-                        &*file,
-                        OFlags::WRONLY | OFlags::CREATE,
-                        Mode::RUSR | Mode::WUSR,
-                    )
-                    .map_io_err(|| format!("Failed to create bucket: {file:?}"))?,
-                ));
-                Ok(())
-            };
-
-            open("(0, 4]")?;
-            for end in 3..12 {
-                use std::fmt::Write;
-
-                let start = end - 1;
-
-                let mut buf = StringView::new(&mut buf);
-                write!(buf, "({}, {}]", 1 << start, 1 << end).unwrap();
-                open(&buf)?;
-            }
-            open("(2048, 4096)")?;
-
-            fds.into_inner().unwrap()
+                openat(
+                    CWD,
+                    &*file,
+                    OFlags::WRONLY | OFlags::CREATE,
+                    Mode::RUSR | Mode::WUSR,
+                )
+                .map_io_err(|| format!("Failed to create bucket: {file:?}"))
+            })?
         };
         let slot_counts = {
-            let mut counts = ArrayVec::new_const();
-
-            for (i, bucket) in buckets.iter().enumerate() {
-                counts.push(
-                    u32::try_from(
-                        statx(bucket, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
-                            .map_io_err(|| "Failed to statx bucket.")?
-                            .stx_size
-                            >> (i + 2),
-                    )
-                    .unwrap(),
-                );
-            }
-
-            counts.into_inner().unwrap()
+            let mut i = 0;
+            slot_counts.map(|len| {
+                let slots = u32::try_from(len >> (i + 2)).unwrap();
+                i += 1;
+                slots
+            })
         };
 
         let direct_dir = {
@@ -308,7 +275,7 @@ impl Allocator {
             rings: Rings([favorites_ring, main_ring]),
             data: AllocatorData {
                 buckets: Buckets {
-                    files: buckets,
+                    files: buckets.map(File::from),
                     slot_counts,
                     free_lists,
                 },
@@ -657,29 +624,6 @@ impl AllocatorData {
             .map_io_err(|| "Failed to remove direct allocation file.")?;
         Ok(())
     }
-}
-
-fn size_to_bucket(size: u32) -> usize {
-    usize::try_from(max(1, size.saturating_sub(1)).ilog2().saturating_sub(1)).unwrap()
-}
-
-struct DirectFileNameToken<'a, T>(&'a mut [u8], PhantomData<T>);
-
-impl<T> Deref for DirectFileNameToken<'_, T> {
-    type Target = CStr;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { CStr::from_ptr(self.0.as_ptr().cast()) }
-    }
-}
-
-fn direct_file_name(
-    buf: &mut [u8; "256".len() + 1 + "4294967296".len() + 1],
-    to: RingKind,
-    id: u32,
-) -> DirectFileNameToken<()> {
-    write!(buf.as_mut_slice(), "{:0>3}_{id:0>10}\0", to as u8).unwrap();
-    DirectFileNameToken(buf.as_mut_slice(), PhantomData)
 }
 
 pub fn decompose_id(id: u64) -> Result<(RingKind, u32), IdNotFoundError> {

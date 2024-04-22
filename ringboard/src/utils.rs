@@ -1,20 +1,25 @@
 use std::{
-    fmt::Debug,
+    cmp::max,
+    ffi::CStr,
+    fmt::{Debug, Formatter},
     fs::File,
-    io::{BorrowedBuf, ErrorKind::UnexpectedEof, Read},
+    io::{BorrowedBuf, ErrorKind::UnexpectedEof, Read, Write},
+    marker::PhantomData,
     mem::{size_of, MaybeUninit},
-    os::fd::AsFd,
+    ops::Deref,
+    os::fd::{AsFd, OwnedFd},
     ptr, slice,
     str::FromStr,
 };
 
+use arrayvec::{ArrayString, ArrayVec};
 use rustix::{
-    fs::{copy_file_range, openat, Mode, OFlags},
+    fs::{copy_file_range, openat, statx, AtFlags, Mode, OFlags, StatxFlags},
     path::Arg,
     process::Pid,
 };
 
-use crate::{Error, IoErr, Result};
+use crate::{protocol::RingKind, Error, IoErr, Result};
 
 pub fn read_server_pid<Fd: AsFd, P: Arg + Copy + Debug>(
     dir: Fd,
@@ -77,4 +82,64 @@ pub fn copy_file_range_all<InFd: AsFd, OutFd: AsFd>(
         total_copied += byte_copied;
     }
     Ok(total_copied)
+}
+
+pub fn open_buckets<F: FnMut(&str) -> Result<OwnedFd>>(
+    mut open: F,
+) -> Result<([OwnedFd; 11], [u64; 11])> {
+    let mut buckets = ArrayVec::new_const();
+
+    buckets.push(open("(0, 4]")?);
+    for end in 3..12 {
+        use std::fmt::Write;
+
+        let start = end - 1;
+
+        let mut buf = ArrayString::<{ "(1024, 2048]".len() }>::new_const();
+        write!(buf, "({}, {}]", 1 << start, 1 << end).unwrap();
+        buckets.push(open(&buf)?);
+    }
+    buckets.push(open("(2048, 4096)")?);
+
+    let mut lengths = ArrayVec::new_const();
+    for bucket in &buckets {
+        lengths.push(
+            statx(bucket, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
+                .map_io_err(|| "Failed to statx bucket.")?
+                .stx_size,
+        );
+    }
+
+    Ok((buckets.into_inner().unwrap(), lengths.into_inner().unwrap()))
+}
+
+pub fn size_to_bucket(bytes: u32) -> usize {
+    usize::try_from(max(1, bytes.saturating_sub(1)).ilog2().saturating_sub(1)).unwrap()
+}
+
+pub struct DirectFileNameToken<'a, T>(&'a mut [u8], PhantomData<T>);
+
+impl<T> Deref for DirectFileNameToken<'_, T> {
+    type Target = CStr;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { CStr::from_ptr(self.0.as_ptr().cast()) }
+    }
+}
+
+impl<T> Debug for DirectFileNameToken<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        std::str::from_utf8(&self.0[..self.0.len() - 1])
+            .unwrap()
+            .fmt(f)
+    }
+}
+
+pub fn direct_file_name(
+    buf: &mut [u8; "256".len() + 1 + "4294967296".len() + 1],
+    to: RingKind,
+    id: u32,
+) -> DirectFileNameToken<()> {
+    write!(buf.as_mut_slice(), "{:0>3}_{id:0>10}\0", to as u8).unwrap();
+    DirectFileNameToken(buf.as_mut_slice(), PhantomData)
 }
