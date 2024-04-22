@@ -30,9 +30,7 @@ use ringboard_core::{
         AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
         RemoveResponse, RingKind, SwapResponse,
     },
-    read_server_pid,
-    ring::Ring,
-    IoErr, PathView,
+    read_server_pid, IoErr,
 };
 use ringboard_sdk::{connect_to_server, connect_to_server_with, EntryReader, RingReader};
 use rustix::{
@@ -711,19 +709,9 @@ fn dump() -> Result<(), CliError> {
     let mut seq = serde_json::Serializer::new(io::stdout().lock());
     let mut seq = seq.serialize_seq(None)?;
     let mut dump_ring = |kind| -> Result<(), CliError> {
-        let ring = {
-            let ring = PathView::new(
-                &mut database,
-                match kind {
-                    RingKind::Main => "main.ring",
-                    RingKind::Favorites => "favorites.ring",
-                },
-            );
-            Ring::open(0, &*ring)?
-        };
         let reader = EntryReader::open(&mut database)?;
-
-        for entry in RingReader::new(&ring, kind) {
+        let ring = RingReader::prepare_ring(&mut database, kind)?;
+        for entry in RingReader::from_ring(&ring, kind) {
             let loaded = entry.to_slice(&reader)?;
             let mime_type = loaded.mime_type()?;
             let mime_type = (!mime_type.is_empty()).then_some(mime_type);

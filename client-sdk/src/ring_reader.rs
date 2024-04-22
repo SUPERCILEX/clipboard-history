@@ -36,7 +36,7 @@ pub struct RingReader<'a> {
 
 impl<'a> RingReader<'a> {
     #[must_use]
-    pub fn new(ring: &'a Ring, kind: RingKind) -> Self {
+    pub fn from_ring(ring: &'a Ring, kind: RingKind) -> Self {
         let back = ring.prev_entry(ring.write_head());
         Self {
             back,
@@ -46,6 +46,20 @@ impl<'a> RingReader<'a> {
             ring,
             kind,
         }
+    }
+
+    pub fn prepare_ring(
+        database_dir: &mut PathBuf,
+        kind: RingKind,
+    ) -> Result<Ring, ringboard_core::Error> {
+        let ring = PathView::new(
+            database_dir,
+            match kind {
+                RingKind::Main => "main.ring",
+                RingKind::Favorites => "favorites.ring",
+            },
+        );
+        Ring::open(0, &*ring)
     }
 }
 
