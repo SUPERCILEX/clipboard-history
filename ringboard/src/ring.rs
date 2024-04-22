@@ -135,12 +135,14 @@ impl Mmap {
         })
     }
 
-    pub fn ptr(&self) -> NonNull<u8> {
+    #[must_use]
+    pub const fn ptr(&self) -> NonNull<u8> {
         self.ptr
     }
 
     #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.len
     }
 }
@@ -274,11 +276,13 @@ impl Ring {
     }
 }
 
+#[must_use]
 pub fn entries_to_offset(entries: u32) -> u64 {
     u64::from(entries) * u64::try_from(mem::size_of::<RawEntry>()).unwrap()
         + u64::try_from(mem::size_of::<Header>()).unwrap()
 }
 
+#[must_use]
 pub fn offset_to_entries(offset: usize) -> u32 {
     u32::try_from(offset.saturating_sub(mem::size_of::<Header>()) / mem::size_of::<RawEntry>())
         .unwrap()

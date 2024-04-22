@@ -35,6 +35,7 @@ pub struct RingReader<'a> {
 }
 
 impl<'a> RingReader<'a> {
+    #[must_use]
     pub fn new(ring: &'a Ring, kind: RingKind) -> Self {
         let back = ring.prev_entry(ring.write_head());
         Self {

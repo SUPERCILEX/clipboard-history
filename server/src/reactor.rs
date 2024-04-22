@@ -448,13 +448,13 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                 REQ_TYPE_READ_SIGNALS => {
                     debug!("Handling read_signals completion.");
                     let result = result.map_io_err(|| "Failed to poll for signals.")?;
-                    if (result & u32::try_from(libc::POLLIN).unwrap()) != 0 {
-                        break 'outer;
-                    } else {
+                    if (result & u32::try_from(libc::POLLIN).unwrap()) == 0 {
                         return Err(CliError::Internal {
                             context: format!("Unknown signal poll event received: {result}").into(),
                         });
                     }
+
+                    break 'outer;
                 }
                 REQ_TYPE_LOW_MEM => {
                     debug!("Handling low memory completion.");

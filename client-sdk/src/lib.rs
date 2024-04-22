@@ -1,4 +1,4 @@
-#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 use std::{
     borrow::Cow,

@@ -113,11 +113,13 @@ pub fn open_buckets<F: FnMut(&str) -> Result<OwnedFd>>(
     Ok((buckets.into_inner().unwrap(), lengths.into_inner().unwrap()))
 }
 
+#[must_use]
 pub fn size_to_bucket(bytes: u32) -> usize {
     usize::try_from(max(1, bytes.saturating_sub(1)).ilog2().saturating_sub(1)).unwrap()
 }
 
-pub fn bucket_to_length(bucket: usize) -> u32 {
+#[must_use]
+pub const fn bucket_to_length(bucket: usize) -> u32 {
     1 << (bucket + 2)
 }
 

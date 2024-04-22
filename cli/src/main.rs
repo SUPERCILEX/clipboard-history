@@ -772,6 +772,7 @@ fn generate(
     drain_add_requests(server, true, None, &mut pending_adds)
 }
 
+#[allow(clippy::too_many_lines)]
 fn fuzz(
     addr: &SocketAddrUnix,
     Fuzz {
@@ -864,14 +865,14 @@ fn fuzz(
                     }
                     3 => {
                         println!("Moving.");
-                        let idx = gen_id_index!();
+                        let index = gen_id_index!();
                         if let MoveToFrontResponse::Success { id } = ringboard_sdk::move_to_front(
                             server,
                             addr,
-                            idx.map(|idx| ids[idx]).unwrap_or_else(|| rng.gen()),
+                            index.map_or_else(|| rng.gen(), |idx| ids[idx]),
                             rng.gen::<Option<FuzzRingKind>>().map(|r| r.0),
                         )? {
-                            ids[idx.unwrap()] = id;
+                            ids[index.unwrap()] = id;
                         }
                     }
                     4 => {
@@ -881,19 +882,22 @@ fn fuzz(
                         let _ = ringboard_sdk::swap(
                             server,
                             addr,
-                            idx1.map(|idx| ids[idx]).unwrap_or_else(|| rng.gen()),
-                            idx2.map(|idx| ids[idx]).unwrap_or_else(|| rng.gen()),
+                            idx1.map_or_else(|| rng.gen(), |idx| ids[idx]),
+                            idx2.map_or_else(|| rng.gen(), |idx| ids[idx]),
                         )?;
                     }
                     5 => {
                         println!("Removing.");
-                        let idx = gen_id_index!();
-                        if let RemoveResponse { error: None } = ringboard_sdk::remove(
-                            server,
-                            addr,
-                            idx.map(|idx| ids[idx]).unwrap_or_else(|| rng.gen()),
-                        )? {
-                            ids.swap_remove(idx.unwrap());
+                        let index = gen_id_index!();
+                        if matches!(
+                            ringboard_sdk::remove(
+                                server,
+                                addr,
+                                index.map_or_else(|| rng.gen(), |idx| ids[idx]),
+                            )?,
+                            RemoveResponse { error: None }
+                        ) {
+                            ids.swap_remove(index.unwrap());
                         }
                     }
                     _ => unreachable!(),
