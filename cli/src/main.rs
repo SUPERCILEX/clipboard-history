@@ -235,7 +235,7 @@ struct Generate {
     /// The number of random entries to generate.
     #[clap(short, long = "entries", alias = "num-entries")]
     #[clap(value_parser = si_number::< u32 >)]
-    #[clap(default_value = "1_000_000")]
+    #[clap(default_value = "100_000")]
     num_entries: u32,
 
     /// The mean entry size.

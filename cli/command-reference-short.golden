@@ -180,7 +180,7 @@ Generate a pseudo-random database for testing and performance tuning purposes
 Usage: clipboard-history debug generate [OPTIONS]
 
 Options:
-  -n, --entries <NUM_ENTRIES>  The number of random entries to generate [default: 1_000_000]
+  -n, --entries <NUM_ENTRIES>  The number of random entries to generate [default: 100_000]
   -m, --mean-size <MEAN_SIZE>  The mean entry size [default: 512]
   -c, --cv-size <CV_SIZE>      The coefficient of variation of the entry size [default: 10]
   -h, --help                   Print help (use `--help` for more detail)
