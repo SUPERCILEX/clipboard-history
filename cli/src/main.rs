@@ -8,7 +8,7 @@ use std::{
     fs::File,
     hash::BuildHasherDefault,
     io,
-    io::{ErrorKind, Read, Seek, SeekFrom},
+    io::{ErrorKind, Read, Seek, SeekFrom, Write},
     os::fd::{AsFd, OwnedFd},
     path::{Path, PathBuf},
     str,
@@ -1030,10 +1030,11 @@ fn fuzz(
     //  efficient
     let mut ids = Vec::new();
 
+    let mut out = io::stdout().lock();
     loop {
         match distr.sample(&mut rng) {
             0 => {
-                println!("Connecting.");
+                writeln!(out, "Connecting.").unwrap();
                 if let Ok(client) = if clients.len() == 32 {
                     connect_to_server_with(addr, SocketFlags::NONBLOCK)
                 } else {
@@ -1043,7 +1044,7 @@ fn fuzz(
                 }
             }
             1 => {
-                println!("Closing.");
+                writeln!(out, "Closing.").unwrap();
                 if !clients.is_empty() {
                     clients.swap_remove(rng.gen_range(0..clients.len()));
                 }
@@ -1068,7 +1069,7 @@ fn fuzz(
 
                 match action {
                     2 => {
-                        println!("Adding.");
+                        writeln!(out, "Adding.").unwrap();
                         let mime_type = if rng.gen() {
                             MimeType::new()
                         } else {
@@ -1090,7 +1091,7 @@ fn fuzz(
                         ids.push(id);
                     }
                     3 => {
-                        println!("Moving.");
+                        writeln!(out, "Moving.").unwrap();
                         let index = gen_id_index!();
                         if let MoveToFrontResponse::Success { id } = ringboard_sdk::move_to_front(
                             server,
@@ -1102,7 +1103,7 @@ fn fuzz(
                         }
                     }
                     4 => {
-                        println!("Swapping.");
+                        writeln!(out, "Swapping.").unwrap();
                         let idx1 = gen_id_index!();
                         let idx2 = gen_id_index!();
                         let _ = ringboard_sdk::swap(
@@ -1113,7 +1114,7 @@ fn fuzz(
                         )?;
                     }
                     5 => {
-                        println!("Removing.");
+                        writeln!(out, "Removing.").unwrap();
                         let index = gen_id_index!();
                         if matches!(
                             ringboard_sdk::remove(
