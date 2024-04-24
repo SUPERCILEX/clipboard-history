@@ -345,10 +345,14 @@ fn run() -> Result<(), CliError> {
                     continue;
                 }
 
-                debug!("Received property notification.");
+                debug!("Received selection notification.");
             }
             Event::PropertyNotify(event) if event.window == transfer_window => {
                 if event.state != Property::NEW_VALUE {
+                    trace!(
+                        "Ignoring unuseful property state change: {:?}.",
+                        event.state
+                    );
                     continue;
                 }
                 let Some(atom_allocation) = TransferAtomAllocation::from_atom(event.atom) else {
