@@ -11,7 +11,7 @@ use ringboard_core::{
     Error, IoErr,
 };
 use rustix::{
-    fs::{openat, Mode, OFlags, CWD},
+    fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
     net::SocketAddrUnix,
     path::Arg,
 };
@@ -110,7 +110,7 @@ enum TransferAtom {
     },
     PendingIncr {
         mime_atom: Atom,
-        file: File,
+        file: Option<File>,
         written: u64,
     },
 }
@@ -360,25 +360,21 @@ fn run() -> Result<(), CliError> {
                 };
                 match mem::take(&mut transfer_atoms[atom_allocation]) {
                     TransferAtom::PendingSelection { mime_atom } => {
-                        let property = conn.get_property(
-                            true,
-                            event.window,
-                            event.atom,
-                            GetPropertyType::ANY,
-                            0,
-                            u32::MAX,
-                        )?;
-                        let file = File::from(
-                            openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
-                                .map_io_err(|| "Failed to create selection transfer temp file.")?,
-                        );
-
-                        let property = property.reply()?;
+                        let property = conn
+                            .get_property(
+                                true,
+                                event.window,
+                                event.atom,
+                                GetPropertyType::ANY,
+                                0,
+                                u32::MAX,
+                            )?
+                            .reply()?;
                         if property.type_ == incr_atom {
                             debug!("Waiting for INCR transfer.");
                             transfer_atoms[atom_allocation] = TransferAtom::PendingIncr {
                                 mime_atom,
-                                file,
+                                file: None,
                                 written: 0,
                             };
                         } else {
@@ -392,6 +388,12 @@ fn run() -> Result<(), CliError> {
                             }
 
                             let mime_type = conn.get_atom_name(mime_atom)?;
+                            let file = File::from(
+                                memfd_create("ringboard_x11_selection", MemfdFlags::empty())
+                                    .map_io_err(|| {
+                                        "Failed to create selection transfer temp file."
+                                    })?,
+                            );
                             file.write_all_at(&property.value, 0)
                                 .map_io_err(|| "Failed to write data to temp file.")?;
                             let mime_type =
@@ -412,16 +414,26 @@ fn run() -> Result<(), CliError> {
                         file,
                         written,
                     } => {
-                        let property = conn
-                            .get_property(
-                                true,
-                                event.window,
-                                event.atom,
-                                GetPropertyType::ANY,
-                                0,
-                                u32::MAX,
-                            )?
-                            .reply()?;
+                        let property = conn.get_property(
+                            true,
+                            event.window,
+                            event.atom,
+                            GetPropertyType::ANY,
+                            0,
+                            u32::MAX,
+                        )?;
+                        let file = if let Some(file) = file {
+                            file
+                        } else {
+                            File::from(
+                                openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
+                                    .map_io_err(|| {
+                                        "Failed to create selection transfer temp file."
+                                    })?,
+                            )
+                        };
+
+                        let property = property.reply()?;
                         if property.value.is_empty() {
                             if written == 0 {
                                 warn!("Dropping empty INCR selection.");
@@ -451,7 +463,7 @@ fn run() -> Result<(), CliError> {
                                 .map_io_err(|| "Failed to write data to temp file.")?;
                             transfer_atoms[atom_allocation] = TransferAtom::PendingIncr {
                                 mime_atom,
-                                file,
+                                file: Some(file),
                                 written: written + u64::try_from(property.value.len()).unwrap(),
                             }
                         }
