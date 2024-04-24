@@ -517,7 +517,7 @@ impl AllocatorData {
             if size > 0 && size < 4096 {
                 self.alloc_bucket(received, u32::try_from(size).unwrap())
             } else {
-                self.alloc_direct(received, mime_type, to, id)
+                self.alloc_direct(received, &MimeType::new(), to, id)
             }
         } else {
             self.alloc_direct(received, mime_type, to, id)
