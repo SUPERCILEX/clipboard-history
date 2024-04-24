@@ -25,8 +25,7 @@ use rustix::{
 };
 
 #[derive(Debug)]
-pub struct RingReader<'a> {
-    ring: &'a Ring,
+struct RingIter {
     kind: RingKind,
 
     front: u32,
@@ -34,17 +33,81 @@ pub struct RingReader<'a> {
     done: bool,
 }
 
+impl RingIter {
+    fn next(&mut self, ring: &Ring) -> Option<Entry> {
+        self.next_dir(ring, |me| {
+            let id = me.front;
+            me.front = ring.next_entry(id);
+            id
+        })
+    }
+
+    fn next_back(&mut self, ring: &Ring) -> Option<Entry> {
+        self.next_dir(ring, |me| {
+            let id = me.back;
+            me.back = ring.prev_entry(id);
+            id
+        })
+    }
+
+    fn next_dir(
+        &mut self,
+        ring: &Ring,
+        mut advance: impl FnMut(&mut Self) -> u32,
+    ) -> Option<Entry> {
+        loop {
+            use ringboard_core::ring::Entry::{Bucketed, File, Uninitialized};
+
+            if self.done {
+                return None;
+            }
+            self.done = self.front == self.back;
+
+            let id = advance(self);
+            let entry = Entry {
+                id,
+                ring: self.kind,
+                kind: match ring.get(id)? {
+                    Uninitialized => continue,
+                    Bucketed(e) => Kind::Bucket(e),
+                    File => Kind::File,
+                },
+            };
+
+            break Some(entry);
+        }
+    }
+
+    fn size_hint(&self, ring: &Ring) -> (usize, Option<usize>) {
+        let len = if self.front > self.back {
+            ring.len() - self.front + self.back
+        } else {
+            self.back - self.front
+        };
+        let len = usize::try_from(len).unwrap();
+        (len, Some(len))
+    }
+}
+
+#[derive(Debug)]
+pub struct RingReader<'a> {
+    ring: &'a Ring,
+    iter: RingIter,
+}
+
 impl<'a> RingReader<'a> {
     #[must_use]
     pub fn from_ring(ring: &'a Ring, kind: RingKind) -> Self {
         let back = ring.prev_entry(ring.write_head());
         Self {
-            back,
-            front: ring.next_entry(back),
-            done: false,
+            iter: RingIter {
+                kind,
 
+                back,
+                front: ring.next_entry(back),
+                done: false,
+            },
             ring,
-            kind,
         }
     }
 
@@ -67,57 +130,17 @@ impl Iterator for RingReader<'_> {
     type Item = Entry;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next_dir(|me| {
-            let id = me.front;
-            me.front = me.ring.next_entry(id);
-            id
-        })
+        self.iter.next(self.ring)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = if self.front > self.back {
-            self.ring.len() - self.front + self.back
-        } else {
-            self.back - self.front
-        };
-        let len = usize::try_from(len).unwrap();
-        (len, Some(len))
-    }
-}
-
-impl RingReader<'_> {
-    fn next_dir(&mut self, mut advance: impl FnMut(&mut Self) -> u32) -> Option<Entry> {
-        loop {
-            use ringboard_core::ring::Entry::{Bucketed, File, Uninitialized};
-
-            if self.done {
-                return None;
-            }
-            self.done = self.front == self.back;
-
-            let id = advance(self);
-            let entry = Entry {
-                id,
-                ring: self.kind,
-                kind: match self.ring.get(id)? {
-                    Uninitialized => continue,
-                    Bucketed(e) => Kind::Bucket(e),
-                    File => Kind::File,
-                },
-            };
-
-            break Some(entry);
-        }
+        self.iter.size_hint(self.ring)
     }
 }
 
 impl DoubleEndedIterator for RingReader<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.next_dir(|me| {
-            let id = me.back;
-            me.back = me.ring.prev_entry(id);
-            id
-        })
+        self.iter.next_back(self.ring)
     }
 }
 
