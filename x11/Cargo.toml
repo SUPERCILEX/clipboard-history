@@ -1,0 +1,25 @@
+[package]
+name = "clipboard-history-x11"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "X11 Ringboard clipboard listener."
+repository.workspace = true
+keywords = ["ringboard", "clipboard", "tools", "x11"]
+categories = ["command-line-utilities", "development-tools", "filesystem"]
+license.workspace = true
+
+[dependencies]
+arrayvec = "0.7.4"
+env_logger = "0.11.3"
+error-stack = "0.4.1"
+log = { version = "0.4.21", features = ["release_max_level_info"] }
+ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
+ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
+rustix = { version = "0.38.30", features = ["stdio", "event"] }
+thiserror = "1.0.58"
+x11rb = { version = "0.13.0", features = ["xfixes"] }
+
+[[bin]]
+name = "ringboard-x11"
+path = "src/main.rs"

@@ -45,12 +45,12 @@ enum Wrapper {
 // TODO add tracing
 // TODO figure out broadcasting
 // TODO add search CLI command
-// TODO implement X11 client
 // TODO implement Wayland client
 // TODO implement TUI
 // TODO implement egui
 // TODO implement COSMIC applet
 // TODO figure out de-duplication
+// TODO support direct file copy context to show in GUI
 fn main() -> error_stack::Result<(), Wrapper> {
     #[cfg(not(debug_assertions))]
     error_stack::Report::install_debug_hook::<std::panic::Location>(|_, _| {});
