@@ -289,7 +289,7 @@ enum CliError {
     Fuc(fuc_engine::Error),
     #[error("Id not found.")]
     IdNotFound(IdNotFoundError),
-    #[error("{0}")]
+    #[error("JSON serialization failed.")]
     SerdeJson(#[from] serde_json::Error),
 }
 
