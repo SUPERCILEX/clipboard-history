@@ -9,15 +9,6 @@ use rustix::{
     path::Arg,
 };
 
-pub const TEXT_MIMES: &[&str] = &[
-    "",
-    "text",
-    "string",
-    "utf8_string",
-    "text/plain",
-    "text/plain;charset=utf-8",
-];
-
 pub fn link_tmp_file<Fd: AsFd, DirFd: AsFd, P: Arg>(
     tmp_file: Fd,
     dirfd: DirFd,

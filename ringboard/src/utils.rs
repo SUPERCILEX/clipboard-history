@@ -21,6 +21,17 @@ use rustix::{
 
 use crate::{protocol::RingKind, Error, IoErr, Result};
 
+pub const TEXT_MIMES: &[&str] = &[
+    "",
+    "text",
+    "string",
+    "utf8_string",
+    "text/plain",
+    "text/plain;charset=utf-8",
+    "text/plain;charset=us-ascii",
+    "text/plain;charset=unicode",
+];
+
 pub fn read_server_pid<Fd: AsFd, P: Arg + Copy + Debug>(
     dir: Fd,
     lock_file: P,

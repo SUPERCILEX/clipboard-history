@@ -22,7 +22,7 @@ use ringboard_core::{
     },
     ring,
     ring::{entries_to_offset, BucketEntry, Entry, Header, RawEntry, Ring},
-    size_to_bucket, IoErr, PathView,
+    size_to_bucket, IoErr, PathView, TEXT_MIMES,
 };
 use rustix::{
     fs::{
@@ -32,10 +32,7 @@ use rustix::{
     path::Arg,
 };
 
-use crate::{
-    utils::{link_tmp_file, TEXT_MIMES},
-    CliError,
-};
+use crate::{utils::link_tmp_file, CliError};
 
 struct RingWriter {
     ring: File,
