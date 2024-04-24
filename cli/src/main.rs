@@ -924,6 +924,7 @@ fn dump() -> Result<(), CliError> {
 
     #[derive(Serialize)]
     struct Entry<'a> {
+        id: u64,
         #[serde(flatten)]
         data: Data<'a>,
         #[serde(skip_serializing_if = "MimeType::is_empty")]
@@ -963,6 +964,7 @@ fn dump() -> Result<(), CliError> {
         let loaded = entry.to_slice(&reader)?;
         let mime_type = loaded.mime_type()?;
         seq.serialize_element(&Entry {
+            id: entry.id(),
             data: if let Ok(data) = str::from_utf8(&loaded) {
                 Data::Human(data)
             } else {

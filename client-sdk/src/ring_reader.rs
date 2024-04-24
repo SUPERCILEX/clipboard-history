@@ -15,7 +15,7 @@ use std::{
 use arrayvec::ArrayVec;
 use ringboard_core::{
     bucket_to_length, direct_file_name, open_buckets,
-    protocol::{decompose_id, IdNotFoundError, MimeType, RingKind},
+    protocol::{composite_id, decompose_id, IdNotFoundError, MimeType, RingKind},
     ring::{BucketEntry, Mmap, Ring},
     size_to_bucket, IoErr, PathView,
 };
@@ -273,6 +273,10 @@ impl Entry {
     #[must_use]
     pub const fn kind(&self) -> Kind {
         self.kind
+    }
+
+    pub fn id(&self) -> u64 {
+        composite_id(self.ring, self.id)
     }
 
     pub fn to_slice<'a>(
