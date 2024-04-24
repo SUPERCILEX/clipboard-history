@@ -1,0 +1,10 @@
+[Unit]
+Description=Ringboard server
+Documentation=https://github.com/SUPERCILEX/clipboard-history
+After=multi-user.target
+
+[Service]
+Type=notify
+Environment=RUST_LOG=trace
+ExecStart=/bin/bash -c 'PATH=~/.cargo/bin:$PATH ringboard-server'
+Restart=on-failure

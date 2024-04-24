@@ -110,6 +110,8 @@ fn into_result(errs: Vec<CliError>) -> Result<(), CliError> {
 
 fn run() -> Result<(), CliError> {
     let mut data_dir = data_dir();
+    info!("Using database in {data_dir:?}.");
+
     fs::create_dir_all(&data_dir)
         .map_io_err(|| format!("Failed to create data directory: {data_dir:?}"))?;
     let server_guard = {

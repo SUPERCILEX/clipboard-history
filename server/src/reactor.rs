@@ -227,6 +227,10 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
 
     let (mut uring, mut buf_ring) = setup_uring()?;
 
+    #[cfg(feature = "systemd")]
+    sd_notify::notify(false, &[sd_notify::NotifyState::Ready])
+        .map_io_err(|| "Failed to notify systemd of startup completion.")?;
+
     {
         let read_signals = PollAdd::new(
             Fixed(MAX_NUM_CLIENTS + 1),
