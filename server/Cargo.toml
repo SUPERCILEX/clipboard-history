@@ -12,7 +12,7 @@ license.workspace = true
 [dependencies]
 arrayvec = "0.7.4"
 bitcode = { version = "0.6.0", features = ["arrayvec"] }
-env_logger = "0.11.3"
+env_logger = { version = "0.11.3", default-features = false }
 error-stack = "0.4.1"
 io-uring = { version = "0.6.2", path = "/home/asaveau/Desktop/wip/io-uring" }
 libc = "0.2.153"
@@ -23,7 +23,9 @@ sd-notify = { version = "0.4.1", optional = true }
 thiserror = "1.0.58"
 
 [features]
+default = ["human-logs"]
 systemd = ["dep:sd-notify"]
+human-logs = ["env_logger/default"]
 
 [[bin]]
 name = "ringboard-server"
