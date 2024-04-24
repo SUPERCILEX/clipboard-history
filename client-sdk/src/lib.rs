@@ -7,7 +7,7 @@ use std::{
     os::fd::{AsFd, OwnedFd},
 };
 
-pub use ring_reader::{Entry, EntryReader, Kind, LoadedEntry, RingReader};
+pub use ring_reader::{DatabaseReader, Entry, EntryReader, Kind, LoadedEntry, RingReader};
 use ringboard_core::{
     protocol,
     protocol::{

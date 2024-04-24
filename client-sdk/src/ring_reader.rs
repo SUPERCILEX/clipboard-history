@@ -15,7 +15,7 @@ use std::{
 use arrayvec::ArrayVec;
 use ringboard_core::{
     bucket_to_length, direct_file_name, open_buckets,
-    protocol::{MimeType, RingKind},
+    protocol::{decompose_id, IdNotFoundError, MimeType, RingKind},
     ring::{BucketEntry, Mmap, Ring},
     size_to_bucket, IoErr, PathView,
 };
@@ -56,25 +56,14 @@ impl RingIter {
         mut advance: impl FnMut(&mut Self) -> u32,
     ) -> Option<Entry> {
         loop {
-            use ringboard_core::ring::Entry::{Bucketed, File, Uninitialized};
-
             if self.done {
                 return None;
             }
             self.done = self.front == self.back;
 
-            let id = advance(self);
-            let entry = Entry {
-                id,
-                ring: self.kind,
-                kind: match ring.get(id)? {
-                    Uninitialized => continue,
-                    Bucketed(e) => Kind::Bucket(e),
-                    File => Kind::File,
-                },
-            };
-
-            break Some(entry);
+            if let Some(entry) = Entry::from(ring, self.kind, advance(self)) {
+                break Some(entry);
+            }
         }
     }
 
@@ -90,6 +79,42 @@ impl RingIter {
 }
 
 #[derive(Debug)]
+pub struct DatabaseReader {
+    main: Ring,
+    favorites: Ring,
+}
+
+impl DatabaseReader {
+    pub fn open(database: &mut PathBuf) -> Result<Self, ringboard_core::Error> {
+        Ok(Self {
+            main: RingReader::prepare_ring(database, RingKind::Main)?,
+            favorites: RingReader::prepare_ring(database, RingKind::Favorites)?,
+        })
+    }
+
+    pub fn get(&self, id: u64) -> Result<Entry, IdNotFoundError> {
+        let (kind, id) = decompose_id(id)?;
+        Entry::from(
+            match kind {
+                RingKind::Favorites => &self.favorites,
+                RingKind::Main => &self.main,
+            },
+            kind,
+            id,
+        )
+        .ok_or(IdNotFoundError::Entry(id))
+    }
+
+    pub fn main(&self) -> RingReader {
+        RingReader::from_ring(&self.main, RingKind::Main)
+    }
+
+    pub fn favorites(&self) -> RingReader {
+        RingReader::from_ring(&self.favorites, RingKind::Favorites)
+    }
+}
+
+#[derive(Debug)]
 pub struct RingReader<'a> {
     ring: &'a Ring,
     iter: RingIter,
@@ -98,7 +123,13 @@ pub struct RingReader<'a> {
 impl<'a> RingReader<'a> {
     #[must_use]
     pub fn from_ring(ring: &'a Ring, kind: RingKind) -> Self {
-        let back = ring.prev_entry(ring.write_head());
+        let tail = ring.write_head();
+        Self::from_id(ring, kind, tail)
+    }
+
+    #[must_use]
+    pub fn from_id(ring: &'a Ring, kind: RingKind, id: u32) -> Self {
+        let back = ring.prev_entry(id);
         Self {
             iter: RingIter {
                 kind,
@@ -123,6 +154,14 @@ impl<'a> RingReader<'a> {
             },
         );
         Ring::open(0, &*ring)
+    }
+
+    pub fn ring(&self) -> &Ring {
+        self.ring
+    }
+
+    pub fn kind(&self) -> RingKind {
+        self.iter.kind
     }
 }
 
@@ -149,6 +188,21 @@ pub struct Entry {
     id: u32,
     ring: RingKind,
     kind: Kind,
+}
+
+impl Entry {
+    fn from(ring: &Ring, kind: RingKind, id: u32) -> Option<Self> {
+        use ringboard_core::ring::Entry::{Bucketed, File, Uninitialized};
+        Some(Self {
+            id,
+            ring: kind,
+            kind: match ring.get(id)? {
+                Uninitialized => return None,
+                Bucketed(e) => Kind::Bucket(e),
+                File => Kind::File,
+            },
+        })
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]

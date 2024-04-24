@@ -37,7 +37,7 @@ use ringboard_core::{
     },
     read_server_pid, size_to_bucket, IoErr,
 };
-use ringboard_sdk::{connect_to_server, connect_to_server_with, EntryReader, Kind, RingReader};
+use ringboard_sdk::{connect_to_server, connect_to_server_with, DatabaseReader, EntryReader, Kind};
 use rustc_hash::FxHasher;
 use rustix::{
     event::{poll, PollFd, PollFlags},
@@ -836,8 +836,13 @@ fn stats() -> Result<(), CliError> {
             },
     } = &mut stats;
 
-    let mut database = data_dir();
-    let reader = EntryReader::open(&mut database)?;
+    let (database, reader) = {
+        let mut database = data_dir();
+        (
+            DatabaseReader::open(&mut database)?,
+            EntryReader::open(&mut database)?,
+        )
+    };
 
     for (
         i,
@@ -857,8 +862,7 @@ fn stats() -> Result<(), CliError> {
             u32::try_from(mem.len() / usize::try_from(bucket_to_length(i)).unwrap()).unwrap();
     }
 
-    for kind in [RingKind::Main, RingKind::Favorites] {
-        let ring = RingReader::prepare_ring(&mut database, kind)?;
+    for ring_reader in [database.main(), database.favorites()] {
         let mut ring_stats = RingStats::default();
         let RingStats {
             capacity,
@@ -867,9 +871,10 @@ fn stats() -> Result<(), CliError> {
             entries,
             num_duplicates,
         } = &mut ring_stats;
-        *capacity = ring.capacity();
+        *capacity = ring_reader.ring().capacity();
+        let kind = ring_reader.kind();
 
-        for entry in RingReader::from_ring(&ring, kind) {
+        for entry in ring_reader {
             match entry.kind() {
                 Kind::Bucket(entry) => {
                     *bucketed_entry_count += 1;
@@ -932,42 +937,40 @@ fn dump() -> Result<(), CliError> {
         Bytes(#[serde(with = "Base64Standard")] Cow<'a, [u8]>),
     }
 
-    let mut database = data_dir();
-    if !database
-        .try_exists()
-        .map_io_err(|| format!("Failed to check that database exists: {database:?}"))?
-    {
-        eprintln!(
-            "Database not found. Make sure to run the ringboard server or match the XDG_DATA_HOME \
-             value."
-        );
-        println!("[]");
-        return Ok(());
-    }
+    let (database, reader) = {
+        let mut database = data_dir();
+        if !database
+            .try_exists()
+            .map_io_err(|| format!("Failed to check that database exists: {database:?}"))?
+        {
+            eprintln!(
+                "Database not found. Make sure to run the ringboard server or match the \
+                 XDG_DATA_HOME value."
+            );
+            println!("[]");
+            return Ok(());
+        }
+
+        (
+            DatabaseReader::open(&mut database)?,
+            EntryReader::open(&mut database)?,
+        )
+    };
 
     let mut seq = serde_json::Serializer::new(io::stdout().lock());
     let mut seq = seq.serialize_seq(None)?;
-    let mut dump_ring = |kind| -> Result<(), CliError> {
-        let reader = EntryReader::open(&mut database)?;
-        let ring = RingReader::prepare_ring(&mut database, kind)?;
-        for entry in RingReader::from_ring(&ring, kind) {
-            let loaded = entry.to_slice(&reader)?;
-            let mime_type = loaded.mime_type()?;
-            seq.serialize_element(&Entry {
-                data: if let Ok(data) = str::from_utf8(&loaded) {
-                    Data::Human(data)
-                } else {
-                    Data::Bytes(loaded.into_inner())
-                },
-                mime_type,
-            })?;
-        }
-
-        Ok(())
-    };
-
-    dump_ring(RingKind::Favorites)?;
-    dump_ring(RingKind::Main)?;
+    for entry in database.favorites().chain(database.main()) {
+        let loaded = entry.to_slice(&reader)?;
+        let mime_type = loaded.mime_type()?;
+        seq.serialize_element(&Entry {
+            data: if let Ok(data) = str::from_utf8(&loaded) {
+                Data::Human(data)
+            } else {
+                Data::Bytes(loaded.into_inner())
+            },
+            mime_type,
+        })?;
+    }
 
     SerializeSeq::end(seq)?;
     Ok(())

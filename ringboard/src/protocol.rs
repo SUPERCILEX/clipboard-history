@@ -90,6 +90,15 @@ pub fn composite_id(kind: RingKind, id: u32) -> u64 {
     ((kind as u64) << 32) | u64::from(id)
 }
 
+pub fn decompose_id(id: u64) -> Result<(RingKind, u32), IdNotFoundError> {
+    match id >> 32 {
+        0 => Ok(RingKind::Favorites),
+        1 => Ok(RingKind::Main),
+        ring => Err(IdNotFoundError::Ring(u32::try_from(ring).unwrap())),
+    }
+    .map(|ring| (ring, u32::try_from(id & u64::from(u32::MAX)).unwrap()))
+}
+
 impl AsBytes for Request {}
 
 impl AsBytes for AddResponse {}

@@ -17,8 +17,8 @@ use log::{debug, info};
 use ringboard_core::{
     bucket_to_length, copy_file_range_all, direct_file_name, open_buckets,
     protocol::{
-        composite_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RemoveResponse,
-        RingKind, SwapResponse,
+        composite_id, decompose_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
+        RemoveResponse, RingKind, SwapResponse,
     },
     ring,
     ring::{entries_to_offset, BucketEntry, Entry, Header, RawEntry, Ring},
@@ -621,13 +621,4 @@ impl AllocatorData {
             .map_io_err(|| "Failed to remove direct allocation file.")?;
         Ok(())
     }
-}
-
-pub fn decompose_id(id: u64) -> Result<(RingKind, u32), IdNotFoundError> {
-    match id >> 32 {
-        0 => Ok(RingKind::Favorites),
-        1 => Ok(RingKind::Main),
-        ring => Err(IdNotFoundError::Ring(u32::try_from(ring).unwrap())),
-    }
-    .map(|ring| (ring, u32::try_from(id & u64::from(u32::MAX)).unwrap()))
 }
