@@ -513,7 +513,7 @@ impl AllocatorData {
             .map_io_err(|| "Failed to copy data to receiver file.")?;
         debug!("Received {size} bytes.");
 
-        if TEXT_MIMES.contains(&mime_type.as_str()) {
+        if TEXT_MIMES.iter().any(|b| mime_type.eq_ignore_ascii_case(b)) {
             if size > 0 && size < 4096 {
                 self.alloc_bucket(received, u32::try_from(size).unwrap())
             } else {
