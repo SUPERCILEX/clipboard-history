@@ -77,7 +77,7 @@ enum Cmd {
     /// Add an entry to the database.
     ///
     /// The ID of the newly added entry will be returned.
-    #[command(aliases = ["new", "create", "copy"])]
+    #[command(aliases = ["a", "new", "create", "copy"])]
     Add(Add),
 
     /// Favorite an entry.
@@ -95,7 +95,7 @@ enum Cmd {
     Swap(Swap),
 
     /// Delete an entry from the database.
-    #[command(aliases = ["delete", "destroy"])]
+    #[command(aliases = ["d", "delete", "destroy"])]
     Remove(EntryAction),
 
     /// Wipe the entire database.
@@ -286,9 +286,13 @@ enum CliError {
     #[error("{0}")]
     Sdk(#[from] ringboard_sdk::ClientError),
     #[error("Failed to delete or copy files.")]
-    Fuc(fuc_engine::Error),
+    Fuc(#[from] fuc_engine::Error),
     #[error("Id not found.")]
-    IdNotFound(IdNotFoundError),
+    IdNotFound(#[from] IdNotFoundError),
+    #[error(
+        "Database not found. Make sure to run the ringboard server or fix the XDG_DATA_HOME path."
+    )]
+    DatabaseNotFound(PathBuf),
     #[error("JSON serialization failed.")]
     SerdeJson(#[from] serde_json::Error),
 }
@@ -332,6 +336,9 @@ fn main() -> error_stack::Result<(), Wrapper> {
             }
             CliError::IdNotFound(IdNotFoundError::Entry(id)) => {
                 Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
+            }
+            CliError::DatabaseNotFound(db) => {
+                Report::new(wrapper).attach_printable(format!("Path: {:?}", db.display()))
             }
             CliError::Fuc(e) => Report::new(e).change_context(wrapper),
             CliError::SerdeJson(e) => Report::new(e).change_context(wrapper),
@@ -380,6 +387,24 @@ fn run() -> Result<(), CliError> {
         }
         Cmd::Debug(Dev::Fuzz(data)) => fuzz(&server_addr, data),
     }
+}
+
+fn open_db() -> Result<(DatabaseReader, EntryReader), CliError> {
+    let (database, reader) = {
+        let mut database = data_dir();
+        if !database
+            .try_exists()
+            .map_io_err(|| format!("Failed to check that database exists: {database:?}"))?
+        {
+            return Err(CliError::DatabaseNotFound(database));
+        }
+
+        (
+            DatabaseReader::open(&mut database)?,
+            EntryReader::open(&mut database)?,
+        )
+    };
+    Ok((database, reader))
 }
 
 fn add(
@@ -503,7 +528,7 @@ fn wipe() -> Result<(), CliError> {
         }
     }
 
-    fuc_engine::remove_dir_all(tmp_data_dir).map_err(CliError::Fuc)?;
+    fuc_engine::remove_dir_all(tmp_data_dir)?;
     println!("Done.");
 
     Ok(())
@@ -836,13 +861,7 @@ fn stats() -> Result<(), CliError> {
             },
     } = &mut stats;
 
-    let (database, reader) = {
-        let mut database = data_dir();
-        (
-            DatabaseReader::open(&mut database)?,
-            EntryReader::open(&mut database)?,
-        )
-    };
+    let (database, reader) = open_db()?;
 
     for (
         i,
@@ -938,26 +957,7 @@ fn dump() -> Result<(), CliError> {
         Bytes(#[serde(with = "Base64Standard")] Cow<'a, [u8]>),
     }
 
-    let (database, reader) = {
-        let mut database = data_dir();
-        if !database
-            .try_exists()
-            .map_io_err(|| format!("Failed to check that database exists: {database:?}"))?
-        {
-            eprintln!(
-                "Database not found. Make sure to run the ringboard server or match the \
-                 XDG_DATA_HOME value."
-            );
-            println!("[]");
-            return Ok(());
-        }
-
-        (
-            DatabaseReader::open(&mut database)?,
-            EntryReader::open(&mut database)?,
-        )
-    };
-
+    let (database, reader) = open_db()?;
     let mut seq = serde_json::Serializer::new(io::stdout().lock());
     let mut seq = seq.serialize_seq(None)?;
     for entry in database.favorites().chain(database.main()) {

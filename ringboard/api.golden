@@ -337,6 +337,7 @@ impl<T> core::convert::From<T> for clipboard_history_core::protocol::SwapRespons
 pub fn clipboard_history_core::protocol::SwapResponse::from(t: T) -> T
 pub const clipboard_history_core::protocol::VERSION: u8 = 0u8
 pub fn clipboard_history_core::protocol::composite_id(kind: clipboard_history_core::protocol::RingKind, id: u32) -> u64
+pub fn clipboard_history_core::protocol::decompose_id(id: u64) -> core::result::Result<(clipboard_history_core::protocol::RingKind, u32), clipboard_history_core::protocol::IdNotFoundError>
 pub type clipboard_history_core::protocol::MimeType = arrayvec::array_string::ArrayString<usize>
 pub mod clipboard_history_core::ring
 pub enum clipboard_history_core::ring::Entry

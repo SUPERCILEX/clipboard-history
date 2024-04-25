@@ -77,8 +77,39 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::Kind where 
 pub fn clipboard_history_client_sdk::Kind::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::Kind
 pub fn clipboard_history_client_sdk::Kind::from(t: T) -> T
+pub struct clipboard_history_client_sdk::DatabaseReader
+impl clipboard_history_client_sdk::DatabaseReader
+pub fn clipboard_history_client_sdk::DatabaseReader::favorites(&self) -> clipboard_history_client_sdk::RingReader<'_>
+pub fn clipboard_history_client_sdk::DatabaseReader::get(&self, id: u64) -> core::result::Result<clipboard_history_client_sdk::Entry, clipboard_history_core::protocol::IdNotFoundError>
+pub fn clipboard_history_client_sdk::DatabaseReader::main(&self) -> clipboard_history_client_sdk::RingReader<'_>
+pub fn clipboard_history_client_sdk::DatabaseReader::open(database: &mut std::path::PathBuf) -> core::result::Result<Self, clipboard_history_core::Error>
+impl core::fmt::Debug for clipboard_history_client_sdk::DatabaseReader
+pub fn clipboard_history_client_sdk::DatabaseReader::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_client_sdk::DatabaseReader
+impl !core::marker::Send for clipboard_history_client_sdk::DatabaseReader
+impl !core::marker::Sync for clipboard_history_client_sdk::DatabaseReader
+impl core::marker::Unpin for clipboard_history_client_sdk::DatabaseReader
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::DatabaseReader
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::DatabaseReader
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::DatabaseReader where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::DatabaseReader::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::DatabaseReader where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::DatabaseReader::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::DatabaseReader::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::DatabaseReader where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::DatabaseReader::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::DatabaseReader::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::DatabaseReader where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::DatabaseReader::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::DatabaseReader where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::DatabaseReader::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::DatabaseReader where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::DatabaseReader::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::DatabaseReader
+pub fn clipboard_history_client_sdk::DatabaseReader::from(t: T) -> T
 pub struct clipboard_history_client_sdk::Entry
 impl clipboard_history_client_sdk::Entry
+pub fn clipboard_history_client_sdk::Entry::id(&self) -> u64
 pub const fn clipboard_history_client_sdk::Entry::kind(&self) -> clipboard_history_client_sdk::Kind
 pub fn clipboard_history_client_sdk::Entry::to_file(&self, reader: &clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<std::fs::File>, clipboard_history_core::Error>
 pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<alloc::borrow::Cow<'a, [u8]>>, clipboard_history_core::Error>
@@ -168,8 +199,11 @@ impl<T> core::convert::From<T> for clipboard_history_client_sdk::LoadedEntry<T>
 pub fn clipboard_history_client_sdk::LoadedEntry<T>::from(t: T) -> T
 pub struct clipboard_history_client_sdk::RingReader<'a>
 impl<'a> clipboard_history_client_sdk::RingReader<'a>
+pub fn clipboard_history_client_sdk::RingReader<'a>::from_id(ring: &'a clipboard_history_core::ring::Ring, kind: clipboard_history_core::protocol::RingKind, id: u32) -> Self
 pub fn clipboard_history_client_sdk::RingReader<'a>::from_ring(ring: &'a clipboard_history_core::ring::Ring, kind: clipboard_history_core::protocol::RingKind) -> Self
+pub fn clipboard_history_client_sdk::RingReader<'a>::kind(&self) -> clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_client_sdk::RingReader<'a>::prepare_ring(database_dir: &mut std::path::PathBuf, kind: clipboard_history_core::protocol::RingKind) -> core::result::Result<clipboard_history_core::ring::Ring, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::RingReader<'a>::ring(&self) -> &clipboard_history_core::ring::Ring
 impl core::iter::traits::double_ended::DoubleEndedIterator for clipboard_history_client_sdk::RingReader<'_>
 pub fn clipboard_history_client_sdk::RingReader<'_>::next_back(&mut self) -> core::option::Option<Self::Item>
 impl core::iter::traits::iterator::Iterator for clipboard_history_client_sdk::RingReader<'_>

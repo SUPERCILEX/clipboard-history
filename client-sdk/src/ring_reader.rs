@@ -105,10 +105,12 @@ impl DatabaseReader {
         .ok_or(IdNotFoundError::Entry(id))
     }
 
+    #[must_use]
     pub fn main(&self) -> RingReader {
         RingReader::from_ring(&self.main, RingKind::Main)
     }
 
+    #[must_use]
     pub fn favorites(&self) -> RingReader {
         RingReader::from_ring(&self.favorites, RingKind::Favorites)
     }
@@ -128,7 +130,7 @@ impl<'a> RingReader<'a> {
     }
 
     #[must_use]
-    pub fn from_id(ring: &'a Ring, kind: RingKind, id: u32) -> Self {
+    pub const fn from_id(ring: &'a Ring, kind: RingKind, id: u32) -> Self {
         let back = ring.prev_entry(id);
         Self {
             iter: RingIter {
@@ -156,11 +158,13 @@ impl<'a> RingReader<'a> {
         Ring::open(0, &*ring)
     }
 
-    pub fn ring(&self) -> &Ring {
+    #[must_use]
+    pub const fn ring(&self) -> &Ring {
         self.ring
     }
 
-    pub fn kind(&self) -> RingKind {
+    #[must_use]
+    pub const fn kind(&self) -> RingKind {
         self.iter.kind
     }
 }
@@ -275,6 +279,7 @@ impl Entry {
         self.kind
     }
 
+    #[must_use]
     pub fn id(&self) -> u64 {
         composite_id(self.ring, self.id)
     }
