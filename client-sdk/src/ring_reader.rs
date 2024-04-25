@@ -159,7 +159,7 @@ impl<'a> RingReader<'a> {
                 RingKind::Favorites => "favorites.ring",
             },
         );
-        Ring::open(0, &*ring)
+        Ring::open(/* TODO read from config */ 250_000, &*ring)
     }
 
     #[must_use]
