@@ -133,16 +133,22 @@ impl<'a> RingReader<'a> {
     }
 
     #[must_use]
-    pub const fn from_id(ring: &'a Ring, kind: RingKind, write_head: u32, id: u32) -> Self {
-        let back = ring.prev_entry(id);
+    pub fn from_id(ring: &'a Ring, kind: RingKind, write_head: u32, id: u32) -> Self {
+        let mut me = Self::from_uninit(ring, kind);
+        me.reset_to(write_head, id);
+        me
+    }
+
+    #[must_use]
+    pub const fn from_uninit(ring: &'a Ring, kind: RingKind) -> Self {
         Self {
             iter: RingIter {
                 kind,
 
-                write_head,
-                back,
-                front: ring.next_entry(back),
-                done: false,
+                write_head: 0,
+                back: 0,
+                front: 0,
+                done: true,
             },
             ring,
         }
@@ -170,6 +176,21 @@ impl<'a> RingReader<'a> {
     #[must_use]
     pub const fn kind(&self) -> RingKind {
         self.iter.kind
+    }
+
+    pub fn reset_to(&mut self, write_head: u32, start: u32) {
+        let RingIter {
+            kind: _,
+            write_head: old_write_head,
+            back,
+            front,
+            done,
+        } = &mut self.iter;
+
+        *old_write_head = write_head;
+        *back = self.ring.prev_entry(start);
+        *front = self.ring.next_entry(*back);
+        *done = false;
     }
 }
 
