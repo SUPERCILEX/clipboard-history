@@ -108,6 +108,8 @@ fn into_result(errs: Vec<CliError>) -> Result<(), CliError> {
 }
 
 fn run() -> Result<(), CliError> {
+    info!("Starting Ringboard server v{}.", env!("CARGO_PKG_VERSION"));
+
     let mut data_dir = data_dir();
     info!("Using database in {data_dir:?}.");
 

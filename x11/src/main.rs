@@ -154,6 +154,11 @@ impl Deref for TransferAtomAllocation {
 
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn run() -> Result<(), CliError> {
+    info!(
+        "Starting Ringboard X11 clipboard listener v{}.",
+        env!("CARGO_PKG_VERSION")
+    );
+
     let server_addr = {
         let socket_file = socket_file();
         SocketAddrUnix::new(&socket_file)
