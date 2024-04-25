@@ -28,6 +28,7 @@ use rustix::{
 struct RingIter {
     kind: RingKind,
 
+    write_head: u32,
     front: u32,
     back: u32,
     done: bool,
@@ -59,7 +60,9 @@ impl RingIter {
             if self.done {
                 return None;
             }
-            self.done = self.front == self.back;
+            self.done = self.front == self.back
+                || ring.next_head(self.front) == self.write_head
+                || self.back == self.write_head;
 
             if let Some(entry) = Entry::from(ring, self.kind, advance(self)) {
                 break Some(entry);
@@ -126,16 +129,17 @@ impl<'a> RingReader<'a> {
     #[must_use]
     pub fn from_ring(ring: &'a Ring, kind: RingKind) -> Self {
         let tail = ring.write_head();
-        Self::from_id(ring, kind, tail)
+        Self::from_id(ring, kind, tail, tail)
     }
 
     #[must_use]
-    pub const fn from_id(ring: &'a Ring, kind: RingKind, id: u32) -> Self {
+    pub const fn from_id(ring: &'a Ring, kind: RingKind, write_head: u32, id: u32) -> Self {
         let back = ring.prev_entry(id);
         Self {
             iter: RingIter {
                 kind,
 
+                write_head,
                 back,
                 front: ring.next_entry(back),
                 done: false,
