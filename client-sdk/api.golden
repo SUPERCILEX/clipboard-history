@@ -111,8 +111,10 @@ pub struct clipboard_history_client_sdk::Entry
 impl clipboard_history_client_sdk::Entry
 pub fn clipboard_history_client_sdk::Entry::id(&self) -> u64
 pub const fn clipboard_history_client_sdk::Entry::kind(&self) -> clipboard_history_client_sdk::Kind
-pub fn clipboard_history_client_sdk::Entry::to_file(&self, reader: &clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<std::fs::File>, clipboard_history_core::Error>
-pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<alloc::borrow::Cow<'a, [u8]>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_file(&self, reader: &clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<std::fs::File>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_file_growable(&self, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<std::fs::File>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<alloc::borrow::Cow<'a, [u8]>>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_slice_growable<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<alloc::borrow::Cow<'a, [u8]>>, clipboard_history_core::Error>
 impl core::fmt::Debug for clipboard_history_client_sdk::Entry
 pub fn clipboard_history_client_sdk::Entry::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Freeze for clipboard_history_client_sdk::Entry

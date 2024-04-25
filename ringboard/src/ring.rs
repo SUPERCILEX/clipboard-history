@@ -2,7 +2,7 @@ use std::{fmt::Debug, mem, ops::Deref, os::fd::AsFd, ptr, ptr::NonNull, slice};
 
 use rustix::{
     fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
-    mm::{mmap, munmap, MapFlags, ProtFlags},
+    mm::{mmap, mremap, munmap, MapFlags, MremapFlags, ProtFlags},
     path::Arg,
 };
 
@@ -133,6 +133,22 @@ impl Mmap {
             .cast(),
             len,
         })
+    }
+
+    pub fn remap(&mut self, len: usize) -> rustix::io::Result<()> {
+        self.ptr = unsafe {
+            NonNull::new_unchecked(
+                mremap(
+                    self.ptr.as_ptr().cast(),
+                    self.len,
+                    len,
+                    MremapFlags::MAYMOVE,
+                )?
+                .cast(),
+            )
+        };
+        self.len = len;
+        Ok(())
     }
 
     #[must_use]

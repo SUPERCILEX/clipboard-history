@@ -288,28 +288,68 @@ impl Entry {
         composite_id(self.ring, self.id)
     }
 
+    pub fn to_slice_growable<'a>(
+        &self,
+        reader: &'a mut EntryReader,
+    ) -> Result<LoadedEntry<Cow<'a, [u8]>>, ringboard_core::Error> {
+        self.grow_bucket_if_needed(reader)?;
+        Ok(self.to_slice(reader)?.unwrap())
+    }
+
+    pub fn to_file_growable(
+        &self,
+        reader: &mut EntryReader,
+    ) -> Result<LoadedEntry<File>, ringboard_core::Error> {
+        self.grow_bucket_if_needed(reader)?;
+        Ok(self.to_file(reader)?.unwrap())
+    }
+
+    fn grow_bucket_if_needed(&self, reader: &mut EntryReader) -> Result<(), ringboard_core::Error> {
+        match self.kind {
+            Kind::Bucket(entry) => {
+                if let Err(BucketTooShort { bucket, needed_len }) =
+                    bucket_entry_to_slice(reader, entry)
+                {
+                    let bucket = &mut reader.buckets[bucket];
+                    bucket
+                        .remap(needed_len.max(bucket.len() * 2))
+                        .map_io_err(|| "Failed to remap bucket.")?;
+                }
+            }
+            Kind::File => {}
+        }
+        Ok(())
+    }
+
     pub fn to_slice<'a>(
         &self,
         reader: &'a EntryReader,
-    ) -> Result<LoadedEntry<Cow<'a, [u8]>>, ringboard_core::Error> {
+    ) -> Result<Option<LoadedEntry<Cow<'a, [u8]>>>, ringboard_core::Error> {
         match self.kind {
-            Kind::Bucket(entry) => Ok(LoadedEntry {
-                loaded: bucket_entry_to_slice(reader, entry).unwrap().into(),
-                fd: None,
-            }),
+            Kind::Bucket(entry) => {
+                let Ok(bytes) = bucket_entry_to_slice(reader, entry) else {
+                    return Ok(None);
+                };
+                Ok(Some(LoadedEntry {
+                    loaded: bytes.into(),
+                    fd: None,
+                }))
+            }
             Kind::File => {
                 let mut v = Vec::new();
-                let mut file = self.to_file(reader)?;
+                let Some(mut file) = self.to_file(reader)? else {
+                    return Ok(None);
+                };
                 file.read_to_end(&mut v).map_io_err(|| {
                     format!(
                         "Failed to read direct entry {} in {:?} ring",
                         self.id, self.ring
                     )
                 })?;
-                Ok(LoadedEntry {
+                Ok(Some(LoadedEntry {
                     loaded: v.into(),
                     fd: Some(LoadedEntryFd::Owned(file.loaded.into())),
-                })
+                }))
             }
         }
     }
@@ -317,12 +357,12 @@ impl Entry {
     pub fn to_file(
         &self,
         reader: &EntryReader,
-    ) -> Result<LoadedEntry<File>, ringboard_core::Error> {
+    ) -> Result<Option<LoadedEntry<File>>, ringboard_core::Error> {
         match self.kind {
             Kind::Bucket(entry) => {
-                // TODO handle this (and above) unwrap properly: we need to grow the EntryReader
-                //  mappings.
-                let bytes = bucket_entry_to_slice(reader, entry).unwrap();
+                let Ok(bytes) = bucket_entry_to_slice(reader, entry) else {
+                    return Ok(None);
+                };
                 let file = File::from(
                     memfd_create("ringboard_bucket_reader", MemfdFlags::empty())
                         .map_io_err(|| "Failed to create data entry file.")?,
@@ -331,10 +371,10 @@ impl Entry {
                 file.write_all_at(bytes, 0)
                     .map_io_err(|| "Failed to write bytes to entry file.")?;
 
-                Ok(LoadedEntry {
+                Ok(Some(LoadedEntry {
                     loaded: file,
                     fd: None,
-                })
+                }))
             }
             Kind::File => {
                 let mut buf = Default::default();
@@ -343,12 +383,12 @@ impl Entry {
                 let file = openat(&reader.direct, &*buf, OFlags::RDONLY, Mode::empty())
                     .map_io_err(|| format!("Failed to open direct file: {buf:?}"))
                     .map(File::from)?;
-                Ok(LoadedEntry {
+                Ok(Some(LoadedEntry {
                     fd: Some(LoadedEntryFd::HackySelfReference(unsafe {
                         BorrowedFd::borrow_raw(file.as_raw_fd())
                     })),
                     loaded: file,
-                })
+                }))
             }
         }
     }
@@ -402,17 +442,29 @@ impl EntryReader {
     }
 }
 
-fn bucket_entry_to_slice(reader: &EntryReader, entry: BucketEntry) -> Option<&[u8]> {
+struct BucketTooShort {
+    bucket: usize,
+    needed_len: usize,
+}
+
+fn bucket_entry_to_slice(
+    reader: &EntryReader,
+    entry: BucketEntry,
+) -> Result<&[u8], BucketTooShort> {
     let index = usize::try_from(entry.index()).unwrap();
     let size = usize::try_from(entry.size()).unwrap();
     let bucket = size_to_bucket(entry.size());
 
-    let start = usize::try_from(bucket_to_length(bucket)).unwrap() * index;
+    let size_class = usize::try_from(bucket_to_length(bucket)).unwrap();
+    let start = size_class * index;
     let mem = &reader.buckets[bucket];
     if start + size > mem.len() {
-        return None;
+        return Err(BucketTooShort {
+            bucket,
+            needed_len: size_class * (index + 1),
+        });
     }
 
     let ptr = mem.ptr().as_ptr();
-    Some(unsafe { slice::from_raw_parts(ptr.add(start), size) })
+    Ok(unsafe { slice::from_raw_parts(ptr.add(start), size) })
 }

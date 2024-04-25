@@ -460,6 +460,7 @@ impl clipboard_history_core::ring::Mmap
 pub const fn clipboard_history_core::ring::Mmap::len(&self) -> usize
 pub fn clipboard_history_core::ring::Mmap::new<Fd: std::os::fd::owned::AsFd>(fd: Fd, len: usize) -> rustix::io::errno::Result<Self>
 pub const fn clipboard_history_core::ring::Mmap::ptr(&self) -> core::ptr::non_null::NonNull<u8>
+pub fn clipboard_history_core::ring::Mmap::remap(&mut self, len: usize) -> rustix::io::errno::Result<()>
 impl core::fmt::Debug for clipboard_history_core::ring::Mmap
 pub fn clipboard_history_core::ring::Mmap::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::ops::drop::Drop for clipboard_history_core::ring::Mmap
