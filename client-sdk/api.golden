@@ -81,6 +81,7 @@ pub struct clipboard_history_client_sdk::DatabaseReader
 impl clipboard_history_client_sdk::DatabaseReader
 pub fn clipboard_history_client_sdk::DatabaseReader::favorites(&self) -> clipboard_history_client_sdk::RingReader<'_>
 pub fn clipboard_history_client_sdk::DatabaseReader::get(&self, id: u64) -> core::result::Result<clipboard_history_client_sdk::Entry, clipboard_history_core::protocol::IdNotFoundError>
+pub unsafe fn clipboard_history_client_sdk::DatabaseReader::growable_get(&mut self, id: u64) -> core::result::Result<clipboard_history_client_sdk::Entry, clipboard_history_core::protocol::IdNotFoundError>
 pub fn clipboard_history_client_sdk::DatabaseReader::main(&self) -> clipboard_history_client_sdk::RingReader<'_>
 pub fn clipboard_history_client_sdk::DatabaseReader::open(database: &mut std::path::PathBuf) -> core::result::Result<Self, clipboard_history_core::Error>
 impl core::fmt::Debug for clipboard_history_client_sdk::DatabaseReader

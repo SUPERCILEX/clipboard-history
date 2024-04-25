@@ -213,6 +213,7 @@ impl Ring {
     ///
     /// The ring file must have at least len entries and cannot exceed capacity.
     pub unsafe fn set_len(&mut self, len: u32) {
+        debug_assert!(len <= self.capacity());
         self.len = len;
     }
 
