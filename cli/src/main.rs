@@ -74,6 +74,12 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
+    /// Get an entry from the database.
+    ///
+    /// The entry bytes will be outputted to stdout.
+    #[command(aliases = ["at"])]
+    Get(EntryAction),
+
     /// Add an entry to the database.
     ///
     /// The ID of the newly added entry will be returned.
@@ -355,6 +361,7 @@ fn run() -> Result<(), CliError> {
             .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
     };
     match cmd {
+        Cmd::Get(data) => get(data),
         Cmd::Add(data) => add(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Favorite(data) => move_to_front(
             connect_to_server(&server_addr)?,
@@ -405,6 +412,14 @@ fn open_db() -> Result<(DatabaseReader, EntryReader), CliError> {
         )
     };
     Ok((database, reader))
+}
+
+fn get(EntryAction { id }: EntryAction) -> Result<(), CliError> {
+    let (database, reader) = open_db()?;
+    let entry = database.get(id)?;
+    io::copy(&mut *entry.to_file(&reader)?, &mut io::stdout().lock())
+        .map_io_err(|| "Failed to write entry to stdout")?;
+    Ok(())
 }
 
 fn add(

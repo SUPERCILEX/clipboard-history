@@ -7,6 +7,7 @@ is a non-interactive client and debugging tool.
 Usage: clipboard-history <COMMAND>
 
 Commands:
+  get              Get an entry from the database
   add              Add an entry to the database
   favorite         Favorite an entry
   unfavorite       Unfavorite an entry
@@ -26,6 +27,22 @@ Options:
 
   -V, --version
           Print version
+
+---
+
+Get an entry from the database.
+
+The entry bytes will be outputted to stdout.
+
+Usage: clipboard-history get <ID>
+
+Arguments:
+  <ID>
+          The entry ID
+
+Options:
+  -h, --help
+          Print help (use `-h` for a summary)
 
 ---
 
@@ -331,6 +348,7 @@ Print this message or the help of the given subcommand(s)
 Usage: clipboard-history help [COMMAND]
 
 Commands:
+  get              Get an entry from the database
   add              Add an entry to the database
   favorite         Favorite an entry
   unfavorite       Unfavorite an entry
@@ -343,6 +361,12 @@ Commands:
   garbage-collect  Run garbage collection on the database
   debug            Debugging tools for developers
   help             Print this message or the help of the given subcommand(s)
+
+---
+
+Get an entry from the database
+
+Usage: clipboard-history help get
 
 ---
 
