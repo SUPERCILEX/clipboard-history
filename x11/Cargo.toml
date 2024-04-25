@@ -14,8 +14,10 @@ arrayvec = "0.7.4"
 env_logger = { version = "0.11.3", default-features = false }
 error-stack = "0.4.1"
 log = { version = "0.4.21", features = ["release_max_level_info"] }
+memmap2 = "0.9.4"
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
+rustc-hash = "1.1.0"
 rustix = { version = "0.38.30", features = ["fs"] }
 thiserror = "1.0.58"
 x11rb = { version = "0.13.0", features = ["xfixes"] }

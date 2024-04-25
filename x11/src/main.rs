@@ -7,7 +7,7 @@ use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_core::{
     dirs::socket_file,
-    protocol::{AddResponse, MimeType, RingKind},
+    protocol::{AddResponse, MimeType, MoveToFrontResponse, RingKind},
     Error, IoErr,
 };
 use rustix::{
@@ -34,9 +34,13 @@ use x11rb::{
     wrapper::ConnectionExt as WrapperConnExt,
 };
 
-use crate::best_target::BestMimeTypeFinder;
+use crate::{
+    best_target::BestMimeTypeFinder,
+    deduplication::{CopyData, CopyDeduplication},
+};
 
 mod best_target;
+mod deduplication;
 
 #[derive(Error, Debug)]
 enum CliError {
@@ -241,6 +245,8 @@ fn run() -> Result<(), CliError> {
         ArrayVec::from([const { TransferAtom::Free }; MAX_CONCURRENT_TRANSFERS]);
     let mut transfer_atoms_allocator = TransferAtomAllocation::default();
 
+    let mut deduplicator = CopyDeduplication::new()?;
+
     info!("Starting event loop.");
     loop {
         trace!("Waiting for event.");
@@ -391,6 +397,27 @@ fn run() -> Result<(), CliError> {
                                 continue;
                             }
 
+                            let data_hash = CopyDeduplication::hash(
+                                CopyData::Slice(&property.value),
+                                u64::try_from(property.value.len()).unwrap(),
+                            );
+                            if let Some(existing) =
+                                deduplicator.check(data_hash, CopyData::Slice(&property.value))
+                            {
+                                info!("Promoting duplicate small selection to front.");
+                                if let MoveToFrontResponse::Success { id } =
+                                    ringboard_sdk::move_to_front(
+                                        &server,
+                                        &server_addr,
+                                        existing,
+                                        None,
+                                    )?
+                                {
+                                    deduplicator.remember(data_hash, id);
+                                    continue;
+                                }
+                            }
+
                             let mime_type = conn.get_atom_name(mime_atom)?;
                             let file = File::from(
                                 memfd_create("ringboard_x11_selection", MemfdFlags::empty())
@@ -403,13 +430,14 @@ fn run() -> Result<(), CliError> {
                             let mime_type =
                                 MimeType::from(&mime_type.reply()?.name.to_string_lossy()).unwrap();
 
-                            let AddResponse::Success { id: _ } = ringboard_sdk::add(
+                            let AddResponse::Success { id } = ringboard_sdk::add(
                                 &server,
                                 &server_addr,
                                 RingKind::Main,
                                 mime_type,
                                 file,
                             )?;
+                            deduplicator.remember(data_hash, id);
                             info!("Small selection transfer complete.");
                         }
                     }
@@ -444,6 +472,24 @@ fn run() -> Result<(), CliError> {
                                 continue;
                             }
 
+                            let data_hash = CopyDeduplication::hash(CopyData::File(&file), written);
+                            if let Some(existing) =
+                                deduplicator.check(data_hash, CopyData::File(&file))
+                            {
+                                info!("Promoting duplicate large selection to front.");
+                                if let MoveToFrontResponse::Success { id } =
+                                    ringboard_sdk::move_to_front(
+                                        &server,
+                                        &server_addr,
+                                        existing,
+                                        None,
+                                    )?
+                                {
+                                    deduplicator.remember(data_hash, id);
+                                    continue;
+                                }
+                            }
+
                             let mime_type = MimeType::from(
                                 &conn
                                     .get_atom_name(mime_atom)?
@@ -453,13 +499,14 @@ fn run() -> Result<(), CliError> {
                             )
                             .unwrap();
 
-                            let AddResponse::Success { id: _ } = ringboard_sdk::add(
+                            let AddResponse::Success { id } = ringboard_sdk::add(
                                 &server,
                                 &server_addr,
                                 RingKind::Main,
                                 mime_type,
                                 file,
                             )?;
+                            deduplicator.remember(data_hash, id);
                             info!("Large selection transfer complete.");
                         } else {
                             debug!("Writing {} bytes for INCR transfer.", property.value.len());

@@ -41,15 +41,14 @@ enum Wrapper {
 }
 
 // TODO implement configuration file/settings
-// TODO implement ring resizing
 // TODO add tracing
 // TODO figure out broadcasting
 // TODO add search CLI command
+// TODO add paste CLI command
 // TODO implement Wayland client
 // TODO implement TUI
 // TODO implement egui
 // TODO implement COSMIC applet
-// TODO figure out de-duplication
 // TODO support direct file copy context to show in GUI
 fn main() -> error_stack::Result<(), Wrapper> {
     #[cfg(not(debug_assertions))]
