@@ -186,6 +186,8 @@ Arguments:
             History](https://extensions.gnome.org/extension/4839/clipboard-history/)
           - clipboard-indicator:     [Clipboard
             Indicator](https://extensions.gnome.org/extension/779/clipboard-indicator/)
+          - json:                    A sequence of JSON objects in the same format as the dump
+            command
 
   [DATABASE]
           The existing clipboard's database location.

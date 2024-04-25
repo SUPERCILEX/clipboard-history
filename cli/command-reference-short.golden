@@ -135,7 +135,7 @@ Usage: clipboard-history migrate <FROM> [DATABASE]
 
 Arguments:
   <FROM>      The existing clipboard to migrate from [possible values: gnome-clipboard-history,
-              clipboard-indicator]
+              clipboard-indicator, json]
   [DATABASE]  The existing clipboard's database location
 
 Options:

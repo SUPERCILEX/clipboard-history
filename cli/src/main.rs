@@ -9,12 +9,16 @@ use std::{
     hash::BuildHasherDefault,
     io,
     io::{ErrorKind, Read, Seek, SeekFrom, Write},
-    os::fd::{AsFd, OwnedFd},
+    os::{
+        fd::{AsFd, OwnedFd},
+        unix::fs::FileExt,
+    },
     path::{Path, PathBuf},
     str,
 };
 
 use ask::Answer;
+use base64_serde::base64_serde_type;
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
 use error_stack::Report;
@@ -46,7 +50,7 @@ use rustix::{
     process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
     stdio::stdin,
 };
-use serde::{ser::SerializeSeq, Serialize, Serializer};
+use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
 /// The Ringboard (clipboard history) CLI.
@@ -216,6 +220,7 @@ struct ReloadSettings {
 struct Migrate {
     /// The existing clipboard to migrate from.
     #[arg(required = true)]
+    #[arg(requires_if("json", "database"))]
     from: MigrateFromClipboard,
 
     /// The existing clipboard's database location.
@@ -234,6 +239,11 @@ enum MigrateFromClipboard {
     /// [Clipboard Indicator](https://extensions.gnome.org/extension/779/clipboard-indicator/)
     #[value(alias = "ci")]
     ClipboardIndicator,
+
+    /// A sequence of JSON objects in the same format as the dump command.
+    ///
+    /// Note that the IDs are ignored and may be omitted.
+    Json,
 }
 
 #[derive(Args, Debug)]
@@ -299,7 +309,7 @@ enum CliError {
         "Database not found. Make sure to run the ringboard server or fix the XDG_DATA_HOME path."
     )]
     DatabaseNotFound(PathBuf),
-    #[error("JSON serialization failed.")]
+    #[error("JSON (de)serialization failed.")]
     SerdeJson(#[from] serde_json::Error),
 }
 
@@ -397,21 +407,18 @@ fn run() -> Result<(), CliError> {
 }
 
 fn open_db() -> Result<(DatabaseReader, EntryReader), CliError> {
-    let (database, reader) = {
-        let mut database = data_dir();
-        if !database
-            .try_exists()
-            .map_io_err(|| format!("Failed to check that database exists: {database:?}"))?
-        {
-            return Err(CliError::DatabaseNotFound(database));
-        }
+    let mut database = data_dir();
+    if !database
+        .try_exists()
+        .map_io_err(|| format!("Failed to check that database exists: {database:?}"))?
+    {
+        return Err(CliError::DatabaseNotFound(database));
+    }
 
-        (
-            DatabaseReader::open(&mut database)?,
-            EntryReader::open(&mut database)?,
-        )
-    };
-    Ok((database, reader))
+    Ok((
+        DatabaseReader::open(&mut database)?,
+        EntryReader::open(&mut database)?,
+    ))
 }
 
 fn get(EntryAction { id }: EntryAction) -> Result<(), CliError> {
@@ -574,6 +581,9 @@ fn migrate(
     match from {
         MigrateFromClipboard::GnomeClipboardHistory => migrate_from_gch(server, addr, database),
         MigrateFromClipboard::ClipboardIndicator => todo!(),
+        MigrateFromClipboard::Json => {
+            migrate_from_ringboard_export(server, addr, database.unwrap())
+        }
     }
 }
 
@@ -668,6 +678,7 @@ fn migrate_from_gch(
                     &server,
                     addr,
                     data,
+                    MimeType::new(),
                     Some(&mut translation),
                     &mut pending_adds,
                 )?;
@@ -950,40 +961,43 @@ fn stats() -> Result<(), CliError> {
     Ok(())
 }
 
+base64_serde_type!(
+    Base64Standard,
+    base64::engine::general_purpose::STANDARD_NO_PAD
+);
+
+#[derive(Serialize, Deserialize)]
+#[serde(bound(deserialize = "'de: 'a"))]
+struct ExportEntry<'a> {
+    #[serde(default)]
+    id: u64,
+    #[serde(flatten)]
+    data: ExportData<'a>,
+    #[serde(skip_serializing_if = "MimeType::is_empty")]
+    #[serde(default)]
+    mime_type: MimeType,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "kind", content = "data")]
+enum ExportData<'a> {
+    Human(Cow<'a, str>),
+    Bytes(#[serde(with = "Base64Standard")] Cow<'a, [u8]>),
+}
+
 fn dump() -> Result<(), CliError> {
-    use base64::engine::general_purpose::STANDARD;
-    use base64_serde::base64_serde_type;
-
-    base64_serde_type!(Base64Standard, STANDARD);
-
-    #[derive(Serialize)]
-    struct Entry<'a> {
-        id: u64,
-        #[serde(flatten)]
-        data: Data<'a>,
-        #[serde(skip_serializing_if = "MimeType::is_empty")]
-        mime_type: MimeType,
-    }
-
-    #[derive(Serialize)]
-    #[serde(tag = "kind", content = "data")]
-    enum Data<'a> {
-        Human(&'a str),
-        Bytes(#[serde(with = "Base64Standard")] Cow<'a, [u8]>),
-    }
-
     let (database, reader) = open_db()?;
     let mut seq = serde_json::Serializer::new(io::stdout().lock());
     let mut seq = seq.serialize_seq(None)?;
     for entry in database.favorites().chain(database.main()) {
         let loaded = entry.to_slice(&reader)?;
         let mime_type = loaded.mime_type()?;
-        seq.serialize_element(&Entry {
+        seq.serialize_element(&ExportEntry {
             id: entry.id(),
             data: if let Ok(data) = str::from_utf8(&loaded) {
-                Data::Human(data)
+                ExportData::Human(data.into())
             } else {
-                Data::Bytes(loaded.into_inner())
+                ExportData::Bytes(loaded.into_inner())
             },
             mime_type,
         })?;
@@ -991,6 +1005,61 @@ fn dump() -> Result<(), CliError> {
 
     SerializeSeq::end(seq)?;
     Ok(())
+}
+
+fn migrate_from_ringboard_export(
+    server: OwnedFd,
+    addr: &SocketAddrUnix,
+    dump_file: PathBuf,
+) -> Result<(), CliError> {
+    fn generate_entry_file(data: &[u8]) -> Result<File, CliError> {
+        let file = File::from(
+            openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
+                .map_io_err(|| "Failed to create data entry file.")?,
+        );
+
+        file.write_all_at(data, 0)
+            .map_io_err(|| "Failed to copy data to entry file.")?;
+
+        Ok(file)
+    }
+
+    let mut pending_adds = 0;
+    let mut process = |ExportEntry {
+                           id: _,
+                           data,
+                           mime_type,
+                       }|
+     -> Result<(), CliError> {
+        let data = generate_entry_file(match &data {
+            ExportData::Human(str) => str.as_bytes(),
+            ExportData::Bytes(bytes) => bytes,
+        })?;
+
+        pipeline_add_request(&server, addr, data, mime_type, None, &mut pending_adds)
+    };
+
+    if dump_file == Path::new("-") {
+        drop(dump_file);
+        let iter =
+            serde_json::Deserializer::from_reader(io::stdin().lock()).into_iter::<ExportEntry>();
+        for result in iter {
+            process(result?)?;
+        }
+    } else {
+        let dump =
+            File::open(&dump_file).map_io_err(|| format!("Failed to open file: {dump_file:?}"))?;
+        let dump = unsafe { Mmap::map(&dump) }
+            .map_io_err(|| format!("Failed to mmap file: {dump_file:?}"))?;
+        drop(dump_file);
+
+        let iter = serde_json::Deserializer::from_slice(&dump).into_iter::<ExportEntry>();
+        for result in iter {
+            process(result?)?;
+        }
+    };
+
+    drain_add_requests(server, true, None, &mut pending_adds)
 }
 
 fn watch() -> Result<(), CliError> {
@@ -1012,7 +1081,14 @@ fn generate(
 
     for _ in 0..num_entries {
         let data = generate_random_entry_file(&mut rng, distr)?;
-        pipeline_add_request(&server, addr, data, None, &mut pending_adds)?;
+        pipeline_add_request(
+            &server,
+            addr,
+            data,
+            MimeType::new(),
+            None,
+            &mut pending_adds,
+        )?;
     }
 
     drain_add_requests(server, true, None, &mut pending_adds)
@@ -1162,6 +1238,7 @@ fn pipeline_add_request(
     server: impl AsFd,
     addr: &SocketAddrUnix,
     data: impl AsFd,
+    mime_type: MimeType,
     mut translation: Option<&mut Vec<u64>>,
     pending_adds: &mut u32,
 ) -> Result<(), CliError> {
@@ -1171,7 +1248,7 @@ fn pipeline_add_request(
             &server,
             addr,
             RingKind::Main,
-            MimeType::new(),
+            mime_type,
             &data,
             if *pending_adds == 0 {
                 SendFlags::empty()
