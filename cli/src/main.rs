@@ -423,7 +423,7 @@ fn open_db() -> Result<(DatabaseReader, EntryReader), CliError> {
 
 fn get(EntryAction { id }: EntryAction) -> Result<(), CliError> {
     let (database, mut reader) = open_db()?;
-    let entry = database.get(id)?;
+    let entry = database.get_raw(id)?;
     io::copy(&mut *entry.to_file(&mut reader)?, &mut io::stdout().lock())
         .map_io_err(|| "Failed to write entry to stdout")?;
     Ok(())
@@ -1256,7 +1256,7 @@ fn fuzz(
                 .unwrap();
 
                 for (&id, a) in &data {
-                    let entry = unsafe { database.growable_get(id) }?;
+                    let entry = unsafe { database.get(id) }?;
                     let b = match entry.kind() {
                         Kind::Bucket(_) => &*entry.to_slice(&mut reader)?,
                         Kind::File => {

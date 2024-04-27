@@ -80,8 +80,8 @@ pub fn clipboard_history_client_sdk::Kind::from(t: T) -> T
 pub struct clipboard_history_client_sdk::DatabaseReader
 impl clipboard_history_client_sdk::DatabaseReader
 pub fn clipboard_history_client_sdk::DatabaseReader::favorites(&self) -> clipboard_history_client_sdk::RingReader<'_>
-pub fn clipboard_history_client_sdk::DatabaseReader::get(&self, id: u64) -> core::result::Result<clipboard_history_client_sdk::Entry, clipboard_history_core::protocol::IdNotFoundError>
-pub unsafe fn clipboard_history_client_sdk::DatabaseReader::growable_get(&mut self, id: u64) -> core::result::Result<clipboard_history_client_sdk::Entry, clipboard_history_core::protocol::IdNotFoundError>
+pub unsafe fn clipboard_history_client_sdk::DatabaseReader::get(&mut self, id: u64) -> core::result::Result<clipboard_history_client_sdk::Entry, clipboard_history_core::protocol::IdNotFoundError>
+pub fn clipboard_history_client_sdk::DatabaseReader::get_raw(&self, id: u64) -> core::result::Result<clipboard_history_client_sdk::Entry, clipboard_history_core::protocol::IdNotFoundError>
 pub fn clipboard_history_client_sdk::DatabaseReader::main(&self) -> clipboard_history_client_sdk::RingReader<'_>
 pub fn clipboard_history_client_sdk::DatabaseReader::open(database: &mut std::path::PathBuf) -> core::result::Result<Self, clipboard_history_core::Error>
 impl core::fmt::Debug for clipboard_history_client_sdk::DatabaseReader
@@ -112,10 +112,10 @@ pub struct clipboard_history_client_sdk::Entry
 impl clipboard_history_client_sdk::Entry
 pub fn clipboard_history_client_sdk::Entry::id(&self) -> u64
 pub const fn clipboard_history_client_sdk::Entry::kind(&self) -> clipboard_history_client_sdk::Kind
-pub fn clipboard_history_client_sdk::Entry::to_file(&self, reader: &clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<std::fs::File>>, clipboard_history_core::Error>
-pub fn clipboard_history_client_sdk::Entry::to_file_growable(&self, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<std::fs::File>, clipboard_history_core::Error>
-pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<alloc::borrow::Cow<'a, [u8]>>>, clipboard_history_core::Error>
-pub fn clipboard_history_client_sdk::Entry::to_slice_growable<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<alloc::borrow::Cow<'a, [u8]>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_file(&self, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<std::fs::File>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_file_raw(&self, reader: &clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<std::fs::File>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<alloc::borrow::Cow<'a, [u8]>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_slice_raw<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<alloc::borrow::Cow<'a, [u8]>>>, clipboard_history_core::Error>
 impl core::fmt::Debug for clipboard_history_client_sdk::Entry
 pub fn clipboard_history_client_sdk::Entry::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Freeze for clipboard_history_client_sdk::Entry
@@ -173,6 +173,8 @@ impl<T> clipboard_history_client_sdk::LoadedEntry<T>
 pub fn clipboard_history_client_sdk::LoadedEntry<T>::backing_file(&self) -> core::option::Option<std::os::fd::owned::BorrowedFd<'_>>
 pub fn clipboard_history_client_sdk::LoadedEntry<T>::into_inner(self) -> T
 pub fn clipboard_history_client_sdk::LoadedEntry<T>::mime_type(&self) -> core::result::Result<clipboard_history_core::protocol::MimeType, clipboard_history_core::Error>
+impl<T: core::fmt::Debug> core::fmt::Debug for clipboard_history_client_sdk::LoadedEntry<T>
+pub fn clipboard_history_client_sdk::LoadedEntry<T>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<T> core::ops::deref::Deref for clipboard_history_client_sdk::LoadedEntry<T>
 pub type clipboard_history_client_sdk::LoadedEntry<T>::Target = T
 pub fn clipboard_history_client_sdk::LoadedEntry<T>::deref(&self) -> &Self::Target

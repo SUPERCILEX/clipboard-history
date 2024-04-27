@@ -96,7 +96,7 @@ impl DatabaseReader {
         })
     }
 
-    pub fn get(&self, id: u64) -> Result<Entry, IdNotFoundError> {
+    pub fn get_raw(&self, id: u64) -> Result<Entry, IdNotFoundError> {
         let (kind, id) = decompose_id(id)?;
         Entry::from(
             match kind {
@@ -109,7 +109,7 @@ impl DatabaseReader {
         .ok_or(IdNotFoundError::Entry(id))
     }
 
-    pub unsafe fn growable_get(&mut self, id: u64) -> Result<Entry, IdNotFoundError> {
+    pub unsafe fn get(&mut self, id: u64) -> Result<Entry, IdNotFoundError> {
         let (kind, sub_id) = decompose_id(id)?;
         let ring = match kind {
             RingKind::Favorites => &mut self.favorites,
@@ -120,7 +120,7 @@ impl DatabaseReader {
                 ring.set_len(sub_id + 1);
             }
         }
-        self.get(id)
+        self.get_raw(id)
     }
 
     #[must_use]

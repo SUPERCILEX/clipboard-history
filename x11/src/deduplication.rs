@@ -122,7 +122,7 @@ impl CopyDeduplication {
                 let id = composite_id(kind, id);
                 let entry = unsafe {
                     self.database
-                        .growable_get(id)
+                        .get(id)
                         .inspect_err(|e| error!("Failed to get entry for ID: {id:?}\nError: {e:?}"))
                         .ok()?
                 };
@@ -131,7 +131,7 @@ impl CopyDeduplication {
                         *entry
                             .to_slice(&mut self.reader)
                             .inspect_err(|e| {
-                                error!("Failed to load entry: {entry:?}\nError: {e:?}")
+                                error!("Failed to load entry: {entry:?}\nError: {e:?}");
                             })
                             .ok()?
                             == data
@@ -140,12 +140,12 @@ impl CopyDeduplication {
                         let entry_file = entry
                             .to_file(&mut self.reader)
                             .inspect_err(|e| {
-                                error!("Failed to load entry: {entry:?}\nError: {e:?}")
+                                error!("Failed to load entry: {entry:?}\nError: {e:?}");
                             })
                             .ok()?;
                         let a = unsafe { Mmap::map(&*entry_file) }
                             .inspect_err(|e| {
-                                error!("Failed to mmap file: {entry_file:?}\nError: {e:?}")
+                                error!("Failed to mmap file: {entry_file:?}\nError: {e:?}");
                             })
                             .ok()?;
                         let b = unsafe { Mmap::map(data) }
