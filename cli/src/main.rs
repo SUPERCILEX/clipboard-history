@@ -557,13 +557,14 @@ fn wipe() -> Result<(), CliError> {
 }
 
 fn reload_settings(
-    _server: OwnedFd,
+    server: OwnedFd,
     _addr: &SocketAddrUnix,
     ReloadSettings { .. }: ReloadSettings,
 ) -> Result<(), CliError> {
     // TODO send config as ancillary data
     // TODO make config not an option by computing its default location at runtime
     // (if possible)
+    drop(server);
     todo!()
 }
 
