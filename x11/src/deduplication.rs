@@ -109,12 +109,13 @@ impl CopyDeduplication {
     }
 
     pub fn check(&mut self, hash: u64, data: CopyData) -> Option<u64> {
-        self.favorites
-            .get(hash)
-            .map(|id| (id, RingKind::Favorites))
-            .or_else(|| self.main.get(hash).map(|id| (id, RingKind::Main)))
-            .map(|(id, ring)| composite_id(ring, id))
+        for kind in [RingKind::Favorites, RingKind::Main] {
+            if let Some(id) = match kind {
+                RingKind::Favorites => self.favorites.get(hash),
+                RingKind::Main => self.main.get(hash),
+            }
             .and_then(|id| {
+                let id = composite_id(kind, id);
                 let entry = unsafe { self.database.growable_get(id).ok()? };
                 match data {
                     CopyData::Slice(data) => *entry.to_slice(&mut self.reader).ok()? == data,
@@ -127,7 +128,11 @@ impl CopyDeduplication {
                     }
                 }
                 .then_some(id)
-            })
+            }) {
+                return Some(id);
+            }
+        }
+        None
     }
 
     pub fn remember(&mut self, hash: u64, id: u64) {
