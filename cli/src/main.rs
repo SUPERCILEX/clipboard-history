@@ -424,11 +424,8 @@ fn open_db() -> Result<(DatabaseReader, EntryReader), CliError> {
 fn get(EntryAction { id }: EntryAction) -> Result<(), CliError> {
     let (database, mut reader) = open_db()?;
     let entry = database.get(id)?;
-    io::copy(
-        &mut *entry.to_file_growable(&mut reader)?,
-        &mut io::stdout().lock(),
-    )
-    .map_io_err(|| "Failed to write entry to stdout")?;
+    io::copy(&mut *entry.to_file(&mut reader)?, &mut io::stdout().lock())
+        .map_io_err(|| "Failed to write entry to stdout")?;
     Ok(())
 }
 
@@ -943,7 +940,7 @@ fn stats() -> Result<(), CliError> {
             }
 
             // TODO replace with hashing so we can mutably borrow
-            let data = entry.to_slice(&reader)?.unwrap();
+            let data = entry.to_slice_raw(&reader)?.unwrap();
             if let Some(fd) = data.backing_file() {
                 *owned_bytes += data.len();
                 *mime_types.entry(data.mime_type()?).or_default() += 1;
@@ -994,7 +991,7 @@ fn dump() -> Result<(), CliError> {
     let mut seq = serde_json::Serializer::new(io::stdout().lock());
     let mut seq = seq.serialize_seq(None)?;
     for entry in database.favorites().chain(database.main()) {
-        let loaded = entry.to_slice_growable(&mut reader)?;
+        let loaded = entry.to_slice(&mut reader)?;
         let mime_type = loaded.mime_type()?;
         seq.serialize_element(&ExportEntry {
             id: entry.id(),

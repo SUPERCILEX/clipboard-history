@@ -323,20 +323,20 @@ impl Entry {
         composite_id(self.ring, self.id)
     }
 
-    pub fn to_slice_growable<'a>(
+    pub fn to_slice<'a>(
         &self,
         reader: &'a mut EntryReader,
     ) -> Result<LoadedEntry<Cow<'a, [u8]>>, ringboard_core::Error> {
         self.grow_bucket_if_needed(reader)?;
-        Ok(self.to_slice(reader)?.unwrap())
+        Ok(self.to_slice_raw(reader)?.unwrap())
     }
 
-    pub fn to_file_growable(
+    pub fn to_file(
         &self,
         reader: &mut EntryReader,
     ) -> Result<LoadedEntry<File>, ringboard_core::Error> {
         self.grow_bucket_if_needed(reader)?;
-        Ok(self.to_file(reader)?.unwrap())
+        Ok(self.to_file_raw(reader)?.unwrap())
     }
 
     fn grow_bucket_if_needed(&self, reader: &mut EntryReader) -> Result<(), ringboard_core::Error> {
@@ -356,7 +356,7 @@ impl Entry {
         Ok(())
     }
 
-    pub fn to_slice<'a>(
+    pub fn to_slice_raw<'a>(
         &self,
         reader: &'a EntryReader,
     ) -> Result<Option<LoadedEntry<Cow<'a, [u8]>>>, ringboard_core::Error> {
@@ -372,7 +372,7 @@ impl Entry {
             }
             Kind::File => {
                 let mut v = Vec::new();
-                let Some(mut file) = self.to_file(reader)? else {
+                let Some(mut file) = self.to_file_raw(reader)? else {
                     return Ok(None);
                 };
                 file.read_to_end(&mut v).map_io_err(|| {
@@ -389,7 +389,7 @@ impl Entry {
         }
     }
 
-    pub fn to_file(
+    pub fn to_file_raw(
         &self,
         reader: &EntryReader,
     ) -> Result<Option<LoadedEntry<File>>, ringboard_core::Error> {

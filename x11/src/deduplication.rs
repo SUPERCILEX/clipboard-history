@@ -62,10 +62,10 @@ impl CopyDeduplication {
 
                 for entry in iter {
                     if let Some(hash) = match entry.kind() {
-                        Kind::Bucket(_) => entry.to_slice_growable(&mut reader).ok().map(|data| {
+                        Kind::Bucket(_) => entry.to_slice(&mut reader).ok().map(|data| {
                             Self::hash(CopyData::Slice(&data), u64::try_from(data.len()).unwrap())
                         }),
-                        Kind::File => entry.to_file_growable(&mut reader).ok().and_then(|file| {
+                        Kind::File => entry.to_file(&mut reader).ok().and_then(|file| {
                             Some(Self::hash(
                                 CopyData::File(&file),
                                 statx(&*file, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
@@ -117,13 +117,10 @@ impl CopyDeduplication {
             .and_then(|id| {
                 let entry = unsafe { self.database.growable_get(id).ok()? };
                 match data {
-                    CopyData::Slice(data) => {
-                        *entry.to_slice_growable(&mut self.reader).ok()? == data
-                    }
+                    CopyData::Slice(data) => *entry.to_slice(&mut self.reader).ok()? == data,
                     CopyData::File(data) => {
                         let a =
-                            unsafe { Mmap::map(&*entry.to_file_growable(&mut self.reader).ok()?) }
-                                .ok()?;
+                            unsafe { Mmap::map(&*entry.to_file(&mut self.reader).ok()?) }.ok()?;
                         let b = unsafe { Mmap::map(data) }.ok()?;
 
                         *a == *b
