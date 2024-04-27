@@ -3,11 +3,12 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use log::info;
+use log::{error, info};
 use memmap2::Mmap;
 use ringboard_core::{
     dirs::data_dir,
     protocol::{composite_id, decompose_id, RingKind},
+    IoErr,
 };
 use ringboard_sdk::{DatabaseReader, EntryReader, Kind, RingReader};
 use rustc_hash::FxHasher;
@@ -43,7 +44,7 @@ impl CopyDeduplication {
             let fav_history = favorites.ids.len();
             let main_history = main.ids.len();
 
-            let mut load = |mut iter: RingReader, count| {
+            let mut load = |mut iter: RingReader, count| -> Result<(), ringboard_core::Error> {
                 let count = u32::try_from(count).unwrap().min(iter.ring().len());
                 let tail = iter.ring().write_head();
                 info!(
@@ -61,26 +62,27 @@ impl CopyDeduplication {
                 );
 
                 for entry in iter {
-                    if let Some(hash) = match entry.kind() {
-                        Kind::Bucket(_) => entry.to_slice(&mut reader).ok().map(|data| {
+                    let hash = match entry.kind() {
+                        Kind::Bucket(_) => entry.to_slice(&mut reader).map(|data| {
                             Self::hash(CopyData::Slice(&data), u64::try_from(data.len()).unwrap())
-                        }),
-                        Kind::File => entry.to_file(&mut reader).ok().and_then(|file| {
-                            Some(Self::hash(
+                        })?,
+                        Kind::File => {
+                            let file = entry.to_file(&mut reader)?;
+                            Self::hash(
                                 CopyData::File(&file),
                                 statx(&*file, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
-                                    .ok()?
+                                    .map_io_err(|| format!("Failed to statx file: {:?}", *file))?
                                     .stx_size,
-                            ))
-                        }),
-                    } {
-                        Self::remember_(&mut main, &mut favorites, hash, entry.id());
-                    }
+                            )
+                        }
+                    };
+                    Self::remember_(&mut main, &mut favorites, hash, entry.id());
                 }
+                Ok(())
             };
 
-            load(database.favorites(), fav_history);
-            load(database.main(), main_history);
+            load(database.favorites(), fav_history)?;
+            load(database.main(), main_history)?;
         }
 
         Ok(Self {
@@ -99,7 +101,9 @@ impl CopyDeduplication {
             match data {
                 CopyData::Slice(s) => s.hash(&mut data_hasher),
                 CopyData::File(f) => {
-                    if let Ok(m) = unsafe { Mmap::map(f) } {
+                    if let Ok(m) = unsafe { Mmap::map(f) }
+                        .inspect_err(|e| error!("Failed to mmap file: {f:?}\nError: {e:?}"))
+                    {
                         m.hash(&mut data_hasher);
                     }
                 }
@@ -116,13 +120,37 @@ impl CopyDeduplication {
             }
             .and_then(|id| {
                 let id = composite_id(kind, id);
-                let entry = unsafe { self.database.growable_get(id).ok()? };
+                let entry = unsafe {
+                    self.database
+                        .growable_get(id)
+                        .inspect_err(|e| error!("Failed to get entry for ID: {id:?}\nError: {e:?}"))
+                        .ok()?
+                };
                 match data {
-                    CopyData::Slice(data) => *entry.to_slice(&mut self.reader).ok()? == data,
+                    CopyData::Slice(data) => {
+                        *entry
+                            .to_slice(&mut self.reader)
+                            .inspect_err(|e| {
+                                error!("Failed to load entry: {entry:?}\nError: {e:?}")
+                            })
+                            .ok()?
+                            == data
+                    }
                     CopyData::File(data) => {
-                        let a =
-                            unsafe { Mmap::map(&*entry.to_file(&mut self.reader).ok()?) }.ok()?;
-                        let b = unsafe { Mmap::map(data) }.ok()?;
+                        let entry_file = &*entry
+                            .to_file(&mut self.reader)
+                            .inspect_err(|e| {
+                                error!("Failed to load entry: {entry:?}\nError: {e:?}")
+                            })
+                            .ok()?;
+                        let a = unsafe { Mmap::map(entry_file) }
+                            .inspect_err(|e| {
+                                error!("Failed to mmap file: {entry_file:?}\nError: {e:?}")
+                            })
+                            .ok()?;
+                        let b = unsafe { Mmap::map(data) }
+                            .inspect_err(|e| error!("Failed to mmap file: {data:?}\nError: {e:?}"))
+                            .ok()?;
 
                         *a == *b
                     }

@@ -199,7 +199,7 @@ impl FreeLists {
                 match bitcode::decode(&bytes) {
                     Ok(lists) => return Ok(Self { lists, file }),
                     Err(e) => {
-                        error!("Corrupted free lists file: {path:?}\nError: {e}");
+                        error!("Corrupted free lists file: {path:?}\nError: {e:?}");
                     }
                 }
             }
