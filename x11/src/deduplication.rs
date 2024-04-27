@@ -71,7 +71,7 @@ impl CopyDeduplication {
                             Self::hash(
                                 CopyData::File(&file),
                                 statx(&*file, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
-                                    .map_io_err(|| format!("Failed to statx file: {:?}", *file))?
+                                    .map_io_err(|| format!("Failed to statx file: {file:?}"))?
                                     .stx_size,
                             )
                         }
@@ -137,13 +137,13 @@ impl CopyDeduplication {
                             == data
                     }
                     CopyData::File(data) => {
-                        let entry_file = &*entry
+                        let entry_file = entry
                             .to_file(&mut self.reader)
                             .inspect_err(|e| {
                                 error!("Failed to load entry: {entry:?}\nError: {e:?}")
                             })
                             .ok()?;
-                        let a = unsafe { Mmap::map(entry_file) }
+                        let a = unsafe { Mmap::map(&*entry_file) }
                             .inspect_err(|e| {
                                 error!("Failed to mmap file: {entry_file:?}\nError: {e:?}")
                             })

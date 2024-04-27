@@ -1116,17 +1116,17 @@ fn fuzz(
         }
     }
 
-    let distr = WeightedAliasIndex::new(vec![55u16, 45, 4000, 2000, 2000, 1000, 1]).unwrap();
+    let distr = WeightedAliasIndex::new(vec![550u32, 450, 40000, 20000, 20000, 20000, 1]).unwrap();
     let entry_size_distr =
         LogNormal::from_mean_cv(f64::from(mean_size), f64::from(cv_size)).unwrap();
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
     let mut buf = String::with_capacity(MimeType::new_const().capacity());
 
     let mut clients = Vec::with_capacity(32);
-    // TODO need map so adds that overlap IDs can get replaced and vec so random is
-    //  efficient
-    let mut ids = Vec::new();
+    let mut max_id_seen = 0;
+    let mut data = HashMap::new();
 
+    let (mut database, mut reader) = open_db()?;
     let mut out = io::stdout().lock();
     loop {
         match distr.sample(&mut rng) {
@@ -1154,16 +1154,6 @@ fn fuzz(
                     &clients[rng.gen_range(0..clients.len())]
                 };
 
-                macro_rules! gen_id_index {
-                    () => {{
-                        if ids.is_empty() {
-                            None
-                        } else {
-                            Some(rng.gen_range(0..ids.len()))
-                        }
-                    }};
-                }
-
                 match action {
                     2 => {
                         writeln!(out, "Adding.").unwrap();
@@ -1178,57 +1168,106 @@ fn fuzz(
                             mime
                         };
 
+                        let file = generate_random_entry_file(&mut rng, entry_size_distr)?;
                         let AddResponse::Success { id } = ringboard_sdk::add(
                             server,
                             addr,
                             rng.gen::<FuzzRingKind>().0,
                             mime_type,
-                            generate_random_entry_file(&mut rng, entry_size_distr)?,
+                            &file,
                         )?;
-                        ids.push(id);
+                        data.insert(
+                            id,
+                            unsafe { Mmap::map(&file) }
+                                .map_io_err(|| format!("Failed to mmap file: {file:?}"))?,
+                        );
+                        max_id_seen = max_id_seen.max(id);
                     }
                     3 => {
                         writeln!(out, "Moving.").unwrap();
-                        let index = gen_id_index!();
-                        if let MoveToFrontResponse::Success { id } = ringboard_sdk::move_to_front(
+                        let move_id = rng.gen_range(0..=max_id_seen);
+                        match ringboard_sdk::move_to_front(
                             server,
                             addr,
-                            index.map_or_else(|| rng.gen(), |idx| ids[idx]),
+                            move_id,
                             rng.gen::<Option<FuzzRingKind>>().map(|r| r.0),
                         )? {
-                            ids[index.unwrap()] = id;
+                            MoveToFrontResponse::Success { id } => {
+                                let file = data.remove(&move_id).unwrap();
+                                data.insert(id, file);
+                                max_id_seen = max_id_seen.max(id);
+                            }
+                            MoveToFrontResponse::Error(_) => {
+                                assert!(!data.contains_key(&move_id));
+                            }
                         }
                     }
                     4 => {
                         writeln!(out, "Swapping.").unwrap();
-                        let idx1 = gen_id_index!();
-                        let idx2 = gen_id_index!();
-                        let _ = ringboard_sdk::swap(
-                            server,
-                            addr,
-                            idx1.map_or_else(|| rng.gen(), |idx| ids[idx]),
-                            idx2.map_or_else(|| rng.gen(), |idx| ids[idx]),
-                        )?;
+                        let idx1 = rng.gen_range(0..=max_id_seen);
+                        let idx2 = rng.gen_range(0..=max_id_seen);
+                        match ringboard_sdk::swap(server, addr, idx1, idx2)? {
+                            SwapResponse {
+                                error1: None,
+                                error2: None,
+                            } => {
+                                let file1 = data.remove(&idx1);
+                                let file2 = data.remove(&idx2);
+                                assert!(file1.is_some() || file2.is_some());
+
+                                if let Some(file2) = file2 {
+                                    data.insert(idx1, file2);
+                                }
+                                if let Some(file1) = file1 {
+                                    data.insert(idx2, file1);
+                                }
+                            }
+                            SwapResponse { error1, error2 } => {
+                                if error1.is_some() {
+                                    assert!(!data.contains_key(&idx1));
+                                }
+                                if error2.is_some() {
+                                    assert!(!data.contains_key(&idx2));
+                                }
+                            }
+                        }
                     }
                     5 => {
                         writeln!(out, "Removing.").unwrap();
-                        let index = gen_id_index!();
-                        if matches!(
-                            ringboard_sdk::remove(
-                                server,
-                                addr,
-                                index.map_or_else(|| rng.gen(), |idx| ids[idx]),
-                            )?,
-                            RemoveResponse { error: None }
-                        ) {
-                            ids.swap_remove(index.unwrap());
+                        let index = rng.gen_range(0..=max_id_seen);
+                        match ringboard_sdk::remove(server, addr, index)? {
+                            RemoveResponse { error: None } => {
+                                data.remove(&index);
+                            }
+                            RemoveResponse { error: Some(_) } => {
+                                assert!(!data.contains_key(&index));
+                            }
                         }
                     }
                     _ => unreachable!(),
                 }
             }
             6 => {
-                // TODO Integrity checks
+                writeln!(
+                    out,
+                    "Validating database integrity on {} entries.",
+                    data.len()
+                )
+                .unwrap();
+
+                for (&id, a) in &data {
+                    let entry = unsafe { database.growable_get(id) }?;
+                    let b = match entry.kind() {
+                        Kind::Bucket(_) => &*entry.to_slice(&mut reader)?,
+                        Kind::File => {
+                            let db_file = entry.to_file(&mut reader)?;
+                            &*unsafe { Mmap::map(&*db_file) }
+                                .map_io_err(|| format!("Failed to mmap file: {db_file:?}"))?
+                        }
+                    };
+
+                    assert_eq!(**a, *b);
+                }
             }
             _ => unreachable!(),
         }

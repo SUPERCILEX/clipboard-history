@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    fmt::{Debug, Formatter},
     fs::File,
     io,
     io::{ErrorKind, Read},
@@ -257,6 +258,12 @@ pub enum Kind {
 pub struct LoadedEntry<T> {
     loaded: T,
     fd: Option<LoadedEntryFd>,
+}
+
+impl<T: Debug> Debug for LoadedEntry<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.loaded.fmt(f)
+    }
 }
 
 enum LoadedEntryFd {
