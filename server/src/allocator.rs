@@ -8,12 +8,13 @@ use std::{
     mem::ManuallyDrop,
     ops::{Index, IndexMut},
     os::{fd::OwnedFd, unix::fs::FileExt},
-    path::{Path, PathBuf},
+    path::PathBuf,
     slice,
 };
 
 use bitcode::{Decode, Encode};
-use log::{debug, info};
+use bitvec::{order::Lsb0, vec::BitVec};
+use log::{debug, error, info, warn};
 use ringboard_core::{
     bucket_to_length, copy_file_range_all, direct_file_name, open_buckets,
     protocol::{
@@ -34,6 +35,7 @@ use rustix::{
 
 use crate::{utils::link_tmp_file, CliError};
 
+#[derive(Debug)]
 struct RingWriter {
     ring: File,
 }
@@ -95,11 +97,13 @@ impl RingWriter {
     }
 }
 
+#[derive(Debug)]
 struct WritableRing {
     writer: RingWriter,
     ring: Ring,
 }
 
+#[derive(Debug)]
 struct Rings([WritableRing; 2]);
 
 impl Index<RingKind> for Rings {
@@ -116,30 +120,32 @@ impl IndexMut<RingKind> for Rings {
     }
 }
 
+#[derive(Debug)]
 pub struct Allocator {
     rings: Rings,
     data: AllocatorData,
 }
 
+#[derive(Debug)]
 struct AllocatorData {
     buckets: Buckets,
     direct_dir: OwnedFd,
-
-    cache: bitcode::Buffer,
 }
 
+#[derive(Debug)]
 struct Buckets {
     files: [File; 11],
     slot_counts: [u32; 11],
     free_lists: FreeLists,
 }
 
+#[derive(Debug)]
 struct FreeLists {
     lists: RawFreeLists,
     file: File,
 }
 
-#[derive(Encode, Decode, Default)]
+#[derive(Encode, Decode, Default, Debug)]
 struct RawFreeLists([Vec<u32>; 11]);
 
 struct BucketSlotGuard<'a> {
@@ -161,14 +167,14 @@ impl Drop for BucketSlotGuard<'_> {
 }
 
 impl FreeLists {
-    fn load<P: AsRef<Path>>(path: P) -> Result<Self, CliError> {
-        let path = path.as_ref();
-        let mut file = match openat(CWD, path, OFlags::RDWR, Mode::empty()) {
+    fn load(data_dir: &mut PathBuf) -> Result<Self, CliError> {
+        let path = PathView::new(data_dir, "free-lists");
+        let mut file = match openat(CWD, &*path, OFlags::RDWR, Mode::empty()) {
             Err(e) if e.kind() == ErrorKind::NotFound => {
                 let file = File::from(
                     openat(
                         CWD,
-                        path,
+                        &*path,
                         OFlags::RDWR | OFlags::CREATE | OFlags::EXCL,
                         Mode::RUSR | Mode::WUSR,
                     )
@@ -182,21 +188,63 @@ impl FreeLists {
             r => File::from(r.map_io_err(|| format!("Failed to open free lists: {path:?}"))?),
         };
 
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)
-            .map_io_err(|| format!("Failed to read free lists: {path:?}"))?;
+        {
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)
+                .map_io_err(|| format!("Failed to read free lists: {path:?}"))?;
 
-        if bytes.is_empty() {
-            todo!("start recovery")
-        } else {
-            let lists = bitcode::decode(&bytes).map_err(|e| CliError::DeserializeError {
-                error: e,
-                context: format!("Free lists file: {path:?}").into(),
-            })?;
-            file.set_len(0)
-                .map_io_err(|| format!("Failed to truncate free lists: {path:?}"))?;
-            Ok(Self { lists, file })
+            if !bytes.is_empty() {
+                file.set_len(0)
+                    .map_io_err(|| format!("Failed to truncate free lists: {path:?}"))?;
+                match bitcode::decode(&bytes) {
+                    Ok(lists) => return Ok(Self { lists, file }),
+                    Err(e) => {
+                        error!("Corrupted free lists file: {path:?}\nError: {e}");
+                    }
+                }
+            }
         }
+        drop(path);
+        warn!("Reconstructing allocator free lists.");
+
+        let mut allocations = [BitVec::<usize, Lsb0>::EMPTY; 11];
+        for ring in [RingKind::Favorites, RingKind::Main] {
+            let ring = Ring::open(
+                0,
+                &*PathView::new(
+                    data_dir,
+                    match ring {
+                        RingKind::Favorites => "favorites.ring",
+                        RingKind::Main => "main.ring",
+                    },
+                ),
+            )?;
+            for entry in (0..ring.len()).filter_map(|i| ring.get(i)) {
+                match entry {
+                    Entry::Bucketed(entry) => {
+                        let slots = &mut allocations[size_to_bucket(entry.size())];
+                        let index = usize::try_from(entry.index()).unwrap();
+                        if slots.len() <= index {
+                            slots.resize(index, false);
+                            slots.push(true);
+                        } else {
+                            slots.set(index, true);
+                        }
+                    }
+                    Entry::Uninitialized | Entry::File => continue,
+                }
+            }
+        }
+
+        Ok(Self {
+            lists: RawFreeLists(allocations.map(|slots| {
+                slots
+                    .iter_zeros()
+                    .map(|i| u32::try_from(i).unwrap())
+                    .collect()
+            })),
+            file,
+        })
     }
 
     fn save(&mut self) -> Result<(), CliError> {
@@ -266,7 +314,7 @@ impl Allocator {
                 .map_io_err(|| format!("Failed to open directory: {file:?}"))
         }?;
 
-        let free_lists = FreeLists::load(PathView::new(&mut data_dir, "free-lists"))?;
+        let free_lists = FreeLists::load(&mut data_dir)?;
 
         Ok(Self {
             rings: Rings([favorites_ring, main_ring]),
@@ -277,14 +325,8 @@ impl Allocator {
                     free_lists,
                 },
                 direct_dir,
-
-                cache: bitcode::Buffer::new(),
             },
         })
-    }
-
-    pub fn trim(&mut self) {
-        mem::take(&mut self.data.cache);
     }
 
     pub fn add(

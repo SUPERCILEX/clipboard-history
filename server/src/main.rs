@@ -3,7 +3,7 @@
 use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 
 use error_stack::Report;
-use log::info;
+use log::{info, warn};
 use ringboard_core::{dirs::data_dir, Error, IoErr, PathView};
 use rustix::process::Pid;
 use thiserror::Error;
@@ -23,11 +23,6 @@ enum CliError {
     Core(#[from] Error),
     #[error("The server is already running: {pid:?}")]
     ServerAlreadyRunning { pid: Pid, lock_file: PathBuf },
-    #[error("Failed to deserialize object.")]
-    DeserializeError {
-        error: bitcode::Error,
-        context: Cow<'static, str>,
-    },
     #[error("Multiple errors occurred.")]
     Multiple(Vec<CliError>),
     #[error("Internal error")]
@@ -80,9 +75,6 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
                  initiate the recovery sequence on the next startup.",
             )
             .attach_printable(format!("Lock file: {lock_file:?}")),
-        CliError::DeserializeError { error, context } => Report::new(wrapper)
-            .attach_printable(error)
-            .attach_printable(context),
         CliError::Multiple(errs) => {
             let mut errs = VecDeque::from(errs);
             let mut report = into_report(errs.pop_front().unwrap_or(CliError::Internal {
@@ -120,6 +112,7 @@ fn run() -> Result<(), CliError> {
             if let Some(g) = claim_server_ownership(&data_dir)? {
                 break g;
             }
+            warn!("Unclean shutdown detected, forcibly claiming server lock.");
 
             let lock = PathView::new(&mut data_dir, "server.lock");
             fs::remove_file(&lock)

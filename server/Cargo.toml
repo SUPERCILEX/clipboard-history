@@ -12,6 +12,7 @@ license.workspace = true
 [dependencies]
 arrayvec = "0.7.4"
 bitcode = { version = "0.6.0", features = ["arrayvec"] }
+bitvec = "1.0.1"
 env_logger = { version = "0.11.3", default-features = false }
 error-stack = "0.4.1"
 io-uring = { version = "0.6.2", path = "/home/asaveau/Desktop/wip/io-uring" }

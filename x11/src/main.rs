@@ -1,5 +1,3 @@
-#![feature(inline_const)]
-
 use std::{fs::File, mem, ops::Deref, os::unix::fs::FileExt};
 
 use arrayvec::ArrayVec;
