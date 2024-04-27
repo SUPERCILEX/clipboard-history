@@ -32,16 +32,19 @@ use rand_xoshiro::{
     rand_core::{RngCore, SeedableRng},
     Xoshiro256PlusPlus,
 };
-use ringboard_core::{
-    bucket_to_length, copy_file_range_all,
-    dirs::{data_dir, socket_file},
-    protocol::{
-        AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
-        RemoveResponse, RingKind, SwapResponse,
+use ringboard_sdk::{
+    connect_to_server, connect_to_server_with,
+    core::{
+        bucket_to_length, copy_file_range_all,
+        dirs::{data_dir, socket_file},
+        protocol::{
+            AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
+            RemoveResponse, RingKind, SwapResponse,
+        },
+        read_server_pid, size_to_bucket, Error as CoreError, IoErr,
     },
-    read_server_pid, size_to_bucket, IoErr,
+    DatabaseReader, EntryReader, Kind,
 };
-use ringboard_sdk::{connect_to_server, connect_to_server_with, DatabaseReader, EntryReader, Kind};
 use rustc_hash::FxHasher;
 use rustix::{
     event::{poll, PollFd, PollFlags},
@@ -298,7 +301,7 @@ struct Dump {
 #[derive(Error, Debug)]
 enum CliError {
     #[error("{0}")]
-    Core(#[from] ringboard_core::Error),
+    Core(#[from] CoreError),
     #[error("{0}")]
     Sdk(#[from] ringboard_sdk::ClientError),
     #[error("Failed to delete or copy files.")]
@@ -326,18 +329,15 @@ fn main() -> error_stack::Result<(), Wrapper> {
     run().map_err(|e| {
         let wrapper = Wrapper::W(e.to_string());
         match e {
-            CliError::Core(e) | CliError::Sdk(ringboard_sdk::ClientError::Core(e)) => {
-                use ringboard_core::Error;
-                match e {
-                    Error::Io { error, context } => Report::new(error)
-                        .attach_printable(context)
-                        .change_context(wrapper),
-                    Error::NotARingboard { file: _ } => Report::new(wrapper),
-                    Error::InvalidPidError { error, context } => Report::new(error)
-                        .attach_printable(context)
-                        .change_context(wrapper),
-                }
-            }
+            CliError::Core(e) | CliError::Sdk(ringboard_sdk::ClientError::Core(e)) => match e {
+                CoreError::Io { error, context } => Report::new(error)
+                    .attach_printable(context)
+                    .change_context(wrapper),
+                CoreError::NotARingboard { file: _ } => Report::new(wrapper),
+                CoreError::InvalidPidError { error, context } => Report::new(error)
+                    .attach_printable(context)
+                    .change_context(wrapper),
+            },
             CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
@@ -543,7 +543,7 @@ fn wipe() -> Result<(), CliError> {
         let mut fds = [PollFd::new(&fd, PollFlags::IN)];
         poll(&mut fds, -1).map_io_err(|| format!("Failed to wait for server exit: {pid:?}"))?;
         if !fds[0].revents().contains(PollFlags::IN) {
-            return Err(CliError::Core(ringboard_core::Error::Io {
+            return Err(CliError::Core(CoreError::Io {
                 error: io::Error::new(ErrorKind::InvalidInput, "Bad poll response."),
                 context: "Failed to receive server exit response.".into(),
             }));
@@ -1297,9 +1297,9 @@ fn pipeline_add_request(
                 SendFlags::DONTWAIT
             },
         ) {
-            Err(ringboard_sdk::ClientError::Core(ringboard_core::Error::Io {
-                error: e, ..
-            })) if e.kind() == ErrorKind::WouldBlock => {
+            Err(ringboard_sdk::ClientError::Core(CoreError::Io { error: e, .. }))
+                if e.kind() == ErrorKind::WouldBlock =>
+            {
                 debug_assert!(*pending_adds > 0);
                 drain_add_requests(&server, retry, translation.as_deref_mut(), pending_adds)?;
                 retry = true;
@@ -1331,9 +1331,9 @@ fn drain_add_requests(
                 },
             )
         } {
-            Err(ringboard_sdk::ClientError::Core(ringboard_core::Error::Io {
-                error: e, ..
-            })) if e.kind() == ErrorKind::WouldBlock => {
+            Err(ringboard_sdk::ClientError::Core(CoreError::Io { error: e, .. }))
+                if e.kind() == ErrorKind::WouldBlock =>
+            {
                 debug_assert!(!all);
                 break;
             }

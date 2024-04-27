@@ -5,12 +5,14 @@ use std::{
 
 use log::{error, info};
 use memmap2::Mmap;
-use ringboard_core::{
-    dirs::data_dir,
-    protocol::{composite_id, decompose_id, RingKind},
-    IoErr,
+use ringboard_sdk::{
+    core::{
+        dirs::data_dir,
+        protocol::{composite_id, decompose_id, RingKind},
+        Error as CoreError, IoErr,
+    },
+    DatabaseReader, EntryReader, Kind, RingReader,
 };
-use ringboard_sdk::{DatabaseReader, EntryReader, Kind, RingReader};
 use rustc_hash::FxHasher;
 use rustix::fs::{statx, AtFlags, StatxFlags};
 
@@ -29,7 +31,7 @@ pub enum CopyData<'a> {
 }
 
 impl CopyDeduplication {
-    pub fn new() -> Result<Self, ringboard_core::Error> {
+    pub fn new() -> Result<Self, CoreError> {
         let mut main = ArrayMap::default();
         let mut favorites = ArrayMap::default();
         let (database, mut reader) = {
@@ -44,7 +46,7 @@ impl CopyDeduplication {
             let fav_history = favorites.ids.len();
             let main_history = main.ids.len();
 
-            let mut load = |mut iter: RingReader, count| -> Result<(), ringboard_core::Error> {
+            let mut load = |mut iter: RingReader, count| -> Result<(), CoreError> {
                 let count = u32::try_from(count).unwrap().min(iter.ring().len());
                 let tail = iter.ring().write_head();
                 info!(

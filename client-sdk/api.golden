@@ -1,4 +1,5 @@
 pub mod clipboard_history_client_sdk
+pub use clipboard_history_client_sdk::core
 pub enum clipboard_history_client_sdk::ClientError
 pub clipboard_history_client_sdk::ClientError::Core(clipboard_history_core::Error)
 pub clipboard_history_client_sdk::ClientError::InvalidResponse

@@ -1,4 +1,4 @@
-use ringboard_core::TEXT_MIMES;
+use ringboard_sdk::core::TEXT_MIMES;
 use x11rb::protocol::xproto::Atom;
 
 #[derive(Default)]

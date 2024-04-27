@@ -3,7 +3,7 @@ use std::{fs::File, mem, ops::Deref, os::unix::fs::FileExt};
 use arrayvec::ArrayVec;
 use error_stack::Report;
 use log::{debug, error, info, trace, warn};
-use ringboard_core::{
+use ringboard_sdk::core::{
     dirs::socket_file,
     protocol::{AddResponse, MimeType, MoveToFrontResponse, RingKind},
     Error, IoErr,

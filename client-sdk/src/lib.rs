@@ -8,6 +8,7 @@ use std::{
 };
 
 pub use ring_reader::{DatabaseReader, Entry, EntryReader, Kind, LoadedEntry, RingReader};
+pub use ringboard_core as core;
 use ringboard_core::{
     protocol,
     protocol::{
