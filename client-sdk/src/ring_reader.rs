@@ -326,6 +326,11 @@ impl Entry {
     }
 
     #[must_use]
+    pub const fn ring(&self) -> RingKind {
+        self.ring
+    }
+
+    #[must_use]
     pub fn id(&self) -> u64 {
         composite_id(self.ring, self.id)
     }
