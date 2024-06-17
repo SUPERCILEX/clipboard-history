@@ -43,7 +43,9 @@ the installation script for systemd:
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/install-with-cargo-systemd.sh | bash
 ```
 
-### Baseline
+### Manual installation
+
+#### Common core
 
 You'll need the server, an X11 or Wayland clipboard watcher, and a way to view your clipboard:
 
@@ -63,13 +65,13 @@ You'll need the server, an X11 or Wayland clipboard watcher, and a way to view y
    a [custom shortcut](https://help.gnome.org/users/gnome-help/stable/keyboard-shortcuts-set.html.en)
    to start your GUI, for example with `bash -c 'PATH=~/.cargo/bin:$PATH ringboard-egui'`.
 
-### systemd
+#### For systemd
 
 Install the [server](server/ringboard-server.service) and [X11](x11/ringboard-x11.service)
 or [Wayland](wayland/ringboard-wayland.service) services into `~/.config/systemd/user` and enable
 them: `systemctl --user enable ringboard-{wayland,x11}`.
 
-### Manually
+#### For framework-less systems
 
 You'll need to start the Ringboard server and X11/Wayland clipboard watcher on boot.
 
@@ -83,8 +85,7 @@ Each submodule contains its own README with details on how to use it.
     - [`client-sdk/`](client-sdk): The client SDK offers APIs to read and write Ringboard data.
     - [`egui/`](egui): The egui Ringboard client displays clipboard entries in a standard GUI.
     - [`ringboard/`](ringboard): The core code shared across many Ringboard crates.
-    - [`server/`](server): The Ringboard server is in charge of writing data to the Ringboard
-      database.
+    - [`server/`](server): The Ringboard server writes data to the Ringboard database.
     - [`x11/`](x11): The X11 clipboard watcher sends new clipboard entries to the Ringboard server.
     - [`wayland/`](wayland): The Wayland clipboard watcher sends new clipboard entries to the
       Ringboard server.
