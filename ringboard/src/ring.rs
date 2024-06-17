@@ -117,6 +117,9 @@ pub struct Mmap {
     len: usize,
 }
 
+unsafe impl Send for Mmap {}
+unsafe impl Sync for Mmap {}
+
 impl Mmap {
     pub fn new<Fd: AsFd>(fd: Fd, len: usize) -> rustix::io::Result<Self> {
         Ok(Self {
@@ -160,6 +163,20 @@ impl Mmap {
     #[must_use]
     pub const fn len(&self) -> usize {
         self.len
+    }
+}
+
+impl Deref for Mmap {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.ptr().as_ptr(), self.len()) }
+    }
+}
+
+impl AsRef<[u8]> for Mmap {
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
     }
 }
 

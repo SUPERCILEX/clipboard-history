@@ -487,6 +487,10 @@ impl EntryReader {
         }
         buckets.into_inner().unwrap()
     }
+
+    pub fn direct(&self) -> BorrowedFd {
+        self.direct.as_fd()
+    }
 }
 
 struct BucketTooShort {
