@@ -84,7 +84,7 @@ enum Cmd {
     /// Get an entry from the database.
     ///
     /// The entry bytes will be outputted to stdout.
-    #[command(aliases = ["at"])]
+    #[command(aliases = ["g", "at", "gimme"])]
     Get(EntryAction),
 
     /// Add an entry to the database.
@@ -108,7 +108,7 @@ enum Cmd {
     Swap(Swap),
 
     /// Delete an entry from the database.
-    #[command(aliases = ["d", "delete", "destroy"])]
+    #[command(aliases = ["r", "del", "delete", "destroy", "yeet"])]
     Remove(EntryAction),
 
     /// Wipe the entire database.
@@ -130,7 +130,7 @@ enum Cmd {
     GarbageCollect,
 
     /// Debugging tools for developers.
-    #[command(alias = "dev")]
+    #[command(aliases = ["d", "dev"])]
     #[command(subcommand)]
     Debug(Dev),
 }
@@ -138,7 +138,7 @@ enum Cmd {
 #[derive(Subcommand, Debug)]
 enum Dev {
     /// Print statistics about the Ringboard database.
-    #[command(alias = "nerd")]
+    #[command(aliases = ["nerd", "kowalski-analysis"])]
     Stats,
 
     /// Dump the contents of the database for analysis.
