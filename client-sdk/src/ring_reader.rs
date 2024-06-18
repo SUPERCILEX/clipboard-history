@@ -271,6 +271,22 @@ enum LoadedEntryFd {
     HackySelfReference(BorrowedFd<'static>),
 }
 
+pub fn xattr_mime_type<Fd: AsFd>(fd: Fd) -> Result<MimeType, ringboard_core::Error> {
+    let mut mime_type = [0u8; MimeType::new_const().capacity()];
+    let len = match fgetxattr(fd, c"user.mime_type", &mut mime_type) {
+        Err(Errno::NODATA) => {
+            return Ok(MimeType::new());
+        }
+        r => r.map_io_err(|| "Failed to read extended attributes.")?,
+    };
+    let mime_type = str::from_utf8(&mime_type[..len]).map_err(|e| ringboard_core::Error::Io {
+        error: io::Error::new(ErrorKind::InvalidInput, e),
+        context: "Database corruption detected: invalid mime type detected".into(),
+    })?;
+
+    Ok(MimeType::from(mime_type).unwrap())
+}
+
 impl<T> LoadedEntry<T> {
     pub fn into_inner(self) -> T {
         self.loaded
@@ -281,20 +297,7 @@ impl<T> LoadedEntry<T> {
             return Ok(MimeType::new());
         };
 
-        let mut mime_type = [0u8; MimeType::new_const().capacity()];
-        let len = match fgetxattr(fd, c"user.mime_type", &mut mime_type) {
-            Err(Errno::NODATA) => {
-                return Ok(MimeType::new());
-            }
-            r => r.map_io_err(|| "Failed to read extended attributes.")?,
-        };
-        let mime_type =
-            str::from_utf8(&mime_type[..len]).map_err(|e| ringboard_core::Error::Io {
-                error: io::Error::new(ErrorKind::InvalidInput, e),
-                context: "Database corruption detected: invalid mime type detected".into(),
-            })?;
-
-        Ok(MimeType::from(mime_type).unwrap())
+        xattr_mime_type(fd)
     }
 
     pub fn backing_file(&self) -> Option<BorrowedFd> {
