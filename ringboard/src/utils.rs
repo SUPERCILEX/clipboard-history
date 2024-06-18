@@ -1,5 +1,4 @@
 use std::{
-    cmp::max,
     ffi::CStr,
     fmt::{Debug, Formatter},
     fs::File,
@@ -126,7 +125,14 @@ pub fn open_buckets<F: FnMut(&str) -> Result<OwnedFd>>(
 
 #[must_use]
 pub fn size_to_bucket(bytes: u32) -> usize {
-    usize::try_from(max(1, bytes.saturating_sub(1)).ilog2().saturating_sub(1)).unwrap()
+    usize::try_from(
+        bytes
+            .saturating_sub(1)
+            .checked_ilog2()
+            .unwrap_or(0)
+            .saturating_sub(1),
+    )
+    .unwrap()
 }
 
 #[must_use]
