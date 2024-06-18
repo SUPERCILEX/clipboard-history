@@ -334,6 +334,11 @@ impl Entry {
     }
 
     #[must_use]
+    pub const fn index(&self) -> u32 {
+        self.id
+    }
+
+    #[must_use]
     pub fn id(&self) -> u64 {
         composite_id(self.ring, self.id)
     }

@@ -2,7 +2,8 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet, HashMap},
+    cmp::{max, min},
+    collections::{BTreeMap, HashMap},
     fmt::{Debug, Display, Formatter},
     fs,
     fs::File,
@@ -46,6 +47,7 @@ use ringboard_sdk::{
         ring::Mmap,
         size_to_bucket, Error as CoreError, IoErr,
     },
+    duplicate_detection::DuplicateDetector,
     search::{BucketAndIndex, EntryLocation, Query, QueryResult},
     DatabaseReader, EntryReader, Kind,
 };
@@ -851,32 +853,15 @@ fn migrate_from_gch(
 
 #[allow(clippy::too_many_lines, clippy::cast_precision_loss)]
 fn stats() -> Result<(), CliError> {
-    #[derive(Default)]
-    struct RingStats<'a> {
+    #[derive(Default, Debug)]
+    struct RingStats {
         capacity: u32,
         bucketed_entry_count: u32,
         file_entry_count: u32,
-
-        entries: BTreeSet<Cow<'a, [u8]>>,
         num_duplicates: u32,
-    }
-
-    impl Debug for RingStats<'_> {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            let Self {
-                capacity,
-                bucketed_entry_count,
-                file_entry_count,
-                entries: _,
-                num_duplicates,
-            } = self;
-            f.debug_struct("RingStats")
-                .field("capacity", capacity)
-                .field("bucketed_entry_count", bucketed_entry_count)
-                .field("file_entry_count", file_entry_count)
-                .field("num_duplicates", num_duplicates)
-                .finish()
-        }
+        min_entry_size: u64,
+        max_entry_size: u64,
+        owned_bytes: u64,
     }
 
     #[derive(Default, Debug)]
@@ -890,19 +875,19 @@ fn stats() -> Result<(), CliError> {
 
     #[derive(Default, Debug)]
     struct DirectFileStats {
-        owned_bytes: usize,
+        owned_bytes: u64,
         allocated_bytes: u64,
         mime_types: BTreeMap<MimeType, u32>,
     }
 
     #[derive(Default, Debug)]
-    struct Stats<'a> {
-        rings: HashMap<RingKind, RingStats<'a>, BuildHasherDefault<FxHasher>>,
+    struct Stats {
+        rings: HashMap<RingKind, RingStats, BuildHasherDefault<FxHasher>>,
         buckets: [BucketStats; 11],
         direct_files: DirectFileStats,
     }
 
-    impl Display for Stats<'_> {
+    impl Display for Stats {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             let mut s = f.debug_struct("Stats");
 
@@ -923,32 +908,22 @@ fn stats() -> Result<(), CliError> {
                                 capacity,
                                 bucketed_entry_count,
                                 file_entry_count,
-                                ref entries,
                                 num_duplicates: _,
+                                min_entry_size: _,
+                                max_entry_size: _,
+                                owned_bytes,
                             },
                         ) in &self.rings
                         {
                             rings.key(kind).value_with(|f| {
                                 let num_entries = bucketed_entry_count + file_entry_count;
-                                let owned_bytes = entries.iter().map(|b| b.len()).sum::<usize>();
                                 let mut s = f.debug_struct("Ring");
                                 s.field("num_entries", &num_entries)
                                     .field("uninitialized_entry_count", &(capacity - num_entries))
-                                    .field("owned_bytes", &owned_bytes)
                                     .field(
                                         "mean_entry_size",
                                         &(owned_bytes as f64 / f64::from(num_entries)),
                                     );
-                                if !entries.is_empty() {
-                                    s.field(
-                                        "min_entry_size",
-                                        &entries.iter().map(|b| b.len()).min().unwrap(),
-                                    )
-                                    .field(
-                                        "max_entry_size",
-                                        &entries.iter().map(|b| b.len()).max().unwrap(),
-                                    );
-                                }
                                 s.finish()
                             });
                         }
@@ -1006,13 +981,14 @@ fn stats() -> Result<(), CliError> {
         buckets,
         direct_files:
             DirectFileStats {
-                owned_bytes,
+                owned_bytes: direct_owned_bytes,
                 allocated_bytes,
                 mime_types,
             },
     } = &mut stats;
 
-    let (database, reader) = open_db()?;
+    let (database, mut reader) = open_db()?;
+    let mut duplicates = DuplicateDetector::default();
 
     for (
         i,
@@ -1038,43 +1014,71 @@ fn stats() -> Result<(), CliError> {
             capacity,
             bucketed_entry_count,
             file_entry_count,
-            entries,
             num_duplicates,
+            min_entry_size,
+            max_entry_size,
+            owned_bytes: ring_owned_bytes,
         } = &mut ring_stats;
         *capacity = ring_reader.ring().capacity();
+        *min_entry_size = u64::MAX;
         let kind = ring_reader.kind();
 
         for entry in ring_reader {
+            let entry_size;
+            let duplicate;
+
             match entry.kind() {
-                Kind::Bucket(entry) => {
+                Kind::Bucket(bucket) => {
                     *bucketed_entry_count += 1;
 
-                    let bucket = usize::from(size_to_bucket(entry.size()));
                     let BucketStats {
                         size_class: _,
                         num_slots: _,
                         used_slots,
                         owned_bytes,
-                    } = &mut buckets[bucket];
+                    } = &mut buckets[usize::from(size_to_bucket(bucket.size()))];
                     *used_slots += 1;
-                    *owned_bytes += u64::from(entry.size());
+
+                    entry_size = u64::from(bucket.size());
+                    *owned_bytes += entry_size;
+
+                    duplicate = duplicates.add_data_entry(
+                        entry.ring(),
+                        entry.index(),
+                        &entry.to_slice(&mut reader)?,
+                    );
                 }
                 Kind::File => {
                     *file_entry_count += 1;
+
+                    let file = entry.to_file(&mut reader)?;
+                    let stats = statx(
+                        &*file,
+                        c"",
+                        AtFlags::EMPTY_PATH,
+                        StatxFlags::SIZE | StatxFlags::BLOCKS,
+                    )
+                    .map_io_err(|| format!("Failed to statx file: {file:?}"))?;
+
+                    entry_size = stats.stx_size;
+                    *direct_owned_bytes += entry_size;
+                    *mime_types.entry(file.mime_type()?).or_default() += 1;
+                    *allocated_bytes += stats.stx_blocks * 512;
+
+                    duplicate = if entry_size > 4096 {
+                        duplicates.add_len_entry(entry.ring(), entry.index(), entry_size)
+                    } else {
+                        let bytes = Mmap::new(&*file, usize::try_from(entry_size).unwrap())
+                            .map_io_err(|| format!("Failed to mmap file: {file:?}"))?;
+                        duplicates.add_data_entry(entry.ring(), entry.index(), &bytes)
+                    };
                 }
             }
 
-            // TODO replace with hashing so we can mutably borrow
-            let data = entry.to_slice_raw(&reader)?.unwrap();
-            if let Some(fd) = data.backing_file() {
-                *owned_bytes += data.len();
-                *mime_types.entry(data.mime_type()?).or_default() += 1;
-                *allocated_bytes += statx(fd, c"", AtFlags::EMPTY_PATH, StatxFlags::BLOCKS)
-                    .map_io_err(|| format!("Failed to statx entry: {entry:?}"))?
-                    .stx_blocks
-                    * 512;
-            }
-            if !entries.insert(data.into_inner()) {
+            *ring_owned_bytes += entry_size;
+            *min_entry_size = min(*min_entry_size, entry_size);
+            *max_entry_size = max(*max_entry_size, entry_size);
+            if duplicate {
                 *num_duplicates += 1;
             }
         }
