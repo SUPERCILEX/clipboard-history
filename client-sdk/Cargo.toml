@@ -15,7 +15,7 @@ memchr = "2.7.4"
 memmap2 = "0.9.4"
 regex = "1.10.5"
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
-rustix = { version = "0.38.30", features = ["net", "fs"] }
+rustix = { version = "0.38.30", features = ["net", "fs", "thread"] }
 thiserror = "1.0.58"
 
 [dev-dependencies]

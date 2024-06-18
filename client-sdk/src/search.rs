@@ -18,6 +18,7 @@ use ringboard_core::{bucket_to_length, size_to_bucket, IoErr, TEXT_MIMES};
 use rustix::{
     fs::{openat, Mode, OFlags, RawDir},
     path::Arg,
+    thread::{unshare, UnshareFlags},
 };
 
 use crate::{ring_reader::xattr_mime_type, EntryReader};
@@ -154,19 +155,22 @@ fn search_impl(
     threads.push(thread::spawn({
         let stop = stop.clone();
         move || {
+            let direct_dir = match openat(reader.direct(), c".", OFlags::DIRECTORY, Mode::empty())
+                .map_io_err(|| "Failed to open direct dir.")
+                .and_then(|fd| {
+                    unshare(UnshareFlags::FILES | UnshareFlags::FS)
+                        .map_io_err(|| "Failed to unshare I/O.")?;
+                    Ok(fd)
+                }) {
+                Ok(fd) => fd,
+                Err(e) => {
+                    let _ = sender.send(Err(e));
+                    return;
+                }
+            };
+
             let mut buf = [MaybeUninit::uninit(); 8192];
-            let mut iter = RawDir::new(
-                match openat(reader.direct(), c".", OFlags::DIRECTORY, Mode::empty())
-                    .map_io_err(|| "Failed to open direct dir.")
-                {
-                    Ok(fd) => fd,
-                    Err(e) => {
-                        let _ = sender.send(Err(e));
-                        return;
-                    }
-                },
-                &mut buf,
-            );
+            let mut iter = RawDir::new(&direct_dir, &mut buf);
             while let Some(file) = iter.next() {
                 if stop.load(Ordering::Relaxed) {
                     break;
@@ -182,18 +186,14 @@ fn search_impl(
                             }
                         }
 
-                        let fd = openat(
-                            reader.direct(),
-                            file.file_name(),
-                            OFlags::RDONLY,
-                            Mode::empty(),
-                        )
-                        .map_io_err(|| {
-                            format!(
-                                "Failed to open direct allocation: {:?}",
-                                file.file_name().to_string_lossy()
-                            )
-                        })?;
+                        let fd =
+                            openat(&direct_dir, file.file_name(), OFlags::RDONLY, Mode::empty())
+                                .map_io_err(|| {
+                                    format!(
+                                        "Failed to open direct allocation: {:?}",
+                                        file.file_name().to_string_lossy()
+                                    )
+                                })?;
                         let mime_type = xattr_mime_type(&fd)?;
                         if !mime_type.is_empty() || !TEXT_MIMES.contains(&&*mime_type) {
                             return Ok(None);
