@@ -14,7 +14,7 @@ use arrayvec::ArrayVec;
 use memchr::memmem::Finder;
 use memmap2::Mmap;
 use regex::bytes::Regex;
-use ringboard_core::{bucket_to_length, size_to_bucket, IoErr, TEXT_MIMES};
+use ringboard_core::{bucket_to_length, ring::MAX_ENTRIES, size_to_bucket, IoErr, TEXT_MIMES};
 use rustix::{
     fs::{openat, Mode, OFlags, RawDir},
     path::Arg,
@@ -74,6 +74,24 @@ pub struct QueryResult {
 pub enum EntryLocation {
     Bucketed { bucket: u8, index: u32 },
     File { entry_id: u64 },
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct BucketAndIndex(u32);
+
+impl BucketAndIndex {
+    pub fn new(bucket: u8, index: u32) -> Self {
+        debug_assert!(index <= MAX_ENTRIES);
+        Self((index << u8::BITS) | u32::from(bucket))
+    }
+
+    pub fn bucket(&self) -> u8 {
+        u8::try_from(self.0 & u32::from(u8::MAX)).unwrap()
+    }
+
+    pub fn index(&self) -> u32 {
+        self.0 >> u8::BITS
+    }
 }
 
 struct QueryIter {
