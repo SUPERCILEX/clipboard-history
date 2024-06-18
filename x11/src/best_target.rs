@@ -3,10 +3,10 @@ use x11rb::protocol::xproto::Atom;
 
 #[derive(Default)]
 struct KnownSeenMimes {
+    text: Option<Atom>,
     x_special: Option<Atom>,
     chromium_custom: Option<Atom>,
     image: Option<Atom>,
-    text: Option<Atom>,
     other: Option<Atom>,
 }
 
@@ -20,22 +20,22 @@ impl BestMimeTypeFinder {
         let Self {
             seen:
                 KnownSeenMimes {
+                    text,
                     x_special,
                     chromium_custom,
                     image,
-                    text,
                     other,
                 },
         } = self;
 
-        let target = if mime.starts_with("x-special/") {
+        let target = if TEXT_MIMES.iter().any(|b| mime.eq_ignore_ascii_case(b)) {
+            text
+        } else if mime.starts_with("x-special/") {
             x_special
         } else if mime.starts_with("chromium/") {
             chromium_custom
         } else if mime.starts_with("image/") {
             image
-        } else if TEXT_MIMES.iter().any(|b| mime.eq_ignore_ascii_case(b)) {
-            text
         } else if mime.chars().next().map_or(true, char::is_lowercase) {
             other
         } else {
@@ -50,14 +50,14 @@ impl BestMimeTypeFinder {
         let Self {
             seen:
                 KnownSeenMimes {
+                    text,
                     x_special,
                     chromium_custom,
                     image,
-                    text,
                     other,
                 },
         } = *self;
 
-        x_special.or(chromium_custom).or(image).or(text).or(other)
+        text.or(x_special).or(chromium_custom).or(image).or(other)
     }
 }
