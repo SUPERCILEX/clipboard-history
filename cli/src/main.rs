@@ -23,7 +23,6 @@ use base64_serde::base64_serde_type;
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
 use error_stack::Report;
-use memmap2::Mmap;
 use rand::{
     distributions::{Alphanumeric, DistString, Standard},
     Rng,
@@ -43,7 +42,9 @@ use ringboard_sdk::{
             AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
             RemoveResponse, RingKind, SwapResponse,
         },
-        read_server_pid, size_to_bucket, Error as CoreError, IoErr,
+        read_server_pid,
+        ring::Mmap,
+        size_to_bucket, Error as CoreError, IoErr,
     },
     search::{BucketAndIndex, EntryLocation, Query, QueryResult},
     DatabaseReader, EntryReader, Kind,
@@ -750,8 +751,7 @@ fn migrate_from_gch(
         let file =
             File::open(&database).map_io_err(|| format!("Failed to open file: {database:?}"))?;
         (
-            unsafe { Mmap::map(&file) }
-                .map_io_err(|| format!("Failed to mmap file: {database:?}"))?,
+            Mmap::from(&file).map_io_err(|| format!("Failed to mmap file: {database:?}"))?,
             file,
         )
     };
@@ -1175,8 +1175,8 @@ fn migrate_from_ringboard_export(
     } else {
         let dump =
             File::open(&dump_file).map_io_err(|| format!("Failed to open file: {dump_file:?}"))?;
-        let dump = unsafe { Mmap::map(&dump) }
-            .map_io_err(|| format!("Failed to mmap file: {dump_file:?}"))?;
+        let dump =
+            Mmap::from(&dump).map_io_err(|| format!("Failed to mmap file: {dump_file:?}"))?;
         drop(dump_file);
 
         let iter = serde_json::Deserializer::from_slice(&dump).into_iter::<ExportEntry>();
@@ -1206,7 +1206,7 @@ fn generate(
     let mut pending_adds = 0;
 
     for _ in 0..num_entries {
-        let data = generate_random_entry_file(&mut rng, distr)?;
+        let data = generate_random_entry_file(&mut rng, distr)?.0;
         pipeline_add_request(
             &server,
             addr,
@@ -1293,7 +1293,8 @@ fn fuzz(
                             mime
                         };
 
-                        let file = generate_random_entry_file(&mut rng, entry_size_distr)?;
+                        let (file, file_len) =
+                            generate_random_entry_file(&mut rng, entry_size_distr)?;
                         let AddResponse::Success { id } = ringboard_sdk::add(
                             server,
                             addr,
@@ -1303,7 +1304,7 @@ fn fuzz(
                         )?;
                         data.insert(
                             id,
-                            unsafe { Mmap::map(&file) }
+                            Mmap::new(&file, usize::try_from(file_len).unwrap())
                                 .map_io_err(|| format!("Failed to mmap file: {file:?}"))?,
                         );
                         max_id_seen = max_id_seen.max(id);
@@ -1386,7 +1387,7 @@ fn fuzz(
                         Kind::Bucket(_) => &*entry.to_slice(&mut reader)?,
                         Kind::File => {
                             let db_file = entry.to_file(&mut reader)?;
-                            &*unsafe { Mmap::map(&*db_file) }
+                            &*Mmap::from(&*db_file)
                                 .map_io_err(|| format!("Failed to mmap file: {db_file:?}"))?
                         }
                     };
@@ -1475,7 +1476,7 @@ fn drain_add_requests(
 fn generate_random_entry_file(
     rng: &mut (impl RngCore + 'static),
     len_distr: LogNormal<f64>,
-) -> Result<File, CliError> {
+) -> Result<(File, u64), CliError> {
     let mut file = File::from(
         memfd_create("ringboard_gen", MemfdFlags::empty())
             .map_io_err(|| "Failed to create data entry file.")?,
@@ -1490,7 +1491,7 @@ fn generate_random_entry_file(
     file.seek(SeekFrom::Start(0))
         .map_io_err(|| "Failed to reset entry file offset.")?;
 
-    Ok(file)
+    Ok((file, len))
 }
 
 #[cfg(test)]

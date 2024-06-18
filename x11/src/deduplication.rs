@@ -4,11 +4,11 @@ use std::{
 };
 
 use log::{error, info};
-use memmap2::Mmap;
 use ringboard_sdk::{
     core::{
         dirs::data_dir,
         protocol::{composite_id, decompose_id, RingKind},
+        ring::Mmap,
         Error as CoreError, IoErr,
     },
     DatabaseReader, EntryReader, Kind, RingReader,
@@ -103,7 +103,7 @@ impl CopyDeduplication {
             match data {
                 CopyData::Slice(s) => s.hash(&mut data_hasher),
                 CopyData::File(f) => {
-                    if let Ok(m) = unsafe { Mmap::map(f) }
+                    if let Ok(m) = Mmap::new(f, usize::try_from(len).unwrap())
                         .inspect_err(|e| error!("Failed to mmap file: {f:?}\nError: {e:?}"))
                     {
                         m.hash(&mut data_hasher);
@@ -145,12 +145,12 @@ impl CopyDeduplication {
                                 error!("Failed to load entry: {entry:?}\nError: {e:?}");
                             })
                             .ok()?;
-                        let a = unsafe { Mmap::map(&*entry_file) }
+                        let a = Mmap::from(&*entry_file)
                             .inspect_err(|e| {
                                 error!("Failed to mmap file: {entry_file:?}\nError: {e:?}");
                             })
                             .ok()?;
-                        let b = unsafe { Mmap::map(data) }
+                        let b = Mmap::from(data)
                             .inspect_err(|e| error!("Failed to mmap file: {data:?}\nError: {e:?}"))
                             .ok()?;
 

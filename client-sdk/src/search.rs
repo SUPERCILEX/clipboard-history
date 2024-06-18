@@ -12,9 +12,12 @@ use std::{
 
 use arrayvec::ArrayVec;
 use memchr::memmem::Finder;
-use memmap2::Mmap;
 use regex::bytes::Regex;
-use ringboard_core::{bucket_to_length, ring::MAX_ENTRIES, size_to_bucket, IoErr, TEXT_MIMES};
+use ringboard_core::{
+    bucket_to_length,
+    ring::{Mmap, MAX_ENTRIES},
+    size_to_bucket, IoErr, TEXT_MIMES,
+};
 use rustix::{
     fs::{openat, Mode, OFlags, RawDir},
     path::Arg,
@@ -223,8 +226,8 @@ fn search_impl(
                             return Ok(None);
                         }
 
-                        let bytes = unsafe { Mmap::map(&fd) }
-                            .map_io_err(|| "Failed to mmap direct allocation.")?;
+                        let bytes =
+                            Mmap::from(&fd).map_io_err(|| "Failed to mmap direct allocation.")?;
                         let Some((start, end)) = query.find(&bytes) else {
                             return Ok(None);
                         };

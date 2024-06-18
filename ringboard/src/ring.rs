@@ -121,7 +121,19 @@ unsafe impl Send for Mmap {}
 unsafe impl Sync for Mmap {}
 
 impl Mmap {
+    pub fn from<Fd: AsFd>(fd: Fd) -> rustix::io::Result<Self> {
+        let len = statx(&fd, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)?.stx_size;
+        Self::new(fd, usize::try_from(len).unwrap())
+    }
+
     pub fn new<Fd: AsFd>(fd: Fd, len: usize) -> rustix::io::Result<Self> {
+        if len == 0 {
+            return Ok(Self {
+                ptr: NonNull::dangling(),
+                len,
+            });
+        }
+
         Ok(Self {
             ptr: unsafe {
                 NonNull::new_unchecked(mmap(
@@ -159,10 +171,14 @@ impl Mmap {
         self.ptr
     }
 
-    #[allow(clippy::len_without_is_empty)]
     #[must_use]
     pub const fn len(&self) -> usize {
         self.len
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 
