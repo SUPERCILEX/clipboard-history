@@ -133,6 +133,11 @@ fn search_impl(
                     break;
                 }
 
+                let entry = if let Some(stop) = memchr::memchr(0, entry) {
+                    &entry[..stop]
+                } else {
+                    entry
+                };
                 let Some((start, end)) = query.find(entry) else {
                     continue;
                 };
