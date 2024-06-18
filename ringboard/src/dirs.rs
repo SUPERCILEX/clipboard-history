@@ -1,4 +1,7 @@
-use std::path::{PathBuf, MAIN_SEPARATOR};
+use std::{
+    env,
+    path::{PathBuf, MAIN_SEPARATOR},
+};
 
 #[must_use]
 pub fn data_dir() -> PathBuf {
@@ -9,6 +12,10 @@ pub fn data_dir() -> PathBuf {
 
 #[must_use]
 pub fn socket_file() -> PathBuf {
+    if let Some(s) = env::var_os("RINGBOARD_SOCK") {
+        return PathBuf::from(s);
+    }
+
     let mut file = PathBuf::from("/tmp");
     file.push(
         dirs::home_dir()
