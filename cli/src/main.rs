@@ -1046,11 +1046,7 @@ fn stats() -> Result<(), CliError> {
                     entry_size = u64::from(bucket.size());
                     *owned_bytes += entry_size;
 
-                    duplicate = duplicates.add_data_entry(
-                        entry.ring(),
-                        entry.index(),
-                        &entry.to_slice(&mut reader)?,
-                    );
+                    duplicate = duplicates.add_entry(entry, &database, &mut reader)?;
                 }
                 Kind::File => {
                     *file_entry_count += 1;
@@ -1069,13 +1065,7 @@ fn stats() -> Result<(), CliError> {
                     *mime_types.entry(file.mime_type()?).or_default() += 1;
                     *allocated_bytes += stats.stx_blocks * 512;
 
-                    duplicate = if entry_size > 4096 {
-                        duplicates.add_len_entry(entry.ring(), entry.index(), entry_size)
-                    } else {
-                        let bytes = Mmap::new(&*file, usize::try_from(entry_size).unwrap())
-                            .map_io_err(|| format!("Failed to mmap file: {file:?}"))?;
-                        duplicates.add_data_entry(entry.ring(), entry.index(), &bytes)
-                    };
+                    duplicate = duplicates.add_entry(entry, &database, &mut reader)?;
                 }
             }
 
