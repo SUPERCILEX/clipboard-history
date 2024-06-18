@@ -15,6 +15,7 @@ use std::{
     },
     path::{Path, PathBuf},
     str,
+    sync::Arc,
 };
 
 use ask::Answer;
@@ -32,6 +33,7 @@ use rand_xoshiro::{
     rand_core::{RngCore, SeedableRng},
     Xoshiro256PlusPlus,
 };
+use regex::bytes::Regex;
 use ringboard_sdk::{
     connect_to_server, connect_to_server_with,
     core::{
@@ -43,6 +45,7 @@ use ringboard_sdk::{
         },
         read_server_pid, size_to_bucket, Error as CoreError, IoErr,
     },
+    search::{BucketAndIndex, EntryLocation, Query, QueryResult},
     DatabaseReader, EntryReader, Kind,
 };
 use rustc_hash::FxHasher;
@@ -86,6 +89,10 @@ enum Cmd {
     /// The entry bytes will be outputted to stdout.
     #[command(aliases = ["g", "at", "gimme"])]
     Get(EntryAction),
+
+    /// Searches the Ringboard database for entries matching a query.
+    #[command(aliases = ["f", "find", "query"])]
+    Search(Search),
 
     /// Add an entry to the database.
     ///
@@ -196,6 +203,18 @@ struct EntryAction {
     /// The entry ID.
     #[arg(required = true)]
     id: u64,
+}
+
+#[derive(Args, Debug)]
+#[command(arg_required_else_help = true)]
+struct Search {
+    /// Interpret the query string as RegEx instead of a plain-text match.
+    #[arg(short, long)]
+    regex: bool,
+
+    /// The query string to search for.
+    #[arg(required = true)]
+    query: String,
 }
 
 #[derive(Args, Debug)]
@@ -314,6 +333,10 @@ enum CliError {
     DatabaseNotFound(PathBuf),
     #[error("JSON (de)serialization failed.")]
     SerdeJson(#[from] serde_json::Error),
+    #[error("Regex instantiation failed.")]
+    Regex(#[from] regex::Error),
+    #[error("An internal error occurred in search.")]
+    InternalSearchError,
 }
 
 #[derive(Error, Debug)]
@@ -358,6 +381,10 @@ fn main() -> error_stack::Result<(), Wrapper> {
             }
             CliError::Fuc(e) => Report::new(e).change_context(wrapper),
             CliError::SerdeJson(e) => Report::new(e).change_context(wrapper),
+            CliError::Regex(e) => Report::new(e).change_context(wrapper),
+            CliError::InternalSearchError => Report::new(wrapper).attach_printable(
+                "Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new",
+            ),
         }
     })
 }
@@ -372,6 +399,7 @@ fn run() -> Result<(), CliError> {
     };
     match cmd {
         Cmd::Get(data) => get(data),
+        Cmd::Search(data) => search(data),
         Cmd::Add(data) => add(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Favorite(data) => move_to_front(
             connect_to_server(&server_addr)?,
@@ -426,6 +454,102 @@ fn get(EntryAction { id }: EntryAction) -> Result<(), CliError> {
     let entry = database.get_raw(id)?;
     io::copy(&mut *entry.to_file(&mut reader)?, &mut io::stdout().lock())
         .map_io_err(|| "Failed to write entry to stdout")?;
+    Ok(())
+}
+
+fn search(Search { regex, query }: Search) -> Result<(), CliError> {
+    const PREFIX_CONTEXT: usize = 40;
+    const CONTEXT_WINDOW: usize = 100;
+
+    let (mut database, reader) = open_db()?;
+    let mut output = io::stdout().lock();
+    let mut print_entry = |entry_id, buf: &[u8], start: usize, end: usize| {
+        writeln!(output, "\n--- ENTRY {entry_id} ---").unwrap();
+
+        let bold_start = start.min(PREFIX_CONTEXT);
+        let (prefix, suffix) = buf.split_at(bold_start);
+        let (middle, suffix) = suffix.split_at((end - start).min(suffix.len()));
+        let mut no_empty_write = |buf: &[u8]| {
+            if !buf.is_empty() {
+                output.write_all(buf).unwrap();
+            }
+        };
+
+        no_empty_write(prefix);
+        no_empty_write(b"\x1b[1m");
+        no_empty_write(middle);
+        no_empty_write(b"\x1b[0m");
+        no_empty_write(suffix);
+        no_empty_write(b"\n");
+    };
+
+    let reader = Arc::new(reader);
+    let (result_stream, threads) = ringboard_sdk::search(
+        if regex {
+            Query::Regex(Regex::new(&query)?)
+        } else {
+            Query::Plain(query.as_bytes())
+        },
+        reader.clone(),
+    );
+    let mut results = BTreeMap::<BucketAndIndex, (u16, u16)>::new();
+    for result in result_stream {
+        let QueryResult {
+            location,
+            start,
+            end,
+        } = result?;
+        match location {
+            EntryLocation::Bucketed { bucket, index } => {
+                results.insert(
+                    BucketAndIndex::new(bucket, index),
+                    (u16::try_from(start).unwrap(), u16::try_from(end).unwrap()),
+                );
+            }
+            EntryLocation::File { entry_id } => {
+                let entry = unsafe { database.get(entry_id)? };
+                let file = entry.to_file_raw(&reader)?.unwrap();
+
+                let mut buf = [0; CONTEXT_WINDOW];
+                match file.read_exact_at(
+                    &mut buf,
+                    u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap(),
+                ) {
+                    Err(e) if e.kind() == ErrorKind::UnexpectedEof => Ok(()),
+                    r => r,
+                }
+                .map_io_err(|| format!("failed to read from direct entry {entry_id}."))?;
+                print_entry(entry_id, &buf, start, end);
+            }
+        }
+    }
+    for thread in threads {
+        thread.join().map_err(|_| CliError::InternalSearchError)?;
+    }
+    let mut reader = Arc::into_inner(reader).unwrap();
+
+    for entry in database.favorites().chain(database.main()) {
+        let Kind::Bucket(bucket) = entry.kind() else {
+            continue;
+        };
+        let Some(&(start, end)) = results.get(&BucketAndIndex::new(
+            size_to_bucket(bucket.size()),
+            bucket.index(),
+        )) else {
+            continue;
+        };
+        let (start, end) = (usize::from(start), usize::from(end));
+
+        let bytes = entry.to_slice(&mut reader)?;
+        let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
+        print_entry(
+            entry.id(),
+            &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
+            start,
+            end,
+        );
+    }
+
     Ok(())
 }
 
