@@ -1,3 +1,4 @@
+#![feature(slice_split_once)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 use std::{
@@ -22,9 +23,11 @@ use rustix::net::{
     RecvFlags, SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketFlags,
     SocketType,
 };
+pub use search::search;
 use thiserror::Error;
 
 mod ring_reader;
+pub mod search;
 
 macro_rules! response {
     ($t:ty) => {
