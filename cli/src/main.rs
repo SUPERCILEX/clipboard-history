@@ -328,8 +328,6 @@ enum CliError {
     Sdk(#[from] ringboard_sdk::ClientError),
     #[error("Failed to delete or copy files.")]
     Fuc(#[from] fuc_engine::Error),
-    #[error("Id not found.")]
-    IdNotFound(#[from] IdNotFoundError),
     #[error(
         "Database not found. Make sure to run the ringboard server or fix the XDG_DATA_HOME path."
     )]
@@ -363,6 +361,12 @@ fn main() -> error_stack::Result<(), Wrapper> {
                 CoreError::InvalidPidError { error, context } => Report::new(error)
                     .attach_printable(context)
                     .change_context(wrapper),
+                CoreError::IdNotFound(IdNotFoundError::Ring(id)) => {
+                    Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
+                }
+                CoreError::IdNotFound(IdNotFoundError::Entry(id)) => {
+                    Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
+                }
             },
             CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
                 .attach_printable(context)
@@ -372,12 +376,6 @@ fn main() -> error_stack::Result<(), Wrapper> {
             }
             CliError::Sdk(ringboard_sdk::ClientError::VersionMismatch { actual: _ }) => {
                 Report::new(wrapper)
-            }
-            CliError::IdNotFound(IdNotFoundError::Ring(id)) => {
-                Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
-            }
-            CliError::IdNotFound(IdNotFoundError::Entry(id)) => {
-                Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
             }
             CliError::DatabaseNotFound(db) => {
                 Report::new(wrapper).attach_printable(format!("Path: {:?}", db.display()))
@@ -390,6 +388,12 @@ fn main() -> error_stack::Result<(), Wrapper> {
             ),
         }
     })
+}
+
+impl From<IdNotFoundError> for CliError {
+    fn from(value: IdNotFoundError) -> Self {
+        CliError::Core(CoreError::IdNotFound(value))
+    }
 }
 
 fn run() -> Result<(), CliError> {
@@ -600,7 +604,7 @@ fn move_to_front(
             println!("Entry moved: {id}");
         }
         MoveToFrontResponse::Error(e) => {
-            return Err(CliError::IdNotFound(e));
+            return Err(e.into());
         }
     }
 
@@ -610,9 +614,9 @@ fn move_to_front(
 fn swap(server: OwnedFd, addr: &SocketAddrUnix, Swap { id1, id2 }: Swap) -> Result<(), CliError> {
     let SwapResponse { error1, error2 } = ringboard_sdk::swap(server, addr, id1, id2)?;
     if let Some(e) = error1 {
-        return Err(CliError::IdNotFound(e));
+        return Err(e.into());
     } else if let Some(e) = error2 {
-        return Err(CliError::IdNotFound(e));
+        return Err(e.into());
     }
     println!("Done.");
 
@@ -626,7 +630,7 @@ fn remove(
 ) -> Result<(), CliError> {
     let RemoveResponse { error } = ringboard_sdk::remove(server, addr, id)?;
     if let Some(e) = error {
-        return Err(CliError::IdNotFound(e));
+        return Err(e.into());
     }
     println!("Done.");
 
@@ -784,7 +788,7 @@ fn migrate_from_gch(
                     "GCH database may be corrupted or ringboard database may be too small (so \
                      there were collisions)."
                 );
-                return Err(CliError::IdNotFound($e));
+                return Err($e.into());
             };
         }
 

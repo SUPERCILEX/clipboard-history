@@ -10,6 +10,8 @@ pub use utils::{
 };
 pub use views::{PathView, StringView};
 
+use crate::protocol::IdNotFoundError;
+
 pub mod dirs;
 pub mod protocol;
 pub mod ring;
@@ -32,6 +34,8 @@ pub enum Error {
         error: ParseIntError,
         context: Cow<'static, str>,
     },
+    #[error("Id not found.")]
+    IdNotFound(#[from] IdNotFoundError),
 }
 
 pub trait IoErr<Out> {

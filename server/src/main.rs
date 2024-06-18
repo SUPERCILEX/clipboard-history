@@ -4,7 +4,7 @@ use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 
 use error_stack::Report;
 use log::{info, warn};
-use ringboard_core::{dirs::data_dir, Error, IoErr, PathView};
+use ringboard_core::{dirs::data_dir, protocol::IdNotFoundError, Error, IoErr, PathView};
 use rustix::process::Pid;
 use thiserror::Error;
 
@@ -61,13 +61,21 @@ fn main() -> error_stack::Result<(), Wrapper> {
 fn into_report(cli_err: CliError) -> Report<Wrapper> {
     let wrapper = Wrapper::W(cli_err.to_string());
     match cli_err {
-        CliError::Core(Error::Io { error, context }) => Report::new(error)
-            .attach_printable(context)
-            .change_context(wrapper),
-        CliError::Core(Error::NotARingboard { file: _ }) => Report::new(wrapper),
-        CliError::Core(Error::InvalidPidError { error, context }) => Report::new(error)
-            .attach_printable(context)
-            .change_context(wrapper),
+        CliError::Core(e) => match e {
+            Error::Io { error, context } => Report::new(error)
+                .attach_printable(context)
+                .change_context(wrapper),
+            Error::NotARingboard { file: _ } => Report::new(wrapper),
+            Error::InvalidPidError { error, context } => Report::new(error)
+                .attach_printable(context)
+                .change_context(wrapper),
+            Error::IdNotFound(IdNotFoundError::Ring(id)) => {
+                Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
+            }
+            Error::IdNotFound(IdNotFoundError::Entry(id)) => {
+                Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
+            }
+        },
         CliError::ServerAlreadyRunning { pid: _, lock_file } => Report::new(wrapper)
             .attach_printable(
                 "Unable to safely start server: please shut down the existing instance. If \

@@ -5,7 +5,7 @@ use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_sdk::core::{
     dirs::socket_file,
-    protocol::{AddResponse, MimeType, MoveToFrontResponse, RingKind},
+    protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
     Error, IoErr,
 };
 use rustix::{
@@ -88,6 +88,12 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
             Error::InvalidPidError { error, context } => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
+            Error::IdNotFound(IdNotFoundError::Ring(id)) => {
+                Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
+            }
+            Error::IdNotFound(IdNotFoundError::Entry(id)) => {
+                Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
+            }
         },
         CliError::Sdk(ringboard_sdk::ClientError::InvalidResponse { context }) => {
             Report::new(wrapper).attach_printable(context)
