@@ -117,8 +117,9 @@ fn search_impl(
     let stop = Arc::new(AtomicBool::new(false));
     let mut threads = ArrayVec::<_, 12>::new_const();
 
-    for bucket in size_to_bucket(u32::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u32::MAX))
-        ..reader.buckets().len()
+    for bucket in usize::from(size_to_bucket(
+        u32::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u32::MAX),
+    ))..reader.buckets().len()
     {
         let query = query.clone();
         let reader = reader.clone();

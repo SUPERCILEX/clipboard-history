@@ -222,7 +222,7 @@ impl FreeLists {
             for entry in (0..ring.len()).filter_map(|i| ring.get(i)) {
                 match entry {
                     Entry::Bucketed(entry) => {
-                        let slots = &mut allocations[size_to_bucket(entry.size())];
+                        let slots = &mut allocations[usize::from(size_to_bucket(entry.size()))];
                         let index = usize::try_from(entry.index()).unwrap();
                         if slots.len() <= index {
                             slots.resize(index, false);
@@ -565,7 +565,7 @@ impl AllocatorData {
 
     fn alloc_bucket(&mut self, data: File, size: u32) -> Result<Entry, CliError> {
         debug!("Allocating {size} byte bucket slot.");
-        let bucket = size_to_bucket(size);
+        let bucket = usize::from(size_to_bucket(size));
         let Buckets {
             files,
             slot_counts: bucket_lengths,
@@ -648,7 +648,7 @@ impl AllocatorData {
             Entry::Bucketed(bucket) => {
                 self.buckets
                     .free_lists
-                    .free(size_to_bucket(bucket.size()), bucket.index());
+                    .free(size_to_bucket(bucket.size()).into(), bucket.index());
                 Ok(())
             }
             Entry::File => self.free_direct(to, id),

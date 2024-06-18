@@ -124,8 +124,8 @@ pub fn open_buckets<F: FnMut(&str) -> Result<OwnedFd>>(
 }
 
 #[must_use]
-pub fn size_to_bucket(bytes: u32) -> usize {
-    usize::try_from(
+pub fn size_to_bucket(bytes: u32) -> u8 {
+    u8::try_from(
         bytes
             .saturating_sub(1)
             .checked_ilog2()

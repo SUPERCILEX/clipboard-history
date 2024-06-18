@@ -925,7 +925,7 @@ fn stats() -> Result<(), CliError> {
                 Kind::Bucket(entry) => {
                     *bucketed_entry_count += 1;
 
-                    let bucket = size_to_bucket(entry.size());
+                    let bucket = usize::from(size_to_bucket(entry.size()));
                     let BucketStats {
                         size_class: _,
                         num_slots: _,
