@@ -26,6 +26,7 @@ use rustix::net::{
 pub use search::search;
 use thiserror::Error;
 
+pub mod duplicate_detection;
 mod ring_reader;
 pub mod search;
 

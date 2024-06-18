@@ -14,7 +14,9 @@ arrayvec = "0.7.4"
 memchr = "2.7.4"
 regex = "1.10.5"
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
+rustc-hash = "2.0.0"
 rustix = { version = "0.38.30", features = ["net", "fs", "thread"] }
+smallvec = "1.13.2"
 thiserror = "1.0.58"
 
 [dev-dependencies]
