@@ -83,16 +83,19 @@ pub enum EntryLocation {
 pub struct BucketAndIndex(u32);
 
 impl BucketAndIndex {
+    #[must_use]
     pub fn new(bucket: u8, index: u32) -> Self {
         debug_assert!(index <= MAX_ENTRIES);
         Self((index << u8::BITS) | u32::from(bucket))
     }
 
+    #[must_use]
     pub fn bucket(&self) -> u8 {
         u8::try_from(self.0 & u32::from(u8::MAX)).unwrap()
     }
 
-    pub fn index(&self) -> u32 {
+    #[must_use]
+    pub const fn index(&self) -> u32 {
         self.0 >> u8::BITS
     }
 }
@@ -130,6 +133,7 @@ pub fn search(
     (results, threads.into_iter())
 }
 
+#[allow(clippy::too_many_lines)]
 fn search_impl(
     query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
@@ -155,11 +159,7 @@ fn search_impl(
                     break;
                 }
 
-                let entry = if let Some(stop) = memchr::memchr(0, entry) {
-                    &entry[..stop]
-                } else {
-                    entry
-                };
+                let entry = memchr::memchr(0, entry).map_or(entry, |stop| &entry[..stop]);
                 let Some((start, end)) = query.find(entry) else {
                     continue;
                 };

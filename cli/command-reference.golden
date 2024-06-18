@@ -8,6 +8,7 @@ Usage: clipboard-history <COMMAND>
 
 Commands:
   get              Get an entry from the database
+  search           Searches the Ringboard database for entries matching a query
   add              Add an entry to the database
   favorite         Favorite an entry
   unfavorite       Unfavorite an entry
@@ -41,6 +42,23 @@ Arguments:
           The entry ID
 
 Options:
+  -h, --help
+          Print help (use `-h` for a summary)
+
+---
+
+Searches the Ringboard database for entries matching a query
+
+Usage: clipboard-history search [OPTIONS] <QUERY>
+
+Arguments:
+  <QUERY>
+          The query string to search for
+
+Options:
+  -r, --regex
+          Interpret the query string as `RegEx` instead of a plain-text match
+
   -h, --help
           Print help (use `-h` for a summary)
 
@@ -351,6 +369,7 @@ Usage: clipboard-history help [COMMAND]
 
 Commands:
   get              Get an entry from the database
+  search           Searches the Ringboard database for entries matching a query
   add              Add an entry to the database
   favorite         Favorite an entry
   unfavorite       Unfavorite an entry
@@ -369,6 +388,12 @@ Commands:
 Get an entry from the database
 
 Usage: clipboard-history help get
+
+---
+
+Searches the Ringboard database for entries matching a query
+
+Usage: clipboard-history help search
 
 ---
 

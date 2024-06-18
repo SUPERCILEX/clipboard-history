@@ -211,7 +211,7 @@ struct EntryAction {
 #[derive(Args, Debug)]
 #[command(arg_required_else_help = true)]
 struct Search {
-    /// Interpret the query string as RegEx instead of a plain-text match.
+    /// Interpret the query string as `RegEx` instead of a plain-text match.
     #[arg(short, long)]
     regex: bool,
 
@@ -392,7 +392,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
 
 impl From<IdNotFoundError> for CliError {
     fn from(value: IdNotFoundError) -> Self {
-        CliError::Core(CoreError::IdNotFound(value))
+        Self::Core(CoreError::IdNotFound(value))
     }
 }
 
@@ -967,8 +967,7 @@ fn stats() -> Result<(), CliError> {
                         f.debug_struct("DirectFiles")
                             .field(
                                 "fragmentation_ratio",
-                                &((allocated_bytes - u64::try_from(owned_bytes).unwrap()) as f64
-                                    / allocated_bytes as f64),
+                                &((allocated_bytes - owned_bytes) as f64 / allocated_bytes as f64),
                             )
                             .finish()
                     })
@@ -1046,7 +1045,7 @@ fn stats() -> Result<(), CliError> {
                     entry_size = u64::from(bucket.size());
                     *owned_bytes += entry_size;
 
-                    duplicate = duplicates.add_entry(entry, &database, &mut reader)?;
+                    duplicate = duplicates.add_entry(&entry, &database, &mut reader)?;
                 }
                 Kind::File => {
                     *file_entry_count += 1;
@@ -1065,7 +1064,7 @@ fn stats() -> Result<(), CliError> {
                     *mime_types.entry(file.mime_type()?).or_default() += 1;
                     *allocated_bytes += stats.stx_blocks * 512;
 
-                    duplicate = duplicates.add_entry(entry, &database, &mut reader)?;
+                    duplicate = duplicates.add_entry(&entry, &database, &mut reader)?;
                 }
             }
 

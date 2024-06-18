@@ -496,6 +496,7 @@ impl EntryReader {
         buckets.into_inner().unwrap()
     }
 
+    #[must_use]
     pub fn direct(&self) -> BorrowedFd {
         self.direct.as_fd()
     }

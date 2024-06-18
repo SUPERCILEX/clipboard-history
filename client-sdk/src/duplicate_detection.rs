@@ -28,16 +28,16 @@ impl RingAndIndex {
         Self((index << u8::BITS) | (ring as u32))
     }
 
-    fn ring(&self) -> RingKind {
+    fn ring(self) -> RingKind {
         let ring = u8::try_from(self.0 & u32::from(u8::MAX)).unwrap();
         unsafe { transmute::<_, RingKind>(ring) }
     }
 
-    fn index(&self) -> u32 {
+    const fn index(self) -> u32 {
         self.0 >> u8::BITS
     }
 
-    fn id(&self) -> u64 {
+    fn id(self) -> u64 {
         composite_id(self.ring(), self.index())
     }
 }
@@ -50,7 +50,7 @@ pub struct DuplicateDetector {
 impl DuplicateDetector {
     pub fn add_entry(
         &mut self,
-        entry: Entry,
+        entry: &Entry,
         database: &DatabaseReader,
         reader: &mut EntryReader,
     ) -> Result<bool, ringboard_core::Error> {
@@ -76,7 +76,10 @@ impl DuplicateDetector {
             data_hasher.finish()
         };
 
-        let entries = self.hashes.entry(hash as u32).or_default();
+        let entries = self
+            .hashes
+            .entry(u32::try_from(hash & u64::from(u32::MAX)).unwrap())
+            .or_default();
         let mut duplicate = false;
         if !entries.is_empty() {
             let data = entry.to_file(reader)?;

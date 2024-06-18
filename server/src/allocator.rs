@@ -79,6 +79,7 @@ impl RingWriter {
         Ok(Self { ring })
     }
 
+    #[allow(clippy::needless_pass_by_ref_mut)]
     fn write(&mut self, entry: Entry, at: u32) -> ringboard_core::Result<()> {
         debug!("Writing entry to position {at}: {entry:?}");
         self.ring
@@ -86,6 +87,7 @@ impl RingWriter {
             .map_io_err(|| format!("Failed to write entry to Ringboard database: {entry:?}"))
     }
 
+    #[allow(clippy::needless_pass_by_ref_mut)]
     fn set_write_head(&mut self, head: u32) -> ringboard_core::Result<()> {
         debug!("Setting write head to {head}.");
         self.ring
@@ -247,6 +249,7 @@ impl FreeLists {
         })
     }
 
+    #[allow(clippy::needless_pass_by_ref_mut)]
     fn save(&mut self) -> Result<(), CliError> {
         info!("Saving allocator free list to disk.");
         let bytes = bitcode::encode(&self.lists);
@@ -613,6 +616,7 @@ impl AllocatorData {
         Ok(Entry::Bucketed(entry))
     }
 
+    #[allow(clippy::needless_pass_by_ref_mut)]
     fn alloc_direct(
         &mut self,
         data: File,
@@ -655,6 +659,7 @@ impl AllocatorData {
         }
     }
 
+    #[allow(clippy::needless_pass_by_ref_mut)]
     fn free_direct(&mut self, to: RingKind, id: u32) -> Result<(), CliError> {
         debug!("Freeing direct allocation.");
         let mut buf = Default::default();
