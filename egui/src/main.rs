@@ -191,6 +191,10 @@ impl eframe::App for App {
                 }
             });
 
+            // TODO add search
+            // TODO implement paste (by pressing enter or ctrl+N)
+            // TODO start with second row of main selected
+            // TODO tab cycles between selecting main or favorites
             ScrollArea::vertical().show(ui, |ui| {
                 let mut show_entry = |ui: &mut Ui, entry: &UiEntry| {
                     match entry.cache.clone() {
@@ -269,9 +273,13 @@ impl eframe::App for App {
                                     });
                                 });
                             });
+
+                            if response.clicked() {
+                                // TODO
+                            }
                         }
                         UiEntryCache::Binary { bytes } => {
-                            ui.label("TODO non-text entry.");
+                            // TODO
                         }
                         UiEntryCache::Error(e) => {
                             ui.label(e);
@@ -289,6 +297,7 @@ impl eframe::App for App {
 
                     show_entry(ui, entry);
                 }
+                // TODO add a load more button
             });
         });
     }

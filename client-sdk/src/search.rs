@@ -227,6 +227,7 @@ fn search_impl(
 
                         let bytes =
                             Mmap::from(&fd).map_io_err(|| "Failed to mmap direct allocation.")?;
+                        // TODO consider splitting this off into its own thread if big enough
                         let Some((start, end)) = query.find(&bytes) else {
                             return Ok(None);
                         };
