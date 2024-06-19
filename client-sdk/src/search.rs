@@ -20,7 +20,6 @@ use ringboard_core::{
 };
 use rustix::{
     fs::{openat, Mode, OFlags, RawDir},
-    path::Arg,
     thread::{unshare, UnshareFlags},
 };
 
@@ -234,14 +233,9 @@ fn search_impl(
 
                         let id = file
                             .file_name()
-                            .to_bytes()
-                            .split_once(|&b| b == b'_')
-                            .and_then(|(ring, entry)| {
-                                Some(
-                                    (u64::from(u32::from_str(ring.as_str().ok()?).ok()?) << 32)
-                                        | u64::from(u32::from_str(entry.as_str().ok()?).ok()?),
-                                )
-                            })
+                            .to_str()
+                            .ok()
+                            .and_then(|id| u64::from_str(id).ok())
                             .ok_or(ringboard_core::Error::NotARingboard {
                                 file: PathBuf::from(&*file.file_name().to_string_lossy()),
                             })?;

@@ -18,7 +18,10 @@ use rustix::{
     process::Pid,
 };
 
-use crate::{protocol::RingKind, Error, IoErr, Result};
+use crate::{
+    protocol::{composite_id, RingKind},
+    Error, IoErr, Result,
+};
 
 pub const TEXT_MIMES: &[&str] = &[
     "",
@@ -159,10 +162,10 @@ impl<T> Debug for DirectFileNameToken<'_, T> {
 }
 
 pub fn direct_file_name(
-    buf: &mut [u8; "256".len() + 1 + "4294967296".len() + 1],
+    buf: &mut [u8; "1099511627776".len() + 1],
     to: RingKind,
     id: u32,
 ) -> DirectFileNameToken<()> {
-    write!(buf.as_mut_slice(), "{:0>3}_{id:0>10}\0", to as u8).unwrap();
+    write!(buf.as_mut_slice(), "{:0>13}\0", composite_id(to, id)).unwrap();
     DirectFileNameToken(buf.as_mut_slice(), PhantomData)
 }
