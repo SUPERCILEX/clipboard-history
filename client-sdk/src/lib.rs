@@ -4,7 +4,6 @@
 use std::{
     borrow::Cow,
     io::{IoSlice, IoSliceMut},
-    mem,
     os::fd::{AsFd, OwnedFd},
 };
 
@@ -32,7 +31,7 @@ pub mod search;
 
 macro_rules! response {
     ($t:ty) => {
-        response::<$t, { mem::size_of::<$t>() }>
+        response::<$t, { size_of::<$t>() }>
     };
 }
 
@@ -231,7 +230,7 @@ unsafe fn response<T: Copy, const N: usize>(
         RecvFlags::TRUNC | flags,
     )
     .map_io_err(|| format!("Failed to receive {}.", type_name()))?;
-    if result.bytes != mem::size_of::<T>() {
+    if result.bytes != size_of::<T>() {
         return Err(ClientError::InvalidResponse {
             context: format!("Bad {}.", type_name()).into(),
         });

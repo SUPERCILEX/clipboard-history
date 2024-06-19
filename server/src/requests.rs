@@ -1,4 +1,4 @@
-use std::{fmt::Debug, mem};
+use std::fmt::Debug;
 
 use arrayvec::ArrayVec;
 use log::{info, warn};
@@ -49,7 +49,7 @@ pub fn handle(
     send_bufs: &mut SendMsgBufs,
     allocator: &mut Allocator,
 ) -> Result<Option<SendBufAllocation>, CliError> {
-    if request_data.len() < mem::size_of::<Request>() {
+    if request_data.len() < size_of::<Request>() {
         warn!("Dropping invalid request (too short).");
         return Ok(None);
     }

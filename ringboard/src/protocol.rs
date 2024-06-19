@@ -1,5 +1,3 @@
-use std::mem;
-
 use arrayvec::ArrayString;
 
 use crate::AsBytes;
@@ -29,7 +27,7 @@ pub enum Request {
     GarbageCollect,
 }
 
-const _: () = assert!(mem::size_of::<Request>() == 128);
+const _: () = assert!(size_of::<Request>() == 128);
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]

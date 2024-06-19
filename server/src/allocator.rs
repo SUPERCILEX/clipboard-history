@@ -4,7 +4,6 @@ use std::{
     fs::File,
     io,
     io::{ErrorKind, IoSlice, Read, Write},
-    mem,
     mem::ManuallyDrop,
     ops::{Index, IndexMut},
     os::{fd::OwnedFd, unix::fs::FileExt},
@@ -93,7 +92,7 @@ impl RingWriter {
         self.ring
             .write_all_at(
                 &head.to_le_bytes(),
-                u64::try_from(ring::MAGIC.len() + mem::size_of_val(&ring::VERSION)).unwrap(),
+                u64::try_from(ring::MAGIC.len() + size_of_val(&ring::VERSION)).unwrap(),
             )
             .map_io_err(|| format!("Failed to update Ringboard write head: {head}"))
     }
@@ -624,7 +623,7 @@ impl AllocatorData {
         to: RingKind,
         id: u32,
     ) -> Result<Entry, CliError> {
-        const _: () = assert!(mem::size_of::<RingKind>() <= u8::BITS as usize);
+        const _: () = assert!(size_of::<RingKind>() <= u8::BITS as usize);
         debug!("Allocating direct entry.");
 
         if !mime_type.is_empty() {

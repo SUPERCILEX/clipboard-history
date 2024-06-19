@@ -1,4 +1,4 @@
-use std::{mem, mem::MaybeUninit, ptr};
+use std::{mem::MaybeUninit, ptr};
 
 use arrayvec::ArrayVec;
 use log::trace;
@@ -44,13 +44,13 @@ impl SendMsgBufs {
         let data_len = buf.len() - control_len;
 
         let ptr = {
-            let metadata_size = mem::size_of::<libc::msghdr>() + mem::size_of::<libc::iovec>();
+            let metadata_size = size_of::<libc::msghdr>() + size_of::<libc::iovec>();
             let align_offset = loop {
                 let old_ptr = buf.as_ptr();
                 let align_offset = buf
                     .spare_capacity_mut()
                     .as_ptr()
-                    .align_offset(mem::align_of::<libc::msghdr>());
+                    .align_offset(align_of::<libc::msghdr>());
                 buf.reserve(align_offset + metadata_size);
 
                 if old_ptr == buf.as_ptr() {
@@ -62,7 +62,7 @@ impl SendMsgBufs {
             let hdr = libc::msghdr {
                 msg_name: ptr::null_mut(),
                 msg_namelen: 0,
-                msg_iov: unsafe { ptr.add(mem::size_of::<libc::msghdr>()).cast() },
+                msg_iov: unsafe { ptr.add(size_of::<libc::msghdr>()).cast() },
                 msg_iovlen: 1,
                 msg_control: buf.as_mut_ptr().cast(),
                 msg_controllen: control_len,
@@ -72,7 +72,7 @@ impl SendMsgBufs {
                 ptr::copy_nonoverlapping(
                     ptr::from_ref(&hdr).cast(),
                     ptr,
-                    mem::size_of::<libc::msghdr>(),
+                    size_of::<libc::msghdr>(),
                 );
             }
 
@@ -83,8 +83,8 @@ impl SendMsgBufs {
             unsafe {
                 ptr::copy_nonoverlapping(
                     ptr::from_ref(&iov).cast(),
-                    ptr.add(mem::size_of::<libc::msghdr>()),
-                    mem::size_of::<libc::iovec>(),
+                    ptr.add(size_of::<libc::msghdr>()),
+                    size_of::<libc::iovec>(),
                 );
             }
 

@@ -1,4 +1,4 @@
-use std::{fmt::Debug, mem, ops::Deref, os::fd::AsFd, ptr, ptr::NonNull, slice};
+use std::{fmt::Debug, ops::Deref, os::fd::AsFd, ptr, ptr::NonNull, slice};
 
 use rustix::{
     fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
@@ -37,7 +37,7 @@ impl Default for Header {
     }
 }
 
-const _: () = assert!(mem::size_of::<Header>() == 8);
+const _: () = assert!(size_of::<Header>() == 8);
 
 #[repr(transparent)]
 pub struct RawEntry(u32);
@@ -263,8 +263,8 @@ impl Ring {
                 self.mem
                     .ptr()
                     .as_ptr()
-                    .add(MAGIC.len() + mem::size_of_val(&VERSION)),
-                mem::size_of::<u32>(),
+                    .add(MAGIC.len() + size_of_val(&VERSION)),
+                size_of::<u32>(),
             )
         };
         u32::from_le_bytes(bytes.try_into().unwrap())
@@ -318,7 +318,7 @@ impl Ring {
                     .ptr()
                     .as_ptr()
                     .add(usize::try_from(entries_to_offset(index)).unwrap()),
-                mem::size_of::<u32>(),
+                size_of::<u32>(),
             )
         };
         let raw = RawEntry(u32::from_le_bytes(bytes.try_into().unwrap()));
@@ -328,12 +328,11 @@ impl Ring {
 
 #[must_use]
 pub fn entries_to_offset(entries: u32) -> u64 {
-    u64::from(entries) * u64::try_from(mem::size_of::<RawEntry>()).unwrap()
-        + u64::try_from(mem::size_of::<Header>()).unwrap()
+    u64::from(entries) * u64::try_from(size_of::<RawEntry>()).unwrap()
+        + u64::try_from(size_of::<Header>()).unwrap()
 }
 
 #[must_use]
 pub fn offset_to_entries(offset: usize) -> u32 {
-    u32::try_from(offset.saturating_sub(mem::size_of::<Header>()) / mem::size_of::<RawEntry>())
-        .unwrap()
+    u32::try_from(offset.saturating_sub(size_of::<Header>()) / size_of::<RawEntry>()).unwrap()
 }
