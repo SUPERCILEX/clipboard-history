@@ -2019,6 +2019,7 @@ dependencies = [
 [[package]]
 name = "io-uring"
 version = "0.6.4"
+source = "git+https://github.com/SUPERCILEX/io-uring?branch=tmp#cce76d2c86dadd25343ba98417db6e3aed0f422e"
 dependencies = [
  "bitflags 1.3.2",
  "libc",
