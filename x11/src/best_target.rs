@@ -46,6 +46,10 @@ impl BestMimeTypeFinder {
         }
     }
 
+    pub fn kill_text(&mut self) {
+        self.seen.text = None;
+    }
+
     pub fn best(&self) -> Option<Atom> {
         let Self {
             seen:

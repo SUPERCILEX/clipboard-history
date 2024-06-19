@@ -1,4 +1,4 @@
-use std::{fs::File, mem, ops::Deref, os::unix::fs::FileExt};
+use std::{fs::File, mem, os::unix::fs::FileExt};
 
 use arrayvec::ArrayVec;
 use error_stack::Report;
@@ -24,8 +24,7 @@ use x11rb::{
         xfixes::{select_selection_input, SelectionEventMask},
         xproto::{
             Atom, AtomEnum, ConnectionExt, CreateWindowAux, EventMask, GetAtomNameReply,
-            GetPropertyType, PropMode, Property, PropertyNotifyEvent, SelectionNotifyEvent,
-            WindowClass,
+            GetPropertyType, PropMode, Property, Window, WindowClass,
         },
         Event,
     },
@@ -109,10 +108,17 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
     }
 }
 
-#[derive(Default)]
-enum TransferAtom {
+#[derive(Default, Debug)]
+enum State {
     #[default]
     Free,
+    FastPathPendingSelection {
+        selection: Atom,
+    },
+    TargetsRequest {
+        selection: Atom,
+        allow_plain_text: bool,
+    },
     PendingSelection {
         mime_atom: Atom,
     },
@@ -127,32 +133,38 @@ const MAX_CONCURRENT_TRANSFERS: usize = 4;
 const BASE_TRANSFER_ATOM: AtomEnum = AtomEnum::CUT_BUFFE_R0;
 
 #[derive(Default)]
-struct TransferAtomAllocation(usize);
-
-impl TransferAtomAllocation {
-    #[must_use]
-    fn advance(&mut self) -> Atom {
-        const _: () = assert!(MAX_CONCURRENT_TRANSFERS.is_power_of_two());
-
-        let old = self.0;
-        self.0 += 1;
-        self.0 &= MAX_CONCURRENT_TRANSFERS - 1;
-        u32::try_from(old).unwrap() + u32::from(BASE_TRANSFER_ATOM)
-    }
-
-    fn from_atom(atom: Atom) -> Option<usize> {
-        (atom >= BASE_TRANSFER_ATOM.into()
-            && atom
-                < u32::try_from(MAX_CONCURRENT_TRANSFERS).unwrap() + u32::from(BASE_TRANSFER_ATOM))
-        .then(|| usize::try_from(atom - u32::from(BASE_TRANSFER_ATOM)).unwrap())
-    }
+struct TransferAtomAllocator {
+    windows: [Window; MAX_CONCURRENT_TRANSFERS],
+    states: [State; MAX_CONCURRENT_TRANSFERS],
+    next: usize,
 }
 
-impl Deref for TransferAtomAllocation {
-    type Target = usize;
+impl TransferAtomAllocator {
+    fn alloc(&mut self) -> (&mut State, Window, Atom) {
+        const _: () = assert!(MAX_CONCURRENT_TRANSFERS.is_power_of_two());
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+        let next = self.next;
+
+        if !matches!(self.states[next], State::Free) {
+            warn!("Too many ongoing transfers, dropping old transfer.");
+        }
+        let state = &mut self.states[next];
+        let transfer_window = self.windows[next];
+        let transfer_atom = Self::transfer_atom(next);
+
+        self.next = (next + 1) & (MAX_CONCURRENT_TRANSFERS - 1);
+        (state, transfer_window, transfer_atom)
+    }
+
+    fn get(&mut self, window: Window) -> Option<(&mut State, Atom)> {
+        self.windows
+            .iter()
+            .position(|&id| id == window)
+            .map(|i| (&mut self.states[i], Self::transfer_atom(i)))
+    }
+
+    fn transfer_atom(id: usize) -> Atom {
+        Atom::from(BASE_TRANSFER_ATOM) + Atom::try_from(id).unwrap()
     }
 }
 
@@ -199,7 +211,7 @@ fn run() -> Result<(), CliError> {
     } = Atoms::new(&conn)?.reply()?;
     debug!("Atom internment complete.");
 
-    let create_window = |title, aux| -> Result<_, CliError> {
+    let create_window = |title: &[u8], aux| -> Result<_, CliError> {
         let window = conn.generate_id()?;
         conn.create_window(
             x11rb::COPY_DEPTH_FROM_PARENT,
@@ -225,14 +237,13 @@ fn run() -> Result<(), CliError> {
         .check()?;
         Ok(window)
     };
-    let targets_window = create_window(
-        b"Ringboard selection notification",
-        CreateWindowAux::default(),
-    )?;
-    let transfer_window = create_window(
-        b"Ringboard data transfer",
-        CreateWindowAux::default().event_mask(EventMask::PROPERTY_CHANGE),
-    )?;
+    let mut transfer_windows = ArrayVec::<_, MAX_CONCURRENT_TRANSFERS>::new_const();
+    for i in 0..MAX_CONCURRENT_TRANSFERS {
+        transfer_windows.push(create_window(
+            format!("Ringboard data transfer {}", i + 1).as_bytes(),
+            CreateWindowAux::default().event_mask(EventMask::PROPERTY_CHANGE),
+        )?);
+    }
     debug!("Created utility windows.");
 
     conn.extension_information(xfixes::X11_EXTENSION_NAME)?
@@ -250,9 +261,11 @@ fn run() -> Result<(), CliError> {
     debug!("Selection owner listener registered.");
 
     let mut pending_atom_cookies = ArrayVec::<(Cookie<_, GetAtomNameReply>, _), 8>::new_const();
-    let mut transfer_atoms =
-        ArrayVec::from([const { TransferAtom::Free }; MAX_CONCURRENT_TRANSFERS]);
-    let mut transfer_atoms_allocator = TransferAtomAllocation::default();
+    let mut allocator = TransferAtomAllocator {
+        windows: transfer_windows.into_inner().unwrap(),
+        states: [const { State::Free }; MAX_CONCURRENT_TRANSFERS],
+        next: 0,
+    };
 
     let mut deduplicator = CopyDeduplication::new()?;
 
@@ -262,123 +275,172 @@ fn run() -> Result<(), CliError> {
         match conn.wait_for_event()? {
             Event::XfixesSelectionNotify(event) => {
                 info!("Selection notification received.");
-                conn.convert_selection(
-                    targets_window,
-                    event.selection,
-                    targets_atom,
-                    Atom::from(BASE_TRANSFER_ATOM)
-                        + u32::try_from(MAX_CONCURRENT_TRANSFERS).unwrap(),
-                    x11rb::CURRENT_TIME,
-                )?
-                .check()?;
-            }
-            Event::SelectionNotify(event) if event.requestor == targets_window => {
-                if event.property == x11rb::NONE {
-                    warn!("Targets response cancelled.");
-                    continue;
-                }
-
-                let property = conn
-                    .get_property(
-                        true,
-                        event.requestor,
-                        event.property,
-                        GetPropertyType::ANY,
-                        0,
-                        u32::MAX,
-                    )?
-                    .reply()?;
-                if property.type_ == incr_atom {
-                    warn!("Ignoring abusive TARGETS property.");
-                    continue;
-                }
-
-                let Some(mut value) = property.value32() else {
-                    error!("Invalid TARGETS property value format.");
-                    continue;
+                let (state, transfer_window, transfer_atom) = allocator.alloc();
+                *state = State::FastPathPendingSelection {
+                    selection: event.selection,
                 };
-
-                let mut finder = BestMimeTypeFinder::default();
-                loop {
-                    let atom = value.next();
-                    if pending_atom_cookies.is_full() || atom.is_none() {
-                        for (cookie, atom) in pending_atom_cookies.drain(..) {
-                            let reply = cookie.reply()?;
-                            let name = reply.name.to_string_lossy();
-                            trace!("Target {name:?} available on atom {atom}.");
-
-                            if name.len() > MimeType::new_const().capacity() {
-                                warn!("Target {name:?} name too long, ignoring.");
-                                continue;
-                            }
-
-                            finder.add_mime(&name, atom);
-                        }
-                    }
-                    let Some(atom) = atom else {
-                        break;
-                    };
-                    pending_atom_cookies.push((conn.get_atom_name(atom)?, atom));
-                }
-
-                let target = finder.best();
-                if target.is_none() {
-                    warn!("No usable targets returned, asking for plain text anyways.");
-                }
-                let target = target.unwrap_or(utf8_string_atom);
-                if cfg!(debug_assertions) {
-                    info!(
-                        "Choosing target {:?} on atom {target}.",
-                        conn.get_atom_name(target)?.reply()?.name.to_string_lossy()
-                    );
-                } else {
-                    info!("Choosing atom {:?}.", target);
-                }
-
-                if !matches!(
-                    transfer_atoms[*transfer_atoms_allocator],
-                    TransferAtom::Free
-                ) {
-                    warn!("Too many ongoing transfers, dropping old transfer.");
-                }
-                transfer_atoms[*transfer_atoms_allocator] =
-                    TransferAtom::PendingSelection { mime_atom: target };
-                let transfer_atom = transfer_atoms_allocator.advance();
 
                 conn.convert_selection(
                     transfer_window,
                     event.selection,
-                    target,
+                    utf8_string_atom,
                     transfer_atom,
                     x11rb::CURRENT_TIME,
                 )?
                 .check()?;
             }
-            Event::SelectionNotify(event) if event.requestor == transfer_window => {
-                if event.property == x11rb::NONE {
-                    warn!("Selection transfer cancelled.");
+            Event::SelectionNotify(event) => {
+                let Some((state, transfer_atom)) = allocator.get(event.requestor) else {
+                    warn!(
+                        "Ignoring selection notify to unknown requester {}.",
+                        event.requestor
+                    );
                     continue;
-                }
-
+                };
                 debug!("Received selection notification.");
+
+                match state {
+                    &mut State::FastPathPendingSelection { selection } => {
+                        if event.property == x11rb::NONE {
+                            debug!(
+                                "UTF8_STRING target fast path failed. Retrying with target query."
+                            );
+                            *state = State::TargetsRequest {
+                                selection,
+                                allow_plain_text: true,
+                            };
+                            conn.convert_selection(
+                                event.requestor,
+                                selection,
+                                targets_atom,
+                                transfer_atom,
+                                x11rb::CURRENT_TIME,
+                            )?
+                            .check()?;
+                        }
+                    }
+                    State::TargetsRequest { .. } => {
+                        if event.property == x11rb::NONE {
+                            warn!("Targets response cancelled.");
+                            *state = State::default();
+                        }
+                    }
+                    State::PendingSelection { .. } => {
+                        if event.property == x11rb::NONE {
+                            warn!("Selection transfer cancelled.");
+                            *state = State::default();
+                        }
+                    }
+                    State::Free | State::PendingIncr { .. } => {
+                        // Nothing to do
+                    }
+                }
             }
-            Event::PropertyNotify(event) if event.window == transfer_window => {
+            Event::PropertyNotify(event) => {
                 if event.state != Property::NEW_VALUE {
                     trace!(
-                        "Ignoring unuseful property state change: {:?}.",
+                        "Ignoring uninteresting property state change: {:?}.",
                         event.state
                     );
                     continue;
                 }
-                let Some(atom_allocation) = TransferAtomAllocation::from_atom(event.atom) else {
-                    debug!(
-                        "Ignoring spurious property change event on atom {}.",
-                        event.atom
+                let Some((state, transfer_atom)) = allocator.get(event.window) else {
+                    warn!(
+                        "Ignoring property notify to unknown requester {}.",
+                        event.window
                     );
                     continue;
                 };
-                match mem::take(&mut transfer_atoms[atom_allocation]) {
-                    TransferAtom::PendingSelection { mime_atom } => {
+
+                match mem::take(state) {
+                    State::TargetsRequest {
+                        selection,
+                        allow_plain_text,
+                    } => {
+                        let property = conn
+                            .get_property(
+                                true,
+                                event.window,
+                                event.atom,
+                                GetPropertyType::ANY,
+                                0,
+                                u32::MAX,
+                            )?
+                            .reply()?;
+                        if property.type_ == incr_atom {
+                            warn!("Ignoring abusive TARGETS property.");
+                            continue;
+                        }
+
+                        let Some(mut value) = property.value32() else {
+                            error!("Invalid TARGETS property value format.");
+                            continue;
+                        };
+
+                        let mut finder = BestMimeTypeFinder::default();
+                        loop {
+                            let atom = value.next();
+                            if pending_atom_cookies.is_full() || atom.is_none() {
+                                for (cookie, atom) in pending_atom_cookies.drain(..) {
+                                    let reply = cookie.reply()?;
+                                    let name = reply.name.to_string_lossy();
+                                    trace!("Target {name:?} available on atom {atom}.");
+
+                                    if name.len() > MimeType::new_const().capacity() {
+                                        warn!("Target {name:?} name too long, ignoring.");
+                                        continue;
+                                    }
+
+                                    finder.add_mime(&name, atom);
+                                }
+                            }
+                            let Some(atom) = atom else {
+                                break;
+                            };
+                            pending_atom_cookies.push((conn.get_atom_name(atom)?, atom));
+                        }
+
+                        if !allow_plain_text {
+                            debug!(
+                                "Blocking plain text as it returned a blank or empty result on \
+                                 the fast path."
+                            );
+                            finder.kill_text();
+                        }
+                        let target = finder.best();
+                        if target.is_none() {
+                            warn!("No usable targets returned, asking for plain text anyways.");
+                        }
+                        let target = target.unwrap_or(utf8_string_atom);
+                        if cfg!(debug_assertions) {
+                            info!(
+                                "Choosing target {:?} on atom {target}.",
+                                conn.get_atom_name(target)?.reply()?.name.to_string_lossy()
+                            );
+                        } else {
+                            info!("Choosing atom {:?}.", target);
+                        }
+
+                        *state = State::PendingSelection { mime_atom: target };
+                        conn.convert_selection(
+                            event.window,
+                            selection,
+                            target,
+                            transfer_atom,
+                            x11rb::CURRENT_TIME,
+                        )?
+                        .check()?;
+                    }
+                    s @ State::FastPathPendingSelection { .. }
+                    | s @ State::PendingSelection { .. } => {
+                        let (mime_atom, fast_path) = match s {
+                            State::FastPathPendingSelection { selection } => {
+                                (utf8_string_atom, Some(selection))
+                            }
+                            State::PendingSelection { mime_atom } => (mime_atom, None),
+                            _ => unreachable!(),
+                        };
+
                         let property = conn
                             .get_property(
                                 true,
@@ -391,18 +453,35 @@ fn run() -> Result<(), CliError> {
                             .reply()?;
                         if property.type_ == incr_atom {
                             debug!("Waiting for INCR transfer.");
-                            transfer_atoms[atom_allocation] = TransferAtom::PendingIncr {
+                            *state = State::PendingIncr {
                                 mime_atom,
                                 file: None,
                                 written: 0,
                             };
                         } else {
-                            if property.value.is_empty() {
-                                warn!("Dropping empty selection.");
-                                continue;
-                            }
-                            if property.value.iter().all(u8::is_ascii_whitespace) {
-                                warn!("Dropping blank selection.");
+                            if property.value.is_empty()
+                                || property.value.iter().all(u8::is_ascii_whitespace)
+                            {
+                                if let Some(selection) = fast_path {
+                                    debug!(
+                                        "UTF8_STRING target fast path empty or blank. Retrying \
+                                         with target query."
+                                    );
+                                    *state = State::TargetsRequest {
+                                        selection,
+                                        allow_plain_text: false,
+                                    };
+                                    conn.convert_selection(
+                                        event.window,
+                                        selection,
+                                        targets_atom,
+                                        transfer_atom,
+                                        x11rb::CURRENT_TIME,
+                                    )?
+                                    .check()?;
+                                } else {
+                                    warn!("Dropping empty or blank selection.");
+                                }
                                 continue;
                             }
 
@@ -450,7 +529,7 @@ fn run() -> Result<(), CliError> {
                             info!("Small selection transfer complete.");
                         }
                     }
-                    TransferAtom::PendingIncr {
+                    State::PendingIncr {
                         mime_atom,
                         file,
                         written,
@@ -521,29 +600,25 @@ fn run() -> Result<(), CliError> {
                             debug!("Writing {} bytes for INCR transfer.", property.value.len());
                             file.write_all_at(&property.value, written)
                                 .map_io_err(|| "Failed to write data to temp file.")?;
-                            transfer_atoms[atom_allocation] = TransferAtom::PendingIncr {
+                            *state = State::PendingIncr {
                                 mime_atom,
                                 file: Some(file),
                                 written: written + u64::try_from(property.value.len()).unwrap(),
                             }
                         }
                     }
-                    TransferAtom::Free => {
-                        error!(
-                            "Received property notification for free atom {}.",
-                            event.atom
-                        );
+                    State::Free => {
+                        if event.atom != window_name_atom {
+                            error!(
+                                "Received property notification for free atom {}.",
+                                conn.get_atom_name(event.atom)?
+                                    .reply()?
+                                    .name
+                                    .to_string_lossy()
+                            );
+                        }
                     }
                 }
-            }
-            Event::SelectionNotify(SelectionNotifyEvent {
-                requestor: window, ..
-            })
-            | Event::PropertyNotify(PropertyNotifyEvent { window, .. }) => {
-                warn!(
-                    "Ignoring selection response to unknown requester {}.",
-                    window
-                );
             }
             Event::Error(e) => {
                 error!("Unexpected X11 event error: {e:?}");
