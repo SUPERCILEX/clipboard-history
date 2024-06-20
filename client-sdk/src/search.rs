@@ -184,8 +184,7 @@ fn search_impl(
             let direct_dir = match openat(reader.direct(), c".", OFlags::DIRECTORY, Mode::empty())
                 .map_io_err(|| "Failed to open direct dir.")
                 .and_then(|fd| {
-                    unshare(UnshareFlags::FILES | UnshareFlags::FS)
-                        .map_io_err(|| "Failed to unshare I/O.")?;
+                    unshare(UnshareFlags::FILES).map_io_err(|| "Failed to unshare FD table.")?;
                     Ok(fd)
                 }) {
                 Ok(fd) => fd,
