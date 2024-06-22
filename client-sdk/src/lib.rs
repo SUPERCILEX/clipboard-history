@@ -40,7 +40,7 @@ pub enum ClientError {
     #[error("{0}")]
     Core(#[from] ringboard_core::Error),
     #[error(
-        "Protocol version mismatch: expected {} but got {actual}",
+        "Protocol version mismatch: expected {} but got {actual}.",
         protocol::VERSION
     )]
     VersionMismatch { actual: u8 },

@@ -39,9 +39,9 @@ pub enum AddResponse {
 #[repr(u8)]
 #[derive(Copy, Clone, thiserror::Error, Debug)]
 pub enum IdNotFoundError {
-    #[error("Invalid ring ID: {0}")]
+    #[error("Invalid ring ID: {0}.")]
     Ring(u32),
-    #[error("Invalid entry ID: {0}")]
+    #[error("Invalid entry ID: {0}.")]
     Entry(u32),
 }
 

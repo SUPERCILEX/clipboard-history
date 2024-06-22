@@ -1,7 +1,7 @@
 #![feature(core_io_borrowed_buf, read_buf)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
-use std::{borrow::Cow, io, num::ParseIntError, path::PathBuf};
+use std::{borrow::Cow, io, num::ParseIntError};
 
 use thiserror::Error;
 pub use utils::{
@@ -22,14 +22,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("An I/O error occurred")]
+    #[error("An I/O error occurred.")]
     Io {
         error: io::Error,
         context: Cow<'static, str>,
     },
-    #[error("Not a Ringboard database: {file:?}")]
-    NotARingboard { file: PathBuf },
-    #[error("Invalid PID")]
+    #[error("Invalid PID.")]
     InvalidPidError {
         error: ParseIntError,
         context: Cow<'static, str>,

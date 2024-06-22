@@ -1,6 +1,7 @@
 use std::{
+    io,
+    io::ErrorKind,
     mem::MaybeUninit,
-    path::PathBuf,
     str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -236,8 +237,16 @@ fn search_impl(
                             .to_str()
                             .ok()
                             .and_then(|id| u64::from_str(id).ok())
-                            .ok_or(ringboard_core::Error::NotARingboard {
-                                file: PathBuf::from(&*file.file_name().to_string_lossy()),
+                            .ok_or_else(|| ringboard_core::Error::Io {
+                                error: io::Error::new(
+                                    ErrorKind::InvalidData,
+                                    "Not a Ringboard database.",
+                                ),
+                                context: format!(
+                                    "Invalid direct allocation file name: {:?}",
+                                    file.file_name()
+                                )
+                                .into(),
                             })?;
 
                         Ok(Some(QueryResult {

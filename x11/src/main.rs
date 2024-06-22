@@ -83,7 +83,6 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
             Error::Io { error, context } => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
-            Error::NotARingboard { file: _ } => Report::new(wrapper),
             Error::InvalidPidError { error, context } => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
@@ -431,8 +430,8 @@ fn run() -> Result<(), CliError> {
                         )?
                         .check()?;
                     }
-                    s @ State::FastPathPendingSelection { .. }
-                    | s @ State::PendingSelection { .. } => {
+                    s @ (State::FastPathPendingSelection { .. }
+                    | State::PendingSelection { .. }) => {
                         let (mime_atom, fast_path) = match s {
                             State::FastPathPendingSelection { selection } => {
                                 (utf8_string_atom, Some(selection))

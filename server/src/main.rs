@@ -21,11 +21,11 @@ mod utils;
 enum CliError {
     #[error("{0}")]
     Core(#[from] Error),
-    #[error("The server is already running: {pid:?}")]
+    #[error("The server is already running: {pid:?}.")]
     ServerAlreadyRunning { pid: Pid, lock_file: PathBuf },
     #[error("Multiple errors occurred.")]
     Multiple(Vec<CliError>),
-    #[error("Internal error")]
+    #[error("Internal error.")]
     Internal { context: Cow<'static, str> },
 }
 
@@ -65,7 +65,6 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
             Error::Io { error, context } => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
-            Error::NotARingboard { file: _ } => Report::new(wrapper),
             Error::InvalidPidError { error, context } => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),

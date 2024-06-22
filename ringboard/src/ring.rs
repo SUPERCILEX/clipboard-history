@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::Deref, os::fd::AsFd, ptr, ptr::NonNull, slice};
+use std::{fmt::Debug, io, io::ErrorKind, ops::Deref, os::fd::AsFd, ptr, ptr::NonNull, slice};
 
 use rustix::{
     fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
@@ -220,8 +220,9 @@ impl Ring {
         if len < MAGIC.len()
             || unsafe { slice::from_raw_parts(mem.ptr().as_ptr(), MAGIC.len()) } != MAGIC
         {
-            return Err(Error::NotARingboard {
-                file: path.to_string_lossy().into_owned().into(),
+            return Err(Error::Io {
+                error: io::Error::new(ErrorKind::InvalidData, "Not a Ringboard database."),
+                context: format!("Ring file has invalid magic header: {path:?}").into(),
             });
         }
 

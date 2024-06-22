@@ -357,7 +357,6 @@ fn main() -> error_stack::Result<(), Wrapper> {
                 CoreError::Io { error, context } => Report::new(error)
                     .attach_printable(context)
                     .change_context(wrapper),
-                CoreError::NotARingboard { file: _ } => Report::new(wrapper),
                 CoreError::InvalidPidError { error, context } => Report::new(error)
                     .attach_printable(context)
                     .change_context(wrapper),
