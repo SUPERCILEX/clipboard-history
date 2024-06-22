@@ -227,7 +227,7 @@ impl DoubleEndedIterator for RingReader<'_> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Entry {
     id: u32,
     ring: RingKind,
