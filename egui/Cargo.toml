@@ -10,8 +10,10 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
-eframe = "0.27.2"
+eframe = { version = "0.27.2" }
+egui_extras = { version = "0.27.2", features = ["file", "image", "svg"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
+rustix = { version = "0.38.34", features = ["process"] }
 
 [[bin]]
 name = "ringboard-egui"

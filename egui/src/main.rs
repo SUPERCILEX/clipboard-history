@@ -1,10 +1,10 @@
 use std::{
     iter::once,
+    os::fd::AsFd,
     str,
     sync::{
         mpsc,
         mpsc::{Receiver, Sender, SyncSender},
-        Arc,
     },
     thread,
 };
@@ -12,15 +12,22 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        text::LayoutJob, Align, CentralPanel, FontId, Key, Label, Layout, Pos2, ScrollArea, Sense,
-        TextFormat, Ui, Vec2, ViewportBuilder,
+        text::LayoutJob, Align, CentralPanel, FontId, Image, Key, Label, Layout, Pos2, ScrollArea,
+        Sense, TextFormat, Ui, Vec2, ViewportBuilder,
     },
     epaint::FontFamily,
 };
 use ringboard_sdk::{
-    core::{dirs::data_dir, protocol::RingKind, Error as CoreError},
-    DatabaseReader, Entry, EntryReader,
+    connect_to_server,
+    core::{
+        direct_file_name,
+        dirs::{data_dir, socket_file},
+        protocol::RingKind,
+        Error as CoreError, IoErr,
+    },
+    ClientError, DatabaseReader, Entry, EntryReader,
 };
+use rustix::{net::SocketAddrUnix, process::fchdir};
 
 fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
@@ -33,6 +40,8 @@ fn main() -> Result<(), eframe::Error> {
             ..Default::default()
         },
         Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+
             let mut fonts = egui::FontDefinitions::default();
             fonts.font_data.insert(
                 "cascadia".to_owned(),
@@ -57,24 +66,53 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
+#[derive(Debug)]
 enum Command {
     LoadFirstPage,
+    GetDetails { entry: Entry, with_text: bool },
+    Favorite(u64),
+    Unfavorite(u64),
+    Delete(u64),
 }
 
+#[derive(Debug)]
 enum Message {
     FatalDbOpen(CoreError),
+    FatalServerConnect(ClientError),
     LoadedFirstPage {
         entries: Vec<UiEntry>,
         first_non_favorite_id: Option<u64>,
     },
+    EntryDetails(Result<DetailedEntry, CoreError>),
 }
 
 fn controller(ctx: egui::Context, commands: Receiver<Command>, responses: SyncSender<Message>) {
+    let server = {
+        match {
+            let socket_file = socket_file();
+            SocketAddrUnix::new(&socket_file)
+                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))
+        }
+        .map_err(ClientError::from)
+        .and_then(|server_addr| Ok((connect_to_server(&server_addr)?, server_addr)))
+        {
+            Ok(server) => server,
+            Err(e) => {
+                let _ = responses.send(Message::FatalServerConnect(e));
+                ctx.request_repaint();
+                return;
+            }
+        }
+    };
     let (database, mut reader) = {
         let mut dir = data_dir();
         let database = DatabaseReader::open(&mut dir);
         let reader = EntryReader::open(&mut dir);
-        match database.and_then(|d| Ok((d, reader?))) {
+        match database.and_then(|d| Ok((d, reader?))).and_then(|db| {
+            fchdir(db.1.direct())
+                .map_io_err(|| "Failed to change working directory to direct allocations.")?;
+            Ok(db)
+        }) {
             Ok(db) => db,
             Err(e) => {
                 let _ = responses.send(Message::FatalDbOpen(e));
@@ -85,10 +123,12 @@ fn controller(ctx: egui::Context, commands: Receiver<Command>, responses: SyncSe
     };
 
     for command in once(Command::LoadFirstPage).chain(commands) {
-        if responses
-            .send(handle_command(command, &database, &mut reader))
-            .is_err()
-        {
+        let Some(response) =
+            handle_command(command, (&server.0, &server.1), &database, &mut reader)
+        else {
+            continue;
+        };
+        if responses.send(response).is_err() {
             break;
         }
         ctx.request_repaint();
@@ -97,9 +137,10 @@ fn controller(ctx: egui::Context, commands: Receiver<Command>, responses: SyncSe
 
 fn handle_command(
     command: Command,
+    server: (impl AsFd, &SocketAddrUnix),
     database: &DatabaseReader,
     reader: &mut EntryReader,
-) -> Message {
+) -> Option<Message> {
     match command {
         Command::LoadFirstPage => {
             let mut entries = Vec::with_capacity(100);
@@ -113,27 +154,61 @@ fn handle_command(
                         "Error: failed to load entry {entry:?}\n{e:?}"
                     )),
                     entry,
-                    mime_type: String::new(),
                 }));
             }
-            Message::LoadedFirstPage {
+            Some(Message::LoadedFirstPage {
                 entries,
                 first_non_favorite_id: database.main().rev().nth(1).as_ref().map(Entry::id),
-            }
+            })
+        }
+        Command::GetDetails { entry, with_text } => {
+            let mut run = || {
+                if with_text {
+                    let loaded = entry.to_slice(reader)?;
+                    Ok(DetailedEntry {
+                        mime_type: (&*loaded.mime_type()?).into(),
+                        full_text: String::from_utf8(loaded.into_inner().into_owned()).ok(),
+                    })
+                } else {
+                    Ok(DetailedEntry {
+                        mime_type: (&*entry.to_file(reader)?.mime_type()?).into(),
+                        full_text: None,
+                    })
+                }
+            };
+            Some(Message::EntryDetails(run()))
+        }
+        ref c @ (Command::Favorite(id) | Command::Unfavorite(id)) => {
+            ringboard_sdk::move_to_front(
+                server.0,
+                server.1,
+                id,
+                Some(match c {
+                    Command::Favorite(_) => RingKind::Favorites,
+                    Command::Unfavorite(_) => RingKind::Main,
+                    _ => unreachable!(),
+                }),
+            );
+            None
+        }
+        Command::Delete(id) => {
+            ringboard_sdk::remove(server.0, server.1, id);
+            None
         }
     }
 }
 
+#[derive(Debug)]
 struct UiEntry {
     entry: Entry,
-    mime_type: String,
     cache: UiEntryCache,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum UiEntryCache {
-    Text { one_liner: String, full: String },
-    Binary { bytes: Arc<[u8]> },
+    Text { one_liner: String },
+    Image { uri: String },
+    Binary { mime_type: String, context: String },
     Error(String),
 }
 
@@ -147,9 +222,18 @@ struct App {
 
 #[derive(Default)]
 struct UiState {
-    fatal_error: Option<CoreError>,
+    fatal_error: Option<ClientError>,
     loaded_entries: Vec<UiEntry>,
     highlighted_id: Option<u64>,
+
+    details_requested: Option<u64>,
+    detailed_entry: Option<Result<DetailedEntry, CoreError>>,
+}
+
+#[derive(Debug)]
+struct DetailedEntry {
+    mime_type: String,
+    full_text: Option<String>,
 }
 
 impl App {
@@ -170,8 +254,17 @@ impl App {
 
 fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError> {
     let loaded = entry.to_slice(reader)?;
-    let mime_type = String::from(&*loaded.mime_type()?);
-    let entry = if let Ok(s) = str::from_utf8(&loaded) {
+    let mime_type = &*loaded.mime_type()?;
+    let entry = if mime_type.starts_with("image/") {
+        let mut buf = Default::default();
+        let buf = direct_file_name(&mut buf, entry.ring(), entry.index());
+        UiEntry {
+            entry,
+            cache: UiEntryCache::Image {
+                uri: format!("file://{}", buf.to_str().unwrap()),
+            },
+        }
+    } else if let Ok(s) = str::from_utf8(&loaded) {
         let mut one_liner = String::new();
         let mut prev_char_is_whitespace = false;
         for c in s.chars() {
@@ -185,18 +278,14 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
 
         UiEntry {
             entry,
-            mime_type,
-            cache: UiEntryCache::Text {
-                one_liner,
-                full: s.to_string(),
-            },
+            cache: UiEntryCache::Text { one_liner },
         }
     } else {
         UiEntry {
             entry,
-            mime_type,
             cache: UiEntryCache::Binary {
-                bytes: loaded.into_inner().into_owned().into(),
+                mime_type: mime_type.into(),
+                context: String::new(),
             },
         }
     };
@@ -205,7 +294,8 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
 
 fn handle_message(message: Message, state: &mut UiState) {
     match message {
-        Message::FatalDbOpen(e) => state.fatal_error = Some(e),
+        Message::FatalDbOpen(e) => state.fatal_error = Some(e.into()),
+        Message::FatalServerConnect(e) => state.fatal_error = Some(e),
         Message::LoadedFirstPage {
             entries,
             first_non_favorite_id,
@@ -213,6 +303,7 @@ fn handle_message(message: Message, state: &mut UiState) {
             state.loaded_entries = entries;
             state.highlighted_id = first_non_favorite_id;
         }
+        Message::EntryDetails(r) => state.detailed_entry = Some(r),
     }
 }
 
@@ -240,8 +331,15 @@ fn main_ui(
     };
 
     let mut try_scroll = false;
-    if !state.loaded_entries.is_empty() {
-        ui.input(|input| {
+    ui.input(|input| {
+        if input.modifiers.ctrl && input.key_pressed(Key::R) {
+            *state = UiState::default();
+            let _ = requests.send(Command::LoadFirstPage);
+            // TODO figure out how to refresh ring lengths so new entries are
+            //  loaded. We need some clean way of keeping the ring
+            //  FDs around.
+        }
+        if !state.loaded_entries.is_empty() {
             if input.key_pressed(Key::ArrowUp) {
                 try_scroll = true;
                 if let Some(id) = state.highlighted_id {
@@ -274,8 +372,8 @@ fn main_ui(
                     state.highlighted_id = state.loaded_entries.first().map(|e| e.entry.id());
                 }
             }
-        });
-    }
+        }
+    });
 
     let mut try_popup = false;
     ui.input(|input| {
@@ -289,8 +387,9 @@ fn main_ui(
     // TODO tab cycles between selecting main or favorites
     ScrollArea::vertical().show(ui, |ui| {
         let mut show_entry = |ui: &mut Ui, entry: &UiEntry| {
-            match entry.cache.clone() {
-                UiEntryCache::Text { one_liner, full } => {
+            let entry_id = entry.entry.id();
+            let response = match entry.cache.clone() {
+                UiEntryCache::Text { one_liner } => {
                     let mut job = LayoutJob::single_section(
                         one_liner,
                         TextFormat {
@@ -315,13 +414,13 @@ fn main_ui(
                         Sense::click(),
                     );
                     if try_scroll {
-                        if state.highlighted_id == Some(entry.entry.id()) {
+                        if state.highlighted_id == Some(entry_id) {
                             response.scroll_to_me(None);
                         }
                     } else if response.hovered() && ui.input(|i| i.pointer.delta() != Vec2::ZERO) {
-                        state.highlighted_id = Some(entry.entry.id());
+                        state.highlighted_id = Some(entry_id);
                     }
-                    if state.highlighted_id == Some(entry.entry.id()) {
+                    if state.highlighted_id == Some(entry_id) {
                         frame.frame.fill = ui
                             .style()
                             .visuals
@@ -332,48 +431,87 @@ fn main_ui(
                     }
                     frame.paint(ui);
 
-                    let popup_id = ui.make_persistent_id(entry.entry.id());
+                    let popup_id = ui.make_persistent_id(entry_id);
                     if response.secondary_clicked()
-                        || (try_popup && state.highlighted_id == Some(entry.entry.id()))
+                        || (try_popup && state.highlighted_id == Some(entry_id))
                     {
                         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
                     }
-                    // TODO disappears on click for some reason
                     egui::popup::popup_below_widget(ui, popup_id, &response, |ui| {
+                        if state.details_requested != Some(entry_id) {
+                            state.details_requested = Some(entry_id);
+                            state.detailed_entry = None;
+                            let _ = requests.send(Command::GetDetails {
+                                entry: entry.entry,
+                                with_text: true,
+                            });
+                        }
+
                         ui.set_min_width(200.);
 
                         ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
                             ui.horizontal(|ui| {
-                                if ui.button("Favorite").clicked() {
-                                    // TODO
+                                match entry.entry.ring() {
+                                    RingKind::Favorites => {
+                                        if ui.button("Unfavorite").clicked() {
+                                            let _ = requests.send(Command::Unfavorite(entry_id));
+                                        }
+                                    }
+                                    RingKind::Main => {
+                                        if ui.button("Favorite").clicked() {
+                                            let _ = requests.send(Command::Favorite(entry_id));
+                                        }
+                                    }
                                 }
                                 if ui.button("Delete").clicked() {
-                                    // TODO
+                                    let _ = requests.send(Command::Delete(entry_id));
                                 }
                             });
                             ui.separator();
 
-                            ui.label(format!("Id: {}", entry.entry.id()));
-                            if !entry.mime_type.is_empty() {
-                                ui.label(format!("Mime type: {}", entry.mime_type));
+                            ui.label(format!("Id: {}", entry_id));
+                            match &state.detailed_entry {
+                                None => {
+                                    ui.label("Loading…");
+                                }
+                                Some(Ok(DetailedEntry {
+                                    mime_type,
+                                    full_text,
+                                })) => {
+                                    if !mime_type.is_empty() {
+                                        ui.label(format!("Mime type: {mime_type}"));
+                                    }
+                                    ui.separator();
+                                    if let Some(full) = full_text {
+                                        ScrollArea::both().auto_shrink(false).show(ui, |ui| {
+                                            ui.label(full);
+                                        });
+                                    } else {
+                                        ui.label("Binary data.");
+                                    }
+                                }
+                                Some(Err(e)) => {
+                                    ui.label(format!("Failed to get entry details:\n{e}"));
+                                }
                             }
-                            ui.separator();
-                            ScrollArea::both().auto_shrink(false).show(ui, |ui| {
-                                ui.label(full);
-                            });
                         });
                     });
 
-                    if response.clicked() {
-                        // TODO
-                    }
+                    response
                 }
-                UiEntryCache::Binary { bytes } => {
-                    // TODO
-                }
+                // TODO why is this so broken? Loads in weird sizes and doesn't work after the first
+                //  load.
+                UiEntryCache::Image { uri } => ui.add(Image::new(uri)),
+                UiEntryCache::Binary { mime_type, context } => ui.label(format!(
+                    "Unknown binary format of type {mime_type:?} from {context}."
+                )),
                 UiEntryCache::Error(e) => {
                     ui.label(e);
+                    return;
                 }
+            };
+            if response.clicked() {
+                // TODO
             }
         };
 
