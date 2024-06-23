@@ -123,6 +123,14 @@ impl DatabaseReader {
         self.get_raw(id)
     }
 
+    pub fn main_ring_mut(&mut self) -> &mut Ring {
+        &mut self.main
+    }
+
+    pub fn favorites_ring_mut(&mut self) -> &mut Ring {
+        &mut self.favorites
+    }
+
     #[must_use]
     pub fn main(&self) -> RingReader {
         RingReader::from_ring(&self.main, RingKind::Main)
