@@ -12,10 +12,17 @@ pub enum RingKind {
 }
 
 impl RingKind {
-    pub fn file_name(&self) -> &'static str {
+    pub const fn file_name(&self) -> &'static str {
         match self {
             RingKind::Main => "main.ring",
             RingKind::Favorites => "favorites.ring",
+        }
+    }
+
+    pub const fn default_max_entries(&self) -> u32 {
+        match self {
+            RingKind::Main => 262_142,
+            RingKind::Favorites => 1022,
         }
     }
 }

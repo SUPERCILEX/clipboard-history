@@ -128,7 +128,7 @@ fn run() -> Result<(), CliError> {
     };
     info!("Acquired server lock.");
 
-    let mut allocator = Allocator::open(data_dir, /* TODO read from config */ 262_142)?;
+    let mut allocator = Allocator::open(data_dir)?;
     into_result(
         [
             reactor::run(&mut allocator),
