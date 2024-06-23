@@ -12,8 +12,8 @@ pub use ringboard_core as core;
 use ringboard_core::{
     protocol,
     protocol::{
-        AddResponse, GarbageCollectResponse, MimeType, MoveToFrontResponse, RemoveResponse,
-        Request, RingKind, SwapResponse,
+        AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
+        RemoveResponse, Request, RingKind, SwapResponse,
     },
     AsBytes, IoErr,
 };
@@ -46,6 +46,12 @@ pub enum ClientError {
     VersionMismatch { actual: u8 },
     #[error("The server returned an invalid response.")]
     InvalidResponse { context: Cow<'static, str> },
+}
+
+impl From<IdNotFoundError> for ClientError {
+    fn from(value: IdNotFoundError) -> Self {
+        Self::Core(ringboard_core::Error::IdNotFound(value))
+    }
 }
 
 pub fn connect_to_server(addr: &SocketAddrUnix) -> Result<OwnedFd, ClientError> {
