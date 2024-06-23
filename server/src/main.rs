@@ -38,7 +38,6 @@ enum Wrapper {
 // TODO implement configuration file/settings
 // TODO add tracing
 // TODO figure out broadcasting
-// TODO add search CLI command
 // TODO add paste CLI command
 // TODO implement Wayland client
 // TODO implement TUI

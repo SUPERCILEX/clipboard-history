@@ -352,9 +352,11 @@ fn handle_command(
             let results = results
                 .into_sorted_vec()
                 .into_iter()
+                // TODO support pages
                 .take(250)
                 .map(|entry| entry.0.0)
                 .map(|entry| {
+                    // TODO add support for bold highlighting the selection range
                     ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
                         cache: UiEntryCache::Error(format!(
                             "Error: failed to load entry {entry:?}\n{e:?}"
@@ -620,7 +622,6 @@ fn main_ui(
     });
 
     // TODO implement paste (by pressing enter or ctrl+N)
-    // TODO tab cycles between selecting main or favorites
     ScrollArea::vertical().show(ui, |ui| {
         let mut show_entry = |ui: &mut Ui, entry: &UiEntry| {
             let entry_id = entry.entry.id();
@@ -743,6 +744,7 @@ fn main_ui(
                 }
                 // TODO why is this so broken? Loads in weird sizes and doesn't work after the first
                 //  load.
+                // TODO make this stuff look like text entries with the popup and stuff
                 UiEntryCache::Image { uri } => ui.add(Image::new(uri)),
                 UiEntryCache::Binary { mime_type, context } => ui.label(format!(
                     "Unknown binary format of type {mime_type:?} from {context}."
@@ -771,6 +773,6 @@ fn main_ui(
 
             show_entry(ui, entry);
         }
-        // TODO add a load more button
+        // TODO support pages
     });
 }
