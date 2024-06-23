@@ -173,13 +173,7 @@ impl<'a> RingReader<'a> {
         database_dir: &mut PathBuf,
         kind: RingKind,
     ) -> Result<Ring, ringboard_core::Error> {
-        let ring = PathView::new(
-            database_dir,
-            match kind {
-                RingKind::Main => "main.ring",
-                RingKind::Favorites => "favorites.ring",
-            },
-        );
+        let ring = PathView::new(database_dir, kind.file_name());
         Ring::open(/* TODO read from config */ 262_142, &*ring)
     }
 

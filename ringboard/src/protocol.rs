@@ -11,6 +11,15 @@ pub enum RingKind {
     Main,
 }
 
+impl RingKind {
+    pub fn file_name(&self) -> &'static str {
+        match self {
+            RingKind::Main => "main.ring",
+            RingKind::Favorites => "favorites.ring",
+        }
+    }
+}
+
 // https://github.com/patrickmccallum/mimetype-io/blob/3a8176e6dd5d183b62a6d78013504128d96e9889/src/mimeData.json
 // The longest mime type found was 73 bytes long, so this should be more than
 // enough while still letting the Request fit in two cache lines.

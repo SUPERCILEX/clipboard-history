@@ -210,16 +210,7 @@ impl FreeLists {
 
         let mut allocations = [BitVec::<usize, Lsb0>::EMPTY; 11];
         for ring in [RingKind::Favorites, RingKind::Main] {
-            let ring = Ring::open(
-                0,
-                &*PathView::new(
-                    data_dir,
-                    match ring {
-                        RingKind::Favorites => "favorites.ring",
-                        RingKind::Main => "main.ring",
-                    },
-                ),
-            )?;
+            let ring = Ring::open(0, &*PathView::new(data_dir, ring.file_name()))?;
             for entry in (0..ring.len()).filter_map(|i| ring.get(i)) {
                 match entry {
                     Entry::Bucketed(entry) => {
@@ -271,15 +262,15 @@ impl FreeLists {
 
 impl Allocator {
     pub fn open(mut data_dir: PathBuf, max_entries: u32) -> Result<Self, CliError> {
-        let mut open_ring = |name| -> Result<_, CliError> {
-            let ring = PathView::new(&mut data_dir, name);
+        let mut open_ring = |kind: RingKind| -> Result<_, CliError> {
+            let ring = PathView::new(&mut data_dir, kind.file_name());
             Ok(WritableRing {
                 writer: RingWriter::open(&*ring)?,
                 ring: Ring::open(max_entries, &*ring)?,
             })
         };
-        let main_ring = open_ring("main.ring")?;
-        let favorites_ring = open_ring("favorites.ring")?;
+        let main_ring = open_ring(RingKind::Main)?;
+        let favorites_ring = open_ring(RingKind::Favorites)?;
 
         let mut create_dir = |name| {
             let dir = PathView::new(&mut data_dir, name);
