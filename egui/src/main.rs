@@ -1,5 +1,5 @@
 use std::{
-    cmp::{Ordering, Reverse},
+    cmp::{min, Ordering, Reverse},
     collections::{BinaryHeap, HashMap},
     hash::BuildHasherDefault,
     iter::once,
@@ -352,6 +352,7 @@ fn handle_command(
             let results = results
                 .into_sorted_vec()
                 .into_iter()
+                .take(250)
                 .map(|entry| entry.0.0)
                 .map(|entry| {
                     ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
@@ -438,7 +439,22 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
                 uri: format!("file://{}", buf.to_str().unwrap()),
             },
         }
-    } else if let Ok(s) = str::from_utf8(&loaded) {
+    } else if let Ok(s) = {
+        let mut shrunk = &loaded[..min(loaded.len(), 250)];
+        loop {
+            let Some(&b) = shrunk.last() else {
+                break;
+            };
+            // https://github.com/rust-lang/rust/blob/33422e72c8a66bdb5ee21246a948a1a02ca91674/library/core/src/num/mod.rs#L1090
+            let is_utf8_char_boundary = (b as i8) >= -0x40;
+            if is_utf8_char_boundary || loaded.len() == shrunk.len() {
+                break;
+            } else {
+                shrunk = &loaded[..shrunk.len() + 1];
+            }
+        }
+        str::from_utf8(shrunk)
+    } {
         let mut one_liner = String::new();
         let mut prev_char_is_whitespace = false;
         for c in s.chars() {
@@ -448,6 +464,9 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
 
             one_liner.push(if c.is_whitespace() { ' ' } else { c });
             prev_char_is_whitespace = c.is_whitespace();
+        }
+        if s.len() != loaded.len() {
+            one_liner.push('…');
         }
 
         UiEntry {
