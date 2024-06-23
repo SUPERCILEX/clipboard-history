@@ -273,7 +273,7 @@ impl Ring {
 
     #[must_use]
     pub const fn next_head(&self, current: u32) -> u32 {
-        if current == self.capacity() - 1 {
+        if current >= self.capacity() - 1 {
             0
         } else {
             current + 1
@@ -286,7 +286,7 @@ impl Ring {
             return current;
         }
 
-        if current == self.len() - 1 {
+        if current >= self.len() - 1 {
             0
         } else {
             current + 1
