@@ -279,7 +279,7 @@ fn handle_command(
             }
             Ok(None)
         }
-        Command::Search { query, regex } => {
+        Command::Search { mut query, regex } => {
             struct SortedEntry(Entry);
 
             impl PartialOrd for SortedEntry {
@@ -311,11 +311,11 @@ fn handle_command(
                     );
                 }
             }
-            let query = query.trim();
             let query = if regex {
-                Query::Regex(Regex::new(query)?)
+                Query::Regex(Regex::new(query.trim())?)
             } else {
-                Query::Plain(query.as_bytes())
+                query.make_ascii_lowercase();
+                Query::PlainIgnoreCase(query.trim().as_bytes())
             };
             let reader = Arc::new(reader_.take().unwrap());
 

@@ -29,11 +29,12 @@ use crate::{ring_reader::xattr_mime_type, EntryReader};
 #[derive(Clone, Debug)]
 pub enum Query<'a> {
     Plain(&'a [u8]),
+    PlainIgnoreCase(&'a [u8]),
     Regex(Regex),
 }
 
 trait QueryImpl {
-    fn find(&self, haystack: &[u8]) -> Option<(usize, usize)>;
+    fn find(&mut self, haystack: &[u8]) -> Option<(usize, usize)>;
 
     fn needle_len(&self) -> Option<usize>;
 }
@@ -42,7 +43,7 @@ trait QueryImpl {
 struct PlainQuery(Arc<Finder<'static>>);
 
 impl QueryImpl for PlainQuery {
-    fn find(&self, haystack: &[u8]) -> Option<(usize, usize)> {
+    fn find(&mut self, haystack: &[u8]) -> Option<(usize, usize)> {
         self.0
             .find(haystack)
             .map(|start| (start, start + self.0.needle().len()))
@@ -54,10 +55,30 @@ impl QueryImpl for PlainQuery {
 }
 
 #[derive(Clone)]
+struct PlainIgnoreCaseQuery {
+    inner: PlainQuery,
+    cache: Vec<u8>,
+}
+
+impl QueryImpl for PlainIgnoreCaseQuery {
+    fn find(&mut self, haystack: &[u8]) -> Option<(usize, usize)> {
+        self.cache.clear();
+        self.cache.extend_from_slice(haystack);
+        self.cache.make_ascii_lowercase();
+
+        self.inner.find(&self.cache)
+    }
+
+    fn needle_len(&self) -> Option<usize> {
+        self.inner.needle_len()
+    }
+}
+
+#[derive(Clone)]
 struct RegexQuery(Regex);
 
 impl QueryImpl for RegexQuery {
-    fn find(&self, haystack: &[u8]) -> Option<(usize, usize)> {
+    fn find(&mut self, haystack: &[u8]) -> Option<(usize, usize)> {
         self.0.find(haystack).map(|m| (m.start(), m.end()))
     }
 
@@ -128,6 +149,16 @@ pub fn search(
 ) {
     let (results, threads) = match query {
         Query::Plain(p) => search_impl(PlainQuery(Arc::new(Finder::new(p).into_owned())), reader),
+        Query::PlainIgnoreCase(p) => {
+            debug_assert!(p.to_ascii_lowercase() == p);
+            search_impl(
+                PlainIgnoreCaseQuery {
+                    inner: PlainQuery(Arc::new(Finder::new(p).into_owned())),
+                    cache: Vec::new(),
+                },
+                reader,
+            )
+        }
         Query::Regex(r) => search_impl(RegexQuery(r), reader),
     };
     (results, threads.into_iter())
@@ -135,7 +166,7 @@ pub fn search(
 
 #[allow(clippy::too_many_lines)]
 fn search_impl(
-    query: impl QueryImpl + Clone + Send + 'static,
+    mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
 ) -> (QueryIter, arrayvec::IntoIter<JoinHandle<()>, 12>) {
     let (sender, receiver) = mpsc::sync_channel(0);
@@ -146,7 +177,7 @@ fn search_impl(
         u32::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u32::MAX),
     ))..reader.buckets().len()
     {
-        let query = query.clone();
+        let mut query = query.clone();
         let reader = reader.clone();
         let sender = sender.clone();
         let stop = stop.clone();
