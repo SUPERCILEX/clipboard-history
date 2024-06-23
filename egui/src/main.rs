@@ -1,6 +1,7 @@
 use std::{
     iter::once,
-    os::fd::AsFd,
+    mem,
+    os::fd::{AsFd, BorrowedFd},
     str,
     sync::{
         mpsc,
@@ -22,12 +23,17 @@ use ringboard_sdk::{
     core::{
         direct_file_name,
         dirs::{data_dir, socket_file},
-        protocol::RingKind,
-        Error as CoreError, IoErr,
+        protocol::{MoveToFrontResponse, RemoveResponse, RingKind},
+        ring::{offset_to_entries, Ring},
+        Error as CoreError, IoErr, PathView,
     },
     ClientError, DatabaseReader, Entry, EntryReader,
 };
-use rustix::{net::SocketAddrUnix, process::fchdir};
+use rustix::{
+    fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
+    net::SocketAddrUnix,
+    process::fchdir,
+};
 
 fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
@@ -68,6 +74,7 @@ fn main() -> Result<(), eframe::Error> {
 
 #[derive(Debug)]
 enum Command {
+    RefreshDb,
     LoadFirstPage,
     GetDetails { entry: Entry, with_text: bool },
     Favorite(u64),
@@ -79,6 +86,7 @@ enum Command {
 enum Message {
     FatalDbOpen(CoreError),
     FatalServerConnect(ClientError),
+    Error(ClientError),
     LoadedFirstPage {
         entries: Vec<UiEntry>,
         first_non_favorite_id: Option<u64>,
@@ -104,15 +112,28 @@ fn controller(ctx: egui::Context, commands: Receiver<Command>, responses: SyncSe
             }
         }
     };
-    let (database, mut reader) = {
-        let mut dir = data_dir();
-        let database = DatabaseReader::open(&mut dir);
-        let reader = EntryReader::open(&mut dir);
-        match database.and_then(|d| Ok((d, reader?))).and_then(|db| {
-            fchdir(db.1.direct())
+    let ((mut database, mut reader), rings) = {
+        let run = || {
+            let mut dir = data_dir();
+
+            let database = DatabaseReader::open(&mut dir)?;
+            let reader = EntryReader::open(&mut dir)?;
+
+            let mut open_ring = |kind: RingKind| {
+                let path = PathView::new(&mut dir, kind.file_name());
+                openat(CWD, &*path, OFlags::PATH, Mode::empty()).map_io_err(|| {
+                    format!("Failed to open Ringboard database for reading: {path:?}")
+                })
+            };
+            let rings = (open_ring(RingKind::Main)?, open_ring(RingKind::Favorites)?);
+
+            fchdir(reader.direct())
                 .map_io_err(|| "Failed to change working directory to direct allocations.")?;
-            Ok(db)
-        }) {
+
+            Ok(((database, reader), rings))
+        };
+
+        match run() {
             Ok(db) => db,
             Err(e) => {
                 let _ = responses.send(Message::FatalDbOpen(e));
@@ -123,9 +144,16 @@ fn controller(ctx: egui::Context, commands: Receiver<Command>, responses: SyncSe
     };
 
     for command in once(Command::LoadFirstPage).chain(commands) {
-        let Some(response) =
-            handle_command(command, (&server.0, &server.1), &database, &mut reader)
-        else {
+        let result = handle_command(
+            command,
+            (&server.0, &server.1),
+            &mut database,
+            &mut reader,
+            (&rings.0, &rings.1),
+        )
+        .unwrap_or_else(|e| Some(Message::Error(e)));
+
+        let Some(response) = result else {
             continue;
         };
         if responses.send(response).is_err() {
@@ -138,10 +166,27 @@ fn controller(ctx: egui::Context, commands: Receiver<Command>, responses: SyncSe
 fn handle_command(
     command: Command,
     server: (impl AsFd, &SocketAddrUnix),
-    database: &DatabaseReader,
+    database: &mut DatabaseReader,
     reader: &mut EntryReader,
-) -> Option<Message> {
+    rings: (impl AsFd, impl AsFd),
+) -> Result<Option<Message>, ClientError> {
     match command {
+        Command::RefreshDb => {
+            let run = |ring: &mut Ring, fd: BorrowedFd| {
+                let len = statx(fd, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
+                    .map_io_err(|| "Failed to statx Ringboard database file.")?
+                    .stx_size;
+                let len = offset_to_entries(usize::try_from(len).unwrap());
+                unsafe {
+                    ring.set_len(len);
+                }
+                Ok::<_, CoreError>(())
+            };
+            run(database.main_ring_mut(), rings.0.as_fd())?;
+            run(database.favorites_ring_mut(), rings.1.as_fd())?;
+
+            Ok(None)
+        }
         Command::LoadFirstPage => {
             let mut entries = Vec::with_capacity(100);
             for entry in database
@@ -156,10 +201,10 @@ fn handle_command(
                     entry,
                 }));
             }
-            Some(Message::LoadedFirstPage {
+            Ok(Some(Message::LoadedFirstPage {
                 entries,
                 first_non_favorite_id: database.main().rev().nth(1).as_ref().map(Entry::id),
-            })
+            }))
         }
         Command::GetDetails { entry, with_text } => {
             let mut run = || {
@@ -176,10 +221,10 @@ fn handle_command(
                     })
                 }
             };
-            Some(Message::EntryDetails(run()))
+            Ok(Some(Message::EntryDetails(run())))
         }
         ref c @ (Command::Favorite(id) | Command::Unfavorite(id)) => {
-            ringboard_sdk::move_to_front(
+            match ringboard_sdk::move_to_front(
                 server.0,
                 server.1,
                 id,
@@ -188,12 +233,18 @@ fn handle_command(
                     Command::Unfavorite(_) => RingKind::Main,
                     _ => unreachable!(),
                 }),
-            );
-            None
+            )? {
+                MoveToFrontResponse::Success { .. } => {}
+                MoveToFrontResponse::Error(e) => return Err(e.into()),
+            }
+            Ok(None)
         }
         Command::Delete(id) => {
-            ringboard_sdk::remove(server.0, server.1, id);
-            None
+            match ringboard_sdk::remove(server.0, server.1, id)? {
+                RemoveResponse { error: Some(e) } => return Err(e.into()),
+                RemoveResponse { error: None } => {}
+            }
+            Ok(None)
         }
     }
 }
@@ -223,6 +274,7 @@ struct App {
 #[derive(Default)]
 struct UiState {
     fatal_error: Option<ClientError>,
+    last_error: Option<ClientError>,
     loaded_entries: Vec<UiEntry>,
     highlighted_id: Option<u64>,
 
@@ -296,12 +348,15 @@ fn handle_message(message: Message, state: &mut UiState) {
     match message {
         Message::FatalDbOpen(e) => state.fatal_error = Some(e.into()),
         Message::FatalServerConnect(e) => state.fatal_error = Some(e),
+        Message::Error(e) => state.last_error = Some(e),
         Message::LoadedFirstPage {
             entries,
             first_non_favorite_id,
         } => {
             state.loaded_entries = entries;
-            state.highlighted_id = first_non_favorite_id;
+            if state.highlighted_id.is_none() {
+                state.highlighted_id = first_non_favorite_id;
+            }
         }
         Message::EntryDetails(r) => state.detailed_entry = Some(r),
     }
@@ -325,19 +380,25 @@ fn main_ui(
     state: &mut UiState,
     requests: &Sender<Command>,
 ) {
+    let refresh = || {
+        let _ = requests
+            .send(Command::RefreshDb)
+            .and_then(|()| requests.send(Command::LoadFirstPage));
+    };
+
     if let Some(ref e) = state.fatal_error {
         ui.label(format!("Fatal error: {e:?}"));
         return;
     };
+    if let Some(e) = mem::take(&mut state.last_error) {
+        ui.label(format!("Error: {e:?}"));
+    }
 
     let mut try_scroll = false;
     ui.input(|input| {
         if input.modifiers.ctrl && input.key_pressed(Key::R) {
             *state = UiState::default();
-            let _ = requests.send(Command::LoadFirstPage);
-            // TODO figure out how to refresh ring lengths so new entries are
-            //  loaded. We need some clean way of keeping the ring
-            //  FDs around.
+            refresh();
         }
         if !state.loaded_entries.is_empty() {
             if input.key_pressed(Key::ArrowUp) {
@@ -455,16 +516,19 @@ fn main_ui(
                                     RingKind::Favorites => {
                                         if ui.button("Unfavorite").clicked() {
                                             let _ = requests.send(Command::Unfavorite(entry_id));
+                                            refresh();
                                         }
                                     }
                                     RingKind::Main => {
                                         if ui.button("Favorite").clicked() {
                                             let _ = requests.send(Command::Favorite(entry_id));
+                                            refresh();
                                         }
                                     }
                                 }
                                 if ui.button("Delete").clicked() {
                                     let _ = requests.send(Command::Delete(entry_id));
+                                    refresh();
                                 }
                             });
                             ui.separator();
@@ -483,9 +547,12 @@ fn main_ui(
                                     }
                                     ui.separator();
                                     if let Some(full) = full_text {
-                                        ScrollArea::both().auto_shrink(false).show(ui, |ui| {
-                                            ui.label(full);
-                                        });
+                                        ScrollArea::both().auto_shrink([false, true]).show(
+                                            ui,
+                                            |ui| {
+                                                ui.label(full);
+                                            },
+                                        );
                                     } else {
                                         ui.label("Binary data.");
                                     }
