@@ -935,7 +935,10 @@ dependencies = [
  "clipboard-history-client-sdk",
  "eframe",
  "egui_extras",
+ "regex",
+ "rustc-hash 2.0.0",
  "rustix 0.38.34",
+ "thiserror",
 ]
 
 [[package]]

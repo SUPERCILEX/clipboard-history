@@ -16,10 +16,10 @@ use smallvec::SmallVec;
 use crate::{DatabaseReader, Entry, EntryReader, Kind};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-struct RingAndIndex(u32);
+pub struct RingAndIndex(u32);
 
 impl RingAndIndex {
-    fn new(ring: RingKind, index: u32) -> Self {
+    pub fn new(ring: RingKind, index: u32) -> Self {
         const {
             assert!(size_of::<RingKind>() == size_of::<u8>());
         }
@@ -28,16 +28,16 @@ impl RingAndIndex {
         Self((index << u8::BITS) | (ring as u32))
     }
 
-    fn ring(self) -> RingKind {
+    pub fn ring(self) -> RingKind {
         let ring = u8::try_from(self.0 & u32::from(u8::MAX)).unwrap();
         unsafe { transmute::<_, RingKind>(ring) }
     }
 
-    const fn index(self) -> u32 {
+    pub const fn index(self) -> u32 {
         self.0 >> u8::BITS
     }
 
-    fn id(self) -> u64 {
+    pub fn id(self) -> u64 {
         composite_id(self.ring(), self.index())
     }
 }
