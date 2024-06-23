@@ -43,6 +43,8 @@ pub clipboard_history_core::protocol::IdNotFoundError::Entry(u32)
 pub clipboard_history_core::protocol::IdNotFoundError::Ring(u32)
 impl core::clone::Clone for clipboard_history_core::protocol::IdNotFoundError
 pub fn clipboard_history_core::protocol::IdNotFoundError::clone(&self) -> clipboard_history_core::protocol::IdNotFoundError
+impl core::convert::From<clipboard_history_core::protocol::IdNotFoundError> for clipboard_history_core::Error
+pub fn clipboard_history_core::Error::from(source: clipboard_history_core::protocol::IdNotFoundError) -> Self
 impl core::error::Error for clipboard_history_core::protocol::IdNotFoundError
 impl core::fmt::Debug for clipboard_history_core::protocol::IdNotFoundError
 pub fn clipboard_history_core::protocol::IdNotFoundError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -162,6 +164,9 @@ pub fn clipboard_history_core::protocol::Request::from(t: T) -> T
 #[repr(u8)] pub enum clipboard_history_core::protocol::RingKind
 pub clipboard_history_core::protocol::RingKind::Favorites
 pub clipboard_history_core::protocol::RingKind::Main
+impl clipboard_history_core::protocol::RingKind
+pub const fn clipboard_history_core::protocol::RingKind::default_max_entries(&self) -> u32
+pub const fn clipboard_history_core::protocol::RingKind::file_name(&self) -> &'static str
 impl core::clone::Clone for clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_core::protocol::RingKind::clone(&self) -> clipboard_history_core::protocol::RingKind
 impl core::cmp::Eq for clipboard_history_core::protocol::RingKind
@@ -335,10 +340,10 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::SwapRes
 pub fn clipboard_history_core::protocol::SwapResponse::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::SwapResponse
 pub fn clipboard_history_core::protocol::SwapResponse::from(t: T) -> T
-pub const clipboard_history_core::protocol::VERSION: u8 = 0u8
+pub const clipboard_history_core::protocol::VERSION: u8
 pub fn clipboard_history_core::protocol::composite_id(kind: clipboard_history_core::protocol::RingKind, id: u32) -> u64
 pub fn clipboard_history_core::protocol::decompose_id(id: u64) -> core::result::Result<(clipboard_history_core::protocol::RingKind, u32), clipboard_history_core::protocol::IdNotFoundError>
-pub type clipboard_history_core::protocol::MimeType = arrayvec::array_string::ArrayString<usize>
+pub type clipboard_history_core::protocol::MimeType = arrayvec::array_string::ArrayString<120>
 pub mod clipboard_history_core::ring
 pub enum clipboard_history_core::ring::Entry
 pub clipboard_history_core::ring::Entry::Bucketed(clipboard_history_core::ring::BucketEntry)
@@ -457,17 +462,24 @@ impl<T> core::convert::From<T> for clipboard_history_core::ring::Header
 pub fn clipboard_history_core::ring::Header::from(t: T) -> T
 pub struct clipboard_history_core::ring::Mmap
 impl clipboard_history_core::ring::Mmap
+pub fn clipboard_history_core::ring::Mmap::from<Fd: std::os::fd::owned::AsFd>(fd: Fd) -> rustix::io::errno::Result<Self>
+pub const fn clipboard_history_core::ring::Mmap::is_empty(&self) -> bool
 pub const fn clipboard_history_core::ring::Mmap::len(&self) -> usize
 pub fn clipboard_history_core::ring::Mmap::new<Fd: std::os::fd::owned::AsFd>(fd: Fd, len: usize) -> rustix::io::errno::Result<Self>
 pub const fn clipboard_history_core::ring::Mmap::ptr(&self) -> core::ptr::non_null::NonNull<u8>
 pub fn clipboard_history_core::ring::Mmap::remap(&mut self, len: usize) -> rustix::io::errno::Result<()>
+impl core::convert::AsRef<[u8]> for clipboard_history_core::ring::Mmap
+pub fn clipboard_history_core::ring::Mmap::as_ref(&self) -> &[u8]
 impl core::fmt::Debug for clipboard_history_core::ring::Mmap
 pub fn clipboard_history_core::ring::Mmap::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Send for clipboard_history_core::ring::Mmap
+impl core::marker::Sync for clipboard_history_core::ring::Mmap
+impl core::ops::deref::Deref for clipboard_history_core::ring::Mmap
+pub type clipboard_history_core::ring::Mmap::Target = [u8]
+pub fn clipboard_history_core::ring::Mmap::deref(&self) -> &[u8]
 impl core::ops::drop::Drop for clipboard_history_core::ring::Mmap
 pub fn clipboard_history_core::ring::Mmap::drop(&mut self)
 impl core::marker::Freeze for clipboard_history_core::ring::Mmap
-impl !core::marker::Send for clipboard_history_core::ring::Mmap
-impl !core::marker::Sync for clipboard_history_core::ring::Mmap
 impl core::marker::Unpin for clipboard_history_core::ring::Mmap
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::Mmap
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::Mmap
@@ -532,8 +544,8 @@ pub fn clipboard_history_core::ring::Ring::write_head(&self) -> u32
 impl core::fmt::Debug for clipboard_history_core::ring::Ring
 pub fn clipboard_history_core::ring::Ring::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Freeze for clipboard_history_core::ring::Ring
-impl !core::marker::Send for clipboard_history_core::ring::Ring
-impl !core::marker::Sync for clipboard_history_core::ring::Ring
+impl core::marker::Send for clipboard_history_core::ring::Ring
+impl core::marker::Sync for clipboard_history_core::ring::Ring
 impl core::marker::Unpin for clipboard_history_core::ring::Ring
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::Ring
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::Ring
@@ -553,21 +565,23 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::Ring where 
 pub fn clipboard_history_core::ring::Ring::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::ring::Ring
 pub fn clipboard_history_core::ring::Ring::from(t: T) -> T
-pub const clipboard_history_core::ring::MAGIC: _
-pub const clipboard_history_core::ring::MAX_ENTRIES: _
-pub const clipboard_history_core::ring::VERSION: u8 = 0u8
+pub const clipboard_history_core::ring::MAGIC: 
+pub const clipboard_history_core::ring::MAX_ENTRIES: 
+pub const clipboard_history_core::ring::VERSION: u8
 pub fn clipboard_history_core::ring::entries_to_offset(entries: u32) -> u64
 pub fn clipboard_history_core::ring::offset_to_entries(offset: usize) -> u32
 pub enum clipboard_history_core::Error
+pub clipboard_history_core::Error::IdNotFound(clipboard_history_core::protocol::IdNotFoundError)
 pub clipboard_history_core::Error::InvalidPidError
 pub clipboard_history_core::Error::InvalidPidError::context: alloc::borrow::Cow<'static, str>
 pub clipboard_history_core::Error::InvalidPidError::error: core::num::error::ParseIntError
 pub clipboard_history_core::Error::Io
 pub clipboard_history_core::Error::Io::context: alloc::borrow::Cow<'static, str>
 pub clipboard_history_core::Error::Io::error: std::io::error::Error
-pub clipboard_history_core::Error::NotARingboard
-pub clipboard_history_core::Error::NotARingboard::file: std::path::PathBuf
+impl core::convert::From<clipboard_history_core::protocol::IdNotFoundError> for clipboard_history_core::Error
+pub fn clipboard_history_core::Error::from(source: clipboard_history_core::protocol::IdNotFoundError) -> Self
 impl core::error::Error for clipboard_history_core::Error
+pub fn clipboard_history_core::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
 impl core::fmt::Debug for clipboard_history_core::Error
 pub fn clipboard_history_core::Error::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for clipboard_history_core::Error
@@ -696,7 +710,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::StringView<'a> wh
 pub fn clipboard_history_core::StringView<'a>::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::StringView<'a>
 pub fn clipboard_history_core::StringView<'a>::from(t: T) -> T
-pub const clipboard_history_core::TEXT_MIMES: _
+pub const clipboard_history_core::TEXT_MIMES: 
 pub trait clipboard_history_core::AsBytes: core::marker::Sized
 pub fn clipboard_history_core::AsBytes::as_bytes(&self) -> &[u8]
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::AddResponse
@@ -713,8 +727,8 @@ impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_
 pub fn rustix::io::errno::Result<T>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
 pub const fn clipboard_history_core::bucket_to_length(bucket: usize) -> u32
 pub fn clipboard_history_core::copy_file_range_all<InFd: std::os::fd::owned::AsFd, OutFd: std::os::fd::owned::AsFd>(fd_in: InFd, off_in: core::option::Option<&mut u64>, fd_out: OutFd, off_out: core::option::Option<&mut u64>, len: usize) -> rustix::io::errno::Result<usize>
-pub fn clipboard_history_core::direct_file_name(buf: &mut [u8; 15], to: clipboard_history_core::protocol::RingKind, id: u32) -> clipboard_history_core::DirectFileNameToken<'_, ()>
+pub fn clipboard_history_core::direct_file_name(buf: &mut [u8; 14], to: clipboard_history_core::protocol::RingKind, id: u32) -> clipboard_history_core::DirectFileNameToken<'_, ()>
 pub fn clipboard_history_core::open_buckets<F: core::ops::function::FnMut(&str) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>>(open: F) -> clipboard_history_core::Result<([std::os::fd::owned::OwnedFd; 11], [u64; 11])>
 pub fn clipboard_history_core::read_server_pid<Fd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(dir: Fd, lock_file: P) -> clipboard_history_core::Result<core::option::Option<rustix::pid::Pid>>
-pub fn clipboard_history_core::size_to_bucket(bytes: u32) -> usize
+pub fn clipboard_history_core::size_to_bucket(bytes: u32) -> u8
 pub type clipboard_history_core::Result<T> = core::result::Result<T, clipboard_history_core::Error>

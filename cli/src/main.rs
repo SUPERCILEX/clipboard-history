@@ -389,6 +389,12 @@ fn main() -> error_stack::Result<(), Wrapper> {
     })
 }
 
+impl From<IdNotFoundError> for CliError {
+    fn from(value: IdNotFoundError) -> Self {
+        Self::Core(CoreError::IdNotFound(value))
+    }
+}
+
 fn run() -> Result<(), CliError> {
     let Cli { cmd, help: _ } = Cli::parse();
 

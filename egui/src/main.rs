@@ -65,14 +65,14 @@ fn main() -> Result<(), eframe::Error> {
             let (response_sender, response_receiver) = mpsc::sync_channel(8);
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
-                || controller(ctx, command_receiver, response_sender)
+                move || controller(&ctx, &command_receiver, &response_sender)
             });
             Box::new(App::start(cascadia, command_sender, response_receiver))
         }),
     )
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 enum Command {
     RefreshDb,
     LoadFirstPage,
@@ -94,7 +94,7 @@ enum Message {
     EntryDetails(Result<DetailedEntry, CoreError>),
 }
 
-fn controller(ctx: egui::Context, commands: Receiver<Command>, responses: SyncSender<Message>) {
+fn controller(ctx: &egui::Context, commands: &Receiver<Command>, responses: &SyncSender<Message>) {
     let server = {
         match {
             let socket_file = socket_file();
@@ -149,7 +149,7 @@ fn controller(ctx: egui::Context, commands: Receiver<Command>, responses: SyncSe
             (&server.0, &server.1),
             &mut database,
             &mut reader,
-            (&rings.0, &rings.1),
+            &(&rings.0, &rings.1),
         )
         .unwrap_or_else(|e| Some(Message::Error(e)));
 
@@ -168,7 +168,7 @@ fn handle_command(
     server: (impl AsFd, &SocketAddrUnix),
     database: &mut DatabaseReader,
     reader: &mut EntryReader,
-    rings: (impl AsFd, impl AsFd),
+    rings: &(impl AsFd, impl AsFd),
 ) -> Result<Option<Message>, ClientError> {
     match command {
         Command::RefreshDb => {
@@ -369,14 +369,14 @@ impl eframe::App for App {
         }
 
         CentralPanel::default().show(ctx, |ui| {
-            main_ui(ui, self.row_font.clone(), &mut self.state, &self.requests)
+            main_ui(ui, &self.row_font, &mut self.state, &self.requests);
         });
     }
 }
 
 fn main_ui(
     ui: &mut Ui,
-    entry_text_font: FontFamily,
+    entry_text_font: &FontFamily,
     state: &mut UiState,
     requests: &Sender<Command>,
 ) {
@@ -533,7 +533,7 @@ fn main_ui(
                             });
                             ui.separator();
 
-                            ui.label(format!("Id: {}", entry_id));
+                            ui.label(format!("Id: {entry_id}"));
                             match &state.detailed_entry {
                                 None => {
                                     ui.label("Loading…");
