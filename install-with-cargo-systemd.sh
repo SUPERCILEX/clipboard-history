@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
-systemd --verison
-cargo --version
-
-cargo install clipboard-history-server --no-default-features --features systemd
+cargo +nightly install clipboard-history-server --no-default-features --features systemd
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/server/ringboard-server.service --create-dirs -O --output-dir ~/.config/systemd/user/
 
-cargo install clipboard-history-$XDG_SESSION_TYPE --no-default-features
+# TODO remove once wayland client is implemented
+XDG_SESSION_TYPE=x11
+cargo +nightly install clipboard-history-$XDG_SESSION_TYPE --no-default-features
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/$XDG_SESSION_TYPE/ringboard-$XDG_SESSION_TYPE.service -O --output-dir ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable ringboard-$XDG_SESSION_TYPE
 
-cargo install clipboard-history clipboard-history-egui
+cargo +nightly install clipboard-history clipboard-history-egui
 
 echo
 echo "--- DONE ---"
