@@ -53,7 +53,7 @@ enum CliError {
     X11Reply(#[from] ReplyError),
     #[error("Failed to create X11 ID.")]
     X11Id(#[from] ReplyOrIdError),
-    #[error("Unsupported X11: xfixes extension not available.")]
+    #[error("Unsupported X11: XFixes extension not available.")]
     X11NoXfixes,
 }
 
@@ -248,7 +248,7 @@ fn run() -> Result<(), CliError> {
     conn.extension_information(xfixes::X11_EXTENSION_NAME)?
         .ok_or(CliError::X11NoXfixes)?;
     xfixes::query_version(&conn, 5, 0)?.reply()?;
-    debug!("Xfixes extension availability confirmed.");
+    debug!("XFixes extension availability confirmed.");
 
     select_selection_input(
         &conn,
@@ -291,12 +291,12 @@ fn run() -> Result<(), CliError> {
             Event::SelectionNotify(event) => {
                 let Some((state, transfer_atom)) = allocator.get(event.requestor) else {
                     warn!(
-                        "Ignoring selection notify to unknown requester {}.",
+                        "Ignoring selection notification to unknown requester {}.",
                         event.requestor
                     );
                     continue;
                 };
-                debug!("Received selection notification.");
+                debug!("Stage 2 selection notification received.");
 
                 match state {
                     &mut State::FastPathPendingSelection { selection } => {
@@ -383,7 +383,7 @@ fn run() -> Result<(), CliError> {
                                 for (cookie, atom) in pending_atom_cookies.drain(..) {
                                     let reply = cookie.reply()?;
                                     let name = reply.name.to_string_lossy();
-                                    trace!("Target {name:?} available on atom {atom}.");
+                                    debug!("Target {name:?} available on atom {atom}.");
 
                                     if name.len() > MimeType::new_const().capacity() {
                                         warn!("Target {name:?} name too long, ignoring.");
