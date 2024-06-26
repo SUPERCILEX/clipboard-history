@@ -1,13 +1,19 @@
 use ringboard_sdk::core::TEXT_MIMES;
 use x11rb::protocol::xproto::Atom;
 
+#[derive(Copy, Clone)]
+struct SeenMime {
+    atom: Atom,
+    has_params: bool,
+}
+
 #[derive(Default)]
 struct KnownSeenMimes {
-    text: Option<Atom>,
-    x_special: Option<Atom>,
-    chromium_custom: Option<Atom>,
-    image: Option<Atom>,
-    other: Option<Atom>,
+    text: Option<SeenMime>,
+    x_special: Option<SeenMime>,
+    chromium_custom: Option<SeenMime>,
+    image: Option<SeenMime>,
+    other: Option<SeenMime>,
 }
 
 #[derive(Default)]
@@ -42,7 +48,20 @@ impl BestMimeTypeFinder {
             return;
         };
         if target.is_none() {
-            *target = Some(atom);
+            *target = Some(SeenMime {
+                atom,
+                has_params: mime.contains(";"),
+            });
+        } else if let Some(SeenMime {
+            atom: _,
+            has_params: true,
+        }) = target
+            && !mime.contains(";")
+        {
+            *target = Some(SeenMime {
+                atom,
+                has_params: false,
+            });
         }
     }
 
@@ -62,6 +81,15 @@ impl BestMimeTypeFinder {
                 },
         } = *self;
 
-        text.or(x_special).or(chromium_custom).or(image).or(other)
+        text.or(x_special)
+            .or(chromium_custom)
+            .or(image)
+            .or(other)
+            .map(
+                |SeenMime {
+                     atom,
+                     has_params: _,
+                 }| atom,
+            )
     }
 }

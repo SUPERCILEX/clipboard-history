@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 use std::{fs::File, mem, os::unix::fs::FileExt};
 
 use arrayvec::ArrayVec;
