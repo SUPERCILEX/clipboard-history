@@ -409,10 +409,10 @@ fn run() -> Result<(), CliError> {
                             finder.kill_text();
                         }
                         let target = finder.best();
-                        if target.is_none() {
-                            warn!("No usable targets returned, asking for plain text anyways.");
-                        }
-                        let target = target.unwrap_or(utf8_string_atom);
+                        let Some(target) = target else {
+                            warn!("No usable targets returned, dropping selection.");
+                            continue;
+                        };
                         if cfg!(debug_assertions) {
                             info!(
                                 "Choosing target {:?} on atom {target}.",
