@@ -346,7 +346,6 @@ impl Allocator {
         let head = ring.write_head();
 
         if let Some(entry) = ring.get(head) {
-            // TODO get rid of this write on the happy path
             writer.write(Entry::Uninitialized, head)?;
             self.data.free(entry, to, head)?;
         }
