@@ -2,7 +2,7 @@ use std::{fmt::Debug, io, io::ErrorKind, ops::Deref, os::fd::AsFd, ptr, ptr::Non
 
 use rustix::{
     fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
-    mm::{mmap, mremap, munmap, MapFlags, MremapFlags, ProtFlags},
+    mm::{mmap, mmap_anonymous, mremap, munmap, MapFlags, MremapFlags, ProtFlags},
     path::Arg,
 };
 
@@ -143,6 +143,28 @@ impl Mmap {
                     MapFlags::SHARED_VALIDATE,
                     fd,
                     0,
+                )?)
+            }
+            .cast(),
+            len,
+        })
+    }
+
+    pub fn new_anon(len: usize) -> rustix::io::Result<Self> {
+        if len == 0 {
+            return Ok(Self {
+                ptr: NonNull::dangling(),
+                len,
+            });
+        }
+
+        Ok(Self {
+            ptr: unsafe {
+                NonNull::new_unchecked(mmap_anonymous(
+                    ptr::null_mut(),
+                    len,
+                    ProtFlags::READ | ProtFlags::WRITE,
+                    MapFlags::PRIVATE,
                 )?)
             }
             .cast(),

@@ -11,6 +11,7 @@ use thiserror::Error;
 use crate::{allocator::Allocator, startup::claim_server_ownership};
 
 mod allocator;
+mod io_uring;
 mod reactor;
 mod requests;
 mod send_msg_bufs;

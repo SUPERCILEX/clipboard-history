@@ -11,11 +11,10 @@ use std::{
 
 use arrayvec::ArrayVec;
 use io_uring::{
-    buf_ring::BufRing,
     cqueue::{buffer_select, more, Entry},
     opcode::{AcceptMulti, Close, PollAdd, RecvMsgMulti, SendMsg, Shutdown},
     squeue::Flags,
-    types::{Fixed, RecvMsgOutMut},
+    types::Fixed,
     IoUring,
 };
 use log::{debug, info, trace, warn};
@@ -27,6 +26,7 @@ use rustix::{
 
 use crate::{
     allocator::Allocator,
+    io_uring::{buf_ring::BufRing, register_buf_ring, types::RecvMsgOutMut},
     requests,
     send_msg_bufs::{SendMsgBufs, Token},
     CliError,
@@ -172,10 +172,13 @@ fn setup_uring() -> Result<(IoUring, BufRing), CliError> {
         .submitter()
         .register_files_update(MAX_NUM_CLIENTS, &built_ins)
         .map_io_err(|| "Failed to register socket FD with io_uring.")?;
-    let buf_ring = uring
-        .submitter()
-        .register_buf_ring(u16::try_from(MAX_NUM_CLIENTS * 2).unwrap(), 0, 256)
-        .map_io_err(|| "Failed to register buffer ring with io_uring.")?;
+    let buf_ring = register_buf_ring(
+        &uring.submitter(),
+        u16::try_from(MAX_NUM_CLIENTS * 2).unwrap(),
+        0,
+        256,
+    )
+    .map_io_err(|| "Failed to register buffer ring with io_uring.")?;
 
     Ok((uring, buf_ring))
 }

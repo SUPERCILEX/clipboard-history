@@ -15,11 +15,11 @@ bitcode = { version = "0.6.0", features = ["arrayvec"] }
 bitvec = "1.0.1"
 env_logger = { version = "0.11.3", default-features = false }
 error-stack = "0.4.1"
-io-uring = { version = "0.6.2", git = "https://github.com/SUPERCILEX/io-uring", branch = "tmp" }
+io-uring = "0.6.2"
 libc = "0.2.155"
 log = { version = "0.4.21", features = ["release_max_level_info"] }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
-rustix = { version = "0.38.34", features = ["fs", "process", "net"] }
+rustix = { version = "0.38.34", features = ["fs", "process", "net", "io_uring"] }
 sd-notify = { version = "0.4.1", optional = true }
 thiserror = "1.0.61"
 
