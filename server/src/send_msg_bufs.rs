@@ -1,4 +1,4 @@
-use std::{mem::MaybeUninit, ptr};
+use std::{mem, mem::MaybeUninit, ptr};
 
 use arrayvec::ArrayVec;
 use log::trace;
@@ -59,14 +59,17 @@ impl SendMsgBufs {
             };
 
             let ptr = unsafe { buf.spare_capacity_mut().as_mut_ptr().add(align_offset) };
-            let hdr = libc::msghdr {
-                msg_name: ptr::null_mut(),
-                msg_namelen: 0,
-                msg_iov: unsafe { ptr.add(size_of::<libc::msghdr>()).cast() },
-                msg_iovlen: 1,
-                msg_control: buf.as_mut_ptr().cast(),
-                msg_controllen: control_len,
-                msg_flags: 0,
+            #[allow(clippy::useless_conversion)]
+            let hdr = {
+                let mut hdr = unsafe { mem::zeroed::<libc::msghdr>() };
+                hdr.msg_name = ptr::null_mut();
+                hdr.msg_namelen = 0;
+                hdr.msg_iov = unsafe { ptr.add(size_of::<libc::msghdr>()).cast() };
+                hdr.msg_iovlen = 1;
+                hdr.msg_control = buf.as_mut_ptr().cast();
+                hdr.msg_controllen = control_len.try_into().unwrap();
+                hdr.msg_flags = 0;
+                hdr
             };
             unsafe {
                 ptr::copy_nonoverlapping(
