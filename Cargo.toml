@@ -18,6 +18,7 @@ license = "AGPL-3.0-only"
 [package]
 name = "lint"
 version = "0.0.0"
+edition.workspace = true
 publish = false
 
 [dev-dependencies]

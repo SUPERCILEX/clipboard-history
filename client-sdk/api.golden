@@ -71,6 +71,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::duplicate_dete
 pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where T: core::marker::Sized
 pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where T: core::marker::Copy
+pub unsafe fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
 pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::from(t: T) -> T
 pub mod clipboard_history_client_sdk::search
@@ -109,6 +113,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::EntryL
 pub fn clipboard_history_client_sdk::search::EntryLocation::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::EntryLocation where T: core::marker::Sized
 pub fn clipboard_history_client_sdk::search::EntryLocation::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::EntryLocation where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::search::EntryLocation::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::EntryLocation where T: core::marker::Copy
+pub unsafe fn clipboard_history_client_sdk::search::EntryLocation::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::EntryLocation
 pub fn clipboard_history_client_sdk::search::EntryLocation::from(t: T) -> T
 pub enum clipboard_history_client_sdk::search::Query<'a>
@@ -143,6 +151,8 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::Query<
 pub fn clipboard_history_client_sdk::search::Query<'a>::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::Query<'a> where T: core::marker::Sized
 pub fn clipboard_history_client_sdk::search::Query<'a>::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::Query<'a> where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::search::Query<'a>::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::Query<'a>
 pub fn clipboard_history_client_sdk::search::Query<'a>::from(t: T) -> T
 pub struct clipboard_history_client_sdk::search::BucketAndIndex(_)
@@ -187,6 +197,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::Bucket
 pub fn clipboard_history_client_sdk::search::BucketAndIndex::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::BucketAndIndex where T: core::marker::Sized
 pub fn clipboard_history_client_sdk::search::BucketAndIndex::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::BucketAndIndex where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::search::BucketAndIndex::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::BucketAndIndex where T: core::marker::Copy
+pub unsafe fn clipboard_history_client_sdk::search::BucketAndIndex::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::BucketAndIndex
 pub fn clipboard_history_client_sdk::search::BucketAndIndex::from(t: T) -> T
 pub struct clipboard_history_client_sdk::search::QueryResult
@@ -222,6 +236,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::QueryR
 pub fn clipboard_history_client_sdk::search::QueryResult::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::QueryResult where T: core::marker::Sized
 pub fn clipboard_history_client_sdk::search::QueryResult::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::QueryResult where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::search::QueryResult::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::QueryResult where T: core::marker::Copy
+pub unsafe fn clipboard_history_client_sdk::search::QueryResult::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::QueryResult
 pub fn clipboard_history_client_sdk::search::QueryResult::from(t: T) -> T
 pub fn clipboard_history_client_sdk::search::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (impl core::iter::traits::iterator::Iterator<Item = core::result::Result<clipboard_history_client_sdk::search::QueryResult, clipboard_history_core::Error>>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>>)
@@ -303,6 +321,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::Kind where T: 
 pub fn clipboard_history_client_sdk::Kind::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::Kind where T: core::marker::Sized
 pub fn clipboard_history_client_sdk::Kind::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::Kind where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::Kind::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::Kind where T: core::marker::Copy
+pub unsafe fn clipboard_history_client_sdk::Kind::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::Kind
 pub fn clipboard_history_client_sdk::Kind::from(t: T) -> T
 pub struct clipboard_history_client_sdk::DatabaseReader
@@ -377,6 +399,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::Entry where T:
 pub fn clipboard_history_client_sdk::Entry::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::Entry where T: core::marker::Sized
 pub fn clipboard_history_client_sdk::Entry::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::Entry where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::Entry::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::Entry where T: core::marker::Copy
+pub unsafe fn clipboard_history_client_sdk::Entry::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::Entry
 pub fn clipboard_history_client_sdk::Entry::from(t: T) -> T
 pub struct clipboard_history_client_sdk::EntryReader

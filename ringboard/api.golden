@@ -36,6 +36,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::AddRespons
 pub fn clipboard_history_core::protocol::AddResponse::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::AddResponse where T: core::marker::Sized
 pub fn clipboard_history_core::protocol::AddResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::AddResponse where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::protocol::AddResponse::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::AddResponse where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::protocol::AddResponse::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::AddResponse
 pub fn clipboard_history_core::protocol::AddResponse::from(t: T) -> T
 #[repr(u8)] pub enum clipboard_history_core::protocol::IdNotFoundError
@@ -77,6 +81,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::IdNotFound
 pub fn clipboard_history_core::protocol::IdNotFoundError::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::IdNotFoundError where T: core::marker::Sized
 pub fn clipboard_history_core::protocol::IdNotFoundError::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::IdNotFoundError where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::protocol::IdNotFoundError::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::IdNotFoundError where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::protocol::IdNotFoundError::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::IdNotFoundError
 pub fn clipboard_history_core::protocol::IdNotFoundError::from(t: T) -> T
 #[repr(u8)] pub enum clipboard_history_core::protocol::MoveToFrontResponse
@@ -113,6 +121,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::MoveToFron
 pub fn clipboard_history_core::protocol::MoveToFrontResponse::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::MoveToFrontResponse where T: core::marker::Sized
 pub fn clipboard_history_core::protocol::MoveToFrontResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::MoveToFrontResponse where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::protocol::MoveToFrontResponse::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::MoveToFrontResponse where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::protocol::MoveToFrontResponse::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::MoveToFrontResponse
 pub fn clipboard_history_core::protocol::MoveToFrontResponse::from(t: T) -> T
 #[repr(u8)] pub enum clipboard_history_core::protocol::Request
@@ -159,6 +171,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::Request wh
 pub fn clipboard_history_core::protocol::Request::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::Request where T: core::marker::Sized
 pub fn clipboard_history_core::protocol::Request::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::Request where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::protocol::Request::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::Request where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::protocol::Request::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::Request
 pub fn clipboard_history_core::protocol::Request::from(t: T) -> T
 #[repr(u8)] pub enum clipboard_history_core::protocol::RingKind
@@ -202,6 +218,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::RingKind w
 pub fn clipboard_history_core::protocol::RingKind::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::RingKind where T: core::marker::Sized
 pub fn clipboard_history_core::protocol::RingKind::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::RingKind where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::protocol::RingKind::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::RingKind where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::protocol::RingKind::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_core::protocol::RingKind::from(t: T) -> T
 #[repr(C)] pub struct clipboard_history_core::protocol::GarbageCollectResponse
@@ -235,6 +255,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::GarbageCol
 pub fn clipboard_history_core::protocol::GarbageCollectResponse::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::GarbageCollectResponse where T: core::marker::Sized
 pub fn clipboard_history_core::protocol::GarbageCollectResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::GarbageCollectResponse where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::protocol::GarbageCollectResponse::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::GarbageCollectResponse where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::protocol::GarbageCollectResponse::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::GarbageCollectResponse
 pub fn clipboard_history_core::protocol::GarbageCollectResponse::from(t: T) -> T
 #[repr(C)] pub struct clipboard_history_core::protocol::ReloadSettingsResponse
@@ -269,6 +293,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::ReloadSett
 pub fn clipboard_history_core::protocol::ReloadSettingsResponse::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::ReloadSettingsResponse where T: core::marker::Sized
 pub fn clipboard_history_core::protocol::ReloadSettingsResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::ReloadSettingsResponse where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::protocol::ReloadSettingsResponse::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::ReloadSettingsResponse where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::protocol::ReloadSettingsResponse::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::ReloadSettingsResponse
 pub fn clipboard_history_core::protocol::ReloadSettingsResponse::from(t: T) -> T
 #[repr(C)] pub struct clipboard_history_core::protocol::RemoveResponse
@@ -303,6 +331,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::RemoveResp
 pub fn clipboard_history_core::protocol::RemoveResponse::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::RemoveResponse where T: core::marker::Sized
 pub fn clipboard_history_core::protocol::RemoveResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::RemoveResponse where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::protocol::RemoveResponse::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::RemoveResponse where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::protocol::RemoveResponse::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::RemoveResponse
 pub fn clipboard_history_core::protocol::RemoveResponse::from(t: T) -> T
 #[repr(C)] pub struct clipboard_history_core::protocol::SwapResponse
@@ -338,6 +370,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::protocol::SwapRespon
 pub fn clipboard_history_core::protocol::SwapResponse::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::protocol::SwapResponse where T: core::marker::Sized
 pub fn clipboard_history_core::protocol::SwapResponse::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::SwapResponse where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::protocol::SwapResponse::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::SwapResponse where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::protocol::SwapResponse::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::SwapResponse
 pub fn clipboard_history_core::protocol::SwapResponse::from(t: T) -> T
 pub const clipboard_history_core::protocol::VERSION: u8
@@ -388,6 +424,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::ring::Entry where T:
 pub fn clipboard_history_core::ring::Entry::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::Entry where T: core::marker::Sized
 pub fn clipboard_history_core::ring::Entry::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::ring::Entry where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::ring::Entry::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::ring::Entry where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::ring::Entry::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::ring::Entry
 pub fn clipboard_history_core::ring::Entry::from(t: T) -> T
 pub struct clipboard_history_core::ring::BucketEntry
@@ -430,6 +470,10 @@ impl<T> core::borrow::Borrow<T> for clipboard_history_core::ring::BucketEntry wh
 pub fn clipboard_history_core::ring::BucketEntry::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::BucketEntry where T: core::marker::Sized
 pub fn clipboard_history_core::ring::BucketEntry::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_core::ring::BucketEntry where T: core::clone::Clone
+pub unsafe fn clipboard_history_core::ring::BucketEntry::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::clone::CloneToUninit for clipboard_history_core::ring::BucketEntry where T: core::marker::Copy
+pub unsafe fn clipboard_history_core::ring::BucketEntry::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::ring::BucketEntry
 pub fn clipboard_history_core::ring::BucketEntry::from(t: T) -> T
 #[repr(C)] pub struct clipboard_history_core::ring::Header
