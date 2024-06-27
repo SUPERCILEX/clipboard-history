@@ -2,7 +2,7 @@ The Ringboard (clipboard history) CLI.
 
 Ringboard uses a client-server architecture, wherein the server has exclusive write access to the
 clipboard database and clients must ask the server to perform the modifications they need. This CLI
-is a non-interactive client and debugging tool.
+is a non-interactive client and a debugging tool.
 
 Usage: clipboard-history <COMMAND>
 
@@ -57,7 +57,7 @@ Arguments:
 
 Options:
   -r, --regex
-          Interpret the query string as `RegEx` instead of a plain-text match
+          Interpret the query string as regex instead of a plain-text match
 
   -h, --help
           Print help (use `-h` for a summary)
@@ -66,7 +66,7 @@ Options:
 
 Add an entry to the database.
 
-The ID of the newly added entry will be returned.
+Prints the ID of the newly added entry.
 
 Usage: clipboard-history add [OPTIONS] <DATA_FILE>
 
@@ -135,7 +135,13 @@ Options:
 
 ---
 
-Swap the positions of two entries
+Swap the positions of two entries.
+
+One of the entries may be uninitialized. Thus, swap can be used to insert an entry into the ring by
+adding it and swapping the new entry into position.
+
+A set operation may also be implemented via swap by adding an entry, swapping it into place, and
+deleting the swapped out entry.
 
 Usage: clipboard-history swap <ID1> <ID2>
 
@@ -220,7 +226,7 @@ Options:
 
 Run garbage collection on the database.
 
-Returns the amount of freed space.
+Prints the amount of freed space.
 
 Usage: clipboard-history garbage-collect
 

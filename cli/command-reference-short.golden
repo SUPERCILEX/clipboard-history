@@ -44,7 +44,7 @@ Arguments:
   <QUERY>  The query string to search for
 
 Options:
-  -r, --regex  Interpret the query string as `RegEx` instead of a plain-text match
+  -r, --regex  Interpret the query string as regex instead of a plain-text match
   -h, --help   Print help (use `--help` for more detail)
 
 ---

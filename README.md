@@ -75,6 +75,13 @@ them: `systemctl --user enable ringboard-{wayland,x11}`.
 
 You'll need to start the Ringboard server and X11/Wayland clipboard watcher on boot.
 
+## Migrating from existing clipboard managers
+
+Tooling is provided to migrate from other clipboard managers. Run:
+
+- `$ ringboard migrate gch` to import
+  your [Gnome Clipboard History](https://github.com/SUPERCILEX/gnome-clipboard-history) entries.
+
 ## Project breakdown
 
 Each submodule contains its own README with details on how to use it.

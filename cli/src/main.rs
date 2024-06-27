@@ -67,7 +67,7 @@ use thiserror::Error;
 /// Ringboard uses a client-server architecture, wherein the server has
 /// exclusive write access to the clipboard database and clients must ask the
 /// server to perform the modifications they need. This CLI is a non-interactive
-/// client and debugging tool.
+/// client and a debugging tool.
 #[derive(Parser, Debug)]
 #[command(version, author = "Alex Saveau (@SUPERCILEX)")]
 #[command(infer_subcommands = true, infer_long_args = true)]
@@ -99,7 +99,7 @@ enum Cmd {
 
     /// Add an entry to the database.
     ///
-    /// The ID of the newly added entry will be returned.
+    /// Prints the ID of the newly added entry.
     #[command(aliases = ["a", "new", "create", "copy"])]
     Add(Add),
 
@@ -115,6 +115,13 @@ enum Cmd {
     MoveToFront(EntryAction),
 
     /// Swap the positions of two entries.
+    ///
+    /// One of the entries may be uninitialized. Thus, swap can be used to
+    /// insert an entry into the ring by adding it and swapping the new entry
+    /// into position.
+    ///
+    /// A set operation may also be implemented via swap by adding an entry,
+    /// swapping it into place, and deleting the swapped out entry.
     Swap(Swap),
 
     /// Delete an entry from the database.
@@ -135,7 +142,7 @@ enum Cmd {
 
     /// Run garbage collection on the database.
     ///
-    /// Returns the amount of freed space.
+    /// Prints the amount of freed space.
     #[command(aliases = ["gc", "clean"])]
     GarbageCollect,
 
@@ -211,7 +218,7 @@ struct EntryAction {
 #[derive(Args, Debug)]
 #[command(arg_required_else_help = true)]
 struct Search {
-    /// Interpret the query string as `RegEx` instead of a plain-text match.
+    /// Interpret the query string as regex instead of a plain-text match.
     #[arg(short, long)]
     regex: bool,
 
