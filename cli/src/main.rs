@@ -159,6 +159,13 @@ enum Dev {
     Stats,
 
     /// Dump the contents of the database for analysis.
+    ///
+    /// The JSON format is as follows:{n}
+    /// {{n}
+    ///   "id": int64,{n}
+    ///   "kind": "Human" | "Bytes",{n}
+    ///   "data": (UTF-8 | base64) string{n}
+    /// }{n}
     #[command(alias = "export")]
     Dump(Dump),
 

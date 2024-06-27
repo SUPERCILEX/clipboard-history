@@ -263,7 +263,14 @@ Options:
 
 ---
 
-Dump the contents of the database for analysis
+Dump the contents of the database for analysis.
+
+The JSON format is as follows:
+ {
+ "id": int64,
+ "kind": "Human" | "Bytes",
+ "data": (UTF-8 | base64) string
+ }
 
 Usage: clipboard-history debug dump [OPTIONS]
 
