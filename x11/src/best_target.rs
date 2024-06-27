@@ -50,13 +50,13 @@ impl BestMimeTypeFinder {
         if target.is_none() {
             *target = Some(SeenMime {
                 atom,
-                has_params: mime.contains(";"),
+                has_params: mime.contains(';'),
             });
         } else if let Some(SeenMime {
             atom: _,
             has_params: true,
         }) = target
-            && !mime.contains(";")
+            && !mime.contains(';')
         {
             *target = Some(SeenMime {
                 atom,

@@ -17,8 +17,8 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        text::LayoutJob, Align, CentralPanel, FontId, Image, Key, Label, Layout, Pos2, ScrollArea,
-        Sense, TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder,
+        text::LayoutJob, Align, CentralPanel, FontId, Image, InputState, Key, Label, Layout, Pos2,
+        ScrollArea, Sense, TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder,
     },
     epaint::FontFamily,
 };
@@ -193,6 +193,7 @@ fn controller(ctx: &egui::Context, commands: &Receiver<Command>, responses: &Syn
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_command(
     command: Command,
     server: (impl AsFd, &SocketAddrUnix),
@@ -280,26 +281,6 @@ fn handle_command(
             Ok(None)
         }
         Command::Search { mut query, regex } => {
-            struct SortedEntry(Entry);
-
-            impl PartialOrd for SortedEntry {
-                fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                    Some(self.cmp(other))
-                }
-            }
-            impl Ord for SortedEntry {
-                fn cmp(&self, other: &Self) -> Ordering {
-                    self.0.id().cmp(&other.0.id())
-                }
-            }
-
-            impl PartialEq<Self> for SortedEntry {
-                fn eq(&self, other: &Self) -> bool {
-                    self.0.id() == other.0.id()
-                }
-            }
-            impl Eq for SortedEntry {}
-
             if reverse_index_cache.is_empty() {
                 for entry in database.favorites().chain(database.main()) {
                     let Kind::Bucket(bucket) = entry.kind() else {
@@ -311,64 +292,96 @@ fn handle_command(
                     );
                 }
             }
+
             let query = if regex {
                 Query::Regex(Regex::new(query.trim())?)
             } else {
                 query.make_ascii_lowercase();
                 Query::PlainIgnoreCase(query.trim().as_bytes())
             };
-            let reader = Arc::new(reader_.take().unwrap());
-
-            let (result_stream, threads) = ringboard_sdk::search(query, reader.clone());
-            let results = result_stream
-                .map(|r| {
-                    r.and_then(|q| match q.location {
-                        EntryLocation::Bucketed { bucket, index } => reverse_index_cache
-                            .get(&BucketAndIndex::new(bucket, index))
-                            .copied()
-                            .ok_or_else(|| {
-                                CoreError::IdNotFound(IdNotFoundError::Entry(
-                                    index << u8::BITS | u32::from(bucket),
-                                ))
-                            })
-                            .and_then(|entry| {
-                                unsafe { database.get(entry.id()) }.map_err(CoreError::IdNotFound)
-                            }),
-                        EntryLocation::File { entry_id } => {
-                            unsafe { database.get(entry_id) }.map_err(CoreError::IdNotFound)
-                        }
-                    })
-                })
-                .filter_map(|r| r.ok())
-                .map(SortedEntry)
-                .map(Reverse)
-                .collect::<BinaryHeap<_>>();
-
-            for thread in threads {
-                let _ = thread.join();
-            }
-            *reader_ = Some(Arc::into_inner(reader).unwrap());
-            let reader = reader_.as_mut().unwrap();
-            let results = results
-                .into_sorted_vec()
-                .into_iter()
-                // TODO support pages
-                .take(250)
-                .map(|entry| entry.0.0)
-                .map(|entry| {
-                    // TODO add support for bold highlighting the selection range
-                    ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
-                        cache: UiEntryCache::Error(format!(
-                            "Error: failed to load entry {entry:?}\n{e:?}"
-                        )),
-                        entry,
-                    })
-                })
-                .collect::<Vec<_>>();
-
-            Ok(Some(Message::SearchResults(results)))
+            Ok(Some(Message::SearchResults(do_search(
+                query,
+                reader_,
+                database,
+                reverse_index_cache,
+            ))))
         }
     }
+}
+
+fn do_search(
+    query: Query,
+    reader_: &mut Option<EntryReader>,
+    database: &mut DatabaseReader,
+    reverse_index_cache: &HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
+) -> Vec<UiEntry> {
+    struct SortedEntry(Entry);
+
+    impl PartialOrd for SortedEntry {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    impl Ord for SortedEntry {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.0.id().cmp(&other.0.id())
+        }
+    }
+
+    impl PartialEq<Self> for SortedEntry {
+        fn eq(&self, other: &Self) -> bool {
+            self.0.id() == other.0.id()
+        }
+    }
+    impl Eq for SortedEntry {}
+
+    let reader = Arc::new(reader_.take().unwrap());
+
+    let (result_stream, threads) = ringboard_sdk::search(query, reader.clone());
+    let results = result_stream
+        .map(|r| {
+            r.and_then(|q| match q.location {
+                EntryLocation::Bucketed { bucket, index } => reverse_index_cache
+                    .get(&BucketAndIndex::new(bucket, index))
+                    .copied()
+                    .ok_or_else(|| {
+                        CoreError::IdNotFound(IdNotFoundError::Entry(
+                            index << u8::BITS | u32::from(bucket),
+                        ))
+                    })
+                    .and_then(|entry| {
+                        unsafe { database.get(entry.id()) }.map_err(CoreError::IdNotFound)
+                    }),
+                EntryLocation::File { entry_id } => {
+                    unsafe { database.get(entry_id) }.map_err(CoreError::IdNotFound)
+                }
+            })
+        })
+        .filter_map(Result::ok)
+        .map(SortedEntry)
+        .map(Reverse)
+        .collect::<BinaryHeap<_>>();
+
+    for thread in threads {
+        let _ = thread.join();
+    }
+    *reader_ = Some(Arc::into_inner(reader).unwrap());
+    let reader = reader_.as_mut().unwrap();
+
+    results
+        .into_sorted_vec()
+        .into_iter()
+        // TODO support pages
+        .take(250)
+        .map(|entry| entry.0.0)
+        .map(|entry| {
+            // TODO add support for bold highlighting the selection range
+            ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
+                cache: UiEntryCache::Error(format!("Error: failed to load entry {entry:?}\n{e:?}")),
+                entry,
+            })
+        })
+        .collect()
 }
 
 #[derive(Debug)]
@@ -448,12 +461,13 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
                 break;
             };
             // https://github.com/rust-lang/rust/blob/33422e72c8a66bdb5ee21246a948a1a02ca91674/library/core/src/num/mod.rs#L1090
+            #[allow(clippy::cast_possible_wrap)]
             let is_utf8_char_boundary = (b as i8) >= -0x40;
             if is_utf8_char_boundary || loaded.len() == shrunk.len() {
                 break;
-            } else {
-                shrunk = &loaded[..shrunk.len() + 1];
             }
+
+            shrunk = &loaded[..=shrunk.len()];
         }
         str::from_utf8(shrunk)
     } {
@@ -552,6 +566,7 @@ fn search_ui(ui: &mut Ui, state: &mut UiState, requests: &Sender<Command>) {
     });
 }
 
+#[allow(clippy::too_many_lines)]
 fn main_ui(
     ui: &mut Ui,
     entry_text_font: &FontFamily,
@@ -579,38 +594,7 @@ fn main_ui(
             refresh();
         }
         if !state.loaded_entries.is_empty() {
-            if input.key_pressed(Key::ArrowUp) {
-                try_scroll = true;
-                if let Some(id) = state.highlighted_id {
-                    let idx = state.loaded_entries.iter().position(|e| e.entry.id() == id);
-                    if idx == Some(0) || idx.is_none() {
-                        state.highlighted_id = state.loaded_entries.last().map(|e| e.entry.id());
-                    } else {
-                        state.highlighted_id = idx
-                            .map(|idx| idx - 1)
-                            .and_then(|idx| state.loaded_entries.get(idx))
-                            .map(|e| e.entry.id());
-                    }
-                } else {
-                    state.highlighted_id = state.loaded_entries.last().map(|e| e.entry.id());
-                }
-            }
-            if input.key_pressed(Key::ArrowDown) {
-                try_scroll = true;
-                if let Some(id) = state.highlighted_id {
-                    let idx = state.loaded_entries.iter().position(|e| e.entry.id() == id);
-                    if idx == Some(state.loaded_entries.len() - 1) || idx.is_none() {
-                        state.highlighted_id = state.loaded_entries.first().map(|e| e.entry.id());
-                    } else {
-                        state.highlighted_id = idx
-                            .map(|idx| idx + 1)
-                            .and_then(|idx| state.loaded_entries.get(idx))
-                            .map(|e| e.entry.id());
-                    }
-                } else {
-                    state.highlighted_id = state.loaded_entries.first().map(|e| e.entry.id());
-                }
-            }
+            handle_arrow_keys(state, &mut try_scroll, input);
         }
     });
 
@@ -775,4 +759,39 @@ fn main_ui(
         }
         // TODO support pages
     });
+}
+
+fn handle_arrow_keys(state: &mut UiState, try_scroll: &mut bool, input: &InputState) {
+    if input.key_pressed(Key::ArrowUp) {
+        *try_scroll = true;
+        if let Some(id) = state.highlighted_id {
+            let idx = state.loaded_entries.iter().position(|e| e.entry.id() == id);
+            if idx == Some(0) || idx.is_none() {
+                state.highlighted_id = state.loaded_entries.last().map(|e| e.entry.id());
+            } else {
+                state.highlighted_id = idx
+                    .map(|idx| idx - 1)
+                    .and_then(|idx| state.loaded_entries.get(idx))
+                    .map(|e| e.entry.id());
+            }
+        } else {
+            state.highlighted_id = state.loaded_entries.last().map(|e| e.entry.id());
+        }
+    }
+    if input.key_pressed(Key::ArrowDown) {
+        *try_scroll = true;
+        if let Some(id) = state.highlighted_id {
+            let idx = state.loaded_entries.iter().position(|e| e.entry.id() == id);
+            if idx == Some(state.loaded_entries.len() - 1) || idx.is_none() {
+                state.highlighted_id = state.loaded_entries.first().map(|e| e.entry.id());
+            } else {
+                state.highlighted_id = idx
+                    .map(|idx| idx + 1)
+                    .and_then(|idx| state.loaded_entries.get(idx))
+                    .map(|e| e.entry.id());
+            }
+        } else {
+            state.highlighted_id = state.loaded_entries.first().map(|e| e.entry.id());
+        }
+    }
 }

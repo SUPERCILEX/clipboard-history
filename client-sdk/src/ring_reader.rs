@@ -109,6 +109,10 @@ impl DatabaseReader {
         .ok_or(IdNotFoundError::Entry(id))
     }
 
+    /// # Safety
+    ///
+    /// The ID must index into a ring whose length is greater than the index
+    /// contained within the ID.
     pub unsafe fn get(&mut self, id: u64) -> Result<Entry, IdNotFoundError> {
         let (kind, sub_id) = decompose_id(id)?;
         let ring = match kind {

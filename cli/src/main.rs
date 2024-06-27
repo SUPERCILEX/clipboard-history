@@ -1116,6 +1116,8 @@ fn dump() -> Result<(), CliError> {
         let mime_type = loaded.mime_type()?;
         seq.serialize_element(&ExportEntry {
             id: entry.id(),
+            // TODO https://github.com/rust-lang/rust-clippy/issues/12723
+            #[allow(clippy::option_if_let_else)]
             data: if let Ok(data) = str::from_utf8(&loaded) {
                 ExportData::Human(data.into())
             } else {
@@ -1406,7 +1408,7 @@ fn pipeline_add_request(
 ) -> Result<(), CliError> {
     let mut retry = false;
     loop {
-        match ringboard_sdk::add_send(
+        match ringboard_sdk::send_add(
             &server,
             addr,
             RingKind::Main,
@@ -1443,7 +1445,7 @@ fn drain_add_requests(
 ) -> Result<(), CliError> {
     while *pending_adds > 0 {
         let AddResponse::Success { id } = match unsafe {
-            ringboard_sdk::add_recv(
+            ringboard_sdk::recv_add(
                 &server,
                 if all {
                     RecvFlags::empty()

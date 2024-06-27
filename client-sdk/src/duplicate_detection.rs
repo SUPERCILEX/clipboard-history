@@ -19,6 +19,7 @@ use crate::{DatabaseReader, Entry, EntryReader, Kind};
 pub struct RingAndIndex(u32);
 
 impl RingAndIndex {
+    #[must_use]
     pub fn new(ring: RingKind, index: u32) -> Self {
         const {
             assert!(size_of::<RingKind>() == size_of::<u8>());
@@ -28,15 +29,18 @@ impl RingAndIndex {
         Self((index << u8::BITS) | (ring as u32))
     }
 
+    #[must_use]
     pub fn ring(self) -> RingKind {
         let ring = u8::try_from(self.0 & u32::from(u8::MAX)).unwrap();
         unsafe { transmute::<_, RingKind>(ring) }
     }
 
+    #[must_use]
     pub const fn index(self) -> u32 {
         self.0 >> u8::BITS
     }
 
+    #[must_use]
     pub fn id(self) -> u64 {
         composite_id(self.ring(), self.index())
     }

@@ -130,11 +130,11 @@ pub fn add_unchecked<Server: AsFd, Data: AsFd>(
     mime_type: MimeType,
     data: Data,
 ) -> Result<AddResponse, ClientError> {
-    add_send(&server, addr, to, mime_type, data, SendFlags::empty())?;
-    unsafe { add_recv(&server, RecvFlags::empty()) }
+    send_add(&server, addr, to, mime_type, data, SendFlags::empty())?;
+    unsafe { recv_add(&server, RecvFlags::empty()) }
 }
 
-pub fn add_send<Server: AsFd, Data: AsFd>(
+pub fn send_add<Server: AsFd, Data: AsFd>(
     server: Server,
     addr: &SocketAddrUnix,
     to: RingKind,
@@ -145,7 +145,13 @@ pub fn add_send<Server: AsFd, Data: AsFd>(
     request_with_fd(&server, addr, Request::Add { to, mime_type }, data, flags)
 }
 
-pub unsafe fn add_recv<Server: AsFd>(
+/// This is a low-level method that can be used for high-performance data
+/// addition through the use of pipelined ADDs via [`send_add`].
+///
+/// # Safety
+///
+/// The previous request must have been an ADD.
+pub unsafe fn recv_add<Server: AsFd>(
     server: Server,
     flags: RecvFlags,
 ) -> Result<AddResponse, ClientError> {
