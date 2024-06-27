@@ -1,0 +1,123 @@
+name: CI/CD
+
+on: [ push, pull_request ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Cargo Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Build project
+        run: cargo build --workspace --release
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        run: rustup component add rustfmt clippy
+      - name: Cargo Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Run tests
+        run: cargo test --workspace
+
+  deploy_release:
+    needs: [ build, test ]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Publish release
+        run: |
+          cargo publish --package clipboard-history-core
+          cargo publish --package clipboard-history-client-sdk
+          cargo publish --package clipboard-history-server
+          cargo publish --package clipboard-history
+          cargo publish --package clipboard-history-x11
+          cargo publish --package clipboard-history-egui
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  attach_binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            tool: cargo
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            tool: cargo
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            tool: RUSTFLAGS="-Ctarget-feature=-outline-atomics" cross
+          - target: riscv64gc-unknown-linux-gnu
+            os: ubuntu-latest
+            tool: cross
+    needs: [ build, test ]
+    runs-on: ${{ matrix.os }}
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        run: |
+          rustup target add ${{ matrix.target }}
+          rustup component add rust-src
+      - name: Install cross
+        if: contains(matrix.tool, 'cross')
+        run: cargo install cross
+      - name: Build binary
+        run: ${{ matrix.tool }} build --workspace --release --locked --target=${{ matrix.target }} -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort
+      - name: Upload binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/ringboard-server
+          asset_name: ringboard-server-${{ matrix.target }}
+          tag: ${{ github.ref }}
+      - name: Upload binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/ringboard
+          asset_name: ringboard-${{ matrix.target }}
+          tag: ${{ github.ref }}
+      - name: Upload binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/ringboard-x11
+          asset_name: ringboard-x11-${{ matrix.target }}
+          tag: ${{ github.ref }}
+      - name: Upload binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/ringboard-egui
+          asset_name: ringboard-egui-${{ matrix.target }}
+          tag: ${{ github.ref }}
