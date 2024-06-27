@@ -1291,7 +1291,7 @@ fn fuzz(
 
                         let (file, file_len) =
                             generate_random_entry_file(&mut rng, entry_size_distr)?;
-                        let AddResponse::Success { id } = ringboard_sdk::add(
+                        let AddResponse::Success { id } = ringboard_sdk::add_unchecked(
                             server,
                             addr,
                             rng.gen::<FuzzRingKind>().0,

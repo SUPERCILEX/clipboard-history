@@ -519,7 +519,7 @@ fn run() -> Result<(), CliError> {
                             let mime_type =
                                 MimeType::from(&mime_type.reply()?.name.to_string_lossy()).unwrap();
 
-                            let AddResponse::Success { id } = ringboard_sdk::add(
+                            let AddResponse::Success { id } = ringboard_sdk::add_unchecked(
                                 &server,
                                 &server_addr,
                                 RingKind::Main,
@@ -588,7 +588,7 @@ fn run() -> Result<(), CliError> {
                             )
                             .unwrap();
 
-                            let AddResponse::Success { id } = ringboard_sdk::add(
+                            let AddResponse::Success { id } = ringboard_sdk::add_unchecked(
                                 &server,
                                 &server_addr,
                                 RingKind::Main,

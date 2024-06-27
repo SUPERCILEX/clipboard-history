@@ -3,8 +3,11 @@
 
 use std::{
     borrow::Cow,
-    io::{IoSlice, IoSliceMut},
-    os::fd::{AsFd, OwnedFd},
+    fs::File,
+    io,
+    io::{IoSlice, IoSliceMut, Seek, SeekFrom},
+    mem::ManuallyDrop,
+    os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
 };
 
 pub use ring_reader::{DatabaseReader, Entry, EntryReader, Kind, LoadedEntry, RingReader};
@@ -17,10 +20,13 @@ use ringboard_core::{
     },
     AsBytes, IoErr,
 };
-use rustix::net::{
-    connect_unix, recvmsg, sendmsg_unix, socket_with, AddressFamily, RecvAncillaryBuffer,
-    RecvFlags, SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketFlags,
-    SocketType,
+use rustix::{
+    fs::{openat, statx, AtFlags, FileType, Mode, OFlags, StatxFlags, CWD},
+    net::{
+        connect_unix, recvmsg, sendmsg_unix, socket_with, AddressFamily, RecvAncillaryBuffer,
+        RecvFlags, SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix,
+        SocketFlags, SocketType,
+    },
 };
 pub use search::search;
 use thiserror::Error;
@@ -92,9 +98,38 @@ pub fn add<Server: AsFd, Data: AsFd>(
     mime_type: MimeType,
     data: Data,
 ) -> Result<AddResponse, ClientError> {
-    // TODO figure out if we need to make a copy of the file for X11/Wayland.
-    //  As in can you copy from stdin to clipboard and will that be routed directly
-    //  to the server.
+    if FileType::from_raw_mode(
+        statx(&data, c"", AtFlags::EMPTY_PATH, StatxFlags::TYPE)
+            .map_io_err(|| "Failed to statx file.")?
+            .stx_mode
+            .into(),
+    ) == FileType::RegularFile
+    {
+        add_unchecked(server, addr, to, mime_type, data)
+    } else {
+        let file = openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
+            .map_io_err(|| "Failed to create intermediary data file.")?;
+        let mut file = File::from(file);
+
+        io::copy(
+            &mut *ManuallyDrop::new(unsafe { File::from_raw_fd(data.as_fd().as_raw_fd()) }),
+            &mut file,
+        )
+        .map_io_err(|| "Failed to copy intermediary data file.")?;
+        file.seek(SeekFrom::Start(0))
+            .map_io_err(|| "Failed to reset intermediary data file offset.")?;
+
+        add_unchecked(server, addr, to, mime_type, &file)
+    }
+}
+
+pub fn add_unchecked<Server: AsFd, Data: AsFd>(
+    server: Server,
+    addr: &SocketAddrUnix,
+    to: RingKind,
+    mime_type: MimeType,
+    data: Data,
+) -> Result<AddResponse, ClientError> {
     add_send(&server, addr, to, mime_type, data, SendFlags::empty())?;
     unsafe { add_recv(&server, RecvFlags::empty()) }
 }
