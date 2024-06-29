@@ -426,6 +426,9 @@ struct UiState {
 
     query: String,
     search_results: Vec<UiEntry>,
+
+    was_focused: bool,
+    skipped_first_focus: bool,
 }
 
 #[derive(Debug)]
@@ -586,6 +589,16 @@ fn main_ui(
             .send(Command::RefreshDb)
             .and_then(|()| requests.send(Command::LoadFirstPage));
     };
+
+    ui.input(|i| {
+        if !state.was_focused && i.focused && state.skipped_first_focus {
+            refresh();
+        }
+        if i.focused {
+            state.skipped_first_focus = true;
+        }
+        state.was_focused = i.focused;
+    });
 
     if let Some(ref e) = state.fatal_error {
         ui.label(format!("Fatal error: {e:?}"));
