@@ -315,8 +315,12 @@ fn do_search(
     database: &mut DatabaseReader,
     reverse_index_cache: &HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
 ) -> Vec<UiEntry> {
+    const MAX_SEARCH_ENTRIES: usize = 256;
+
     struct SortedEntry(Entry);
 
+    // TODO fix this being broken when ring wraps around, need to take into account
+    //  the write_head
     impl PartialOrd for SortedEntry {
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
             Some(self.cmp(other))
@@ -338,7 +342,8 @@ fn do_search(
     let reader = Arc::new(reader_.take().unwrap());
 
     let (result_stream, threads) = ringboard_sdk::search(query, reader.clone());
-    let results = result_stream
+    let mut results = BinaryHeap::new();
+    for entry in result_stream
         .map(|r| {
             r.and_then(|q| match q.location {
                 EntryLocation::Bucketed { bucket, index } => reverse_index_cache
@@ -360,7 +365,12 @@ fn do_search(
         .filter_map(Result::ok)
         .map(SortedEntry)
         .map(Reverse)
-        .collect::<BinaryHeap<_>>();
+    {
+        results.push(entry);
+        if results.len() == MAX_SEARCH_ENTRIES {
+            results.pop();
+        }
+    }
 
     for thread in threads {
         let _ = thread.join();
@@ -371,8 +381,6 @@ fn do_search(
     results
         .into_sorted_vec()
         .into_iter()
-        // TODO support pages
-        .take(250)
         .map(|entry| entry.0.0)
         .map(|entry| {
             // TODO add support for bold highlighting the selection range
