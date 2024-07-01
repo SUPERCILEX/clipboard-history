@@ -586,6 +586,7 @@ fn search_ui(
         reset(state);
     }
     if ui.input(|input| input.key_pressed(Key::Slash)) {
+        ui.memory_mut(|mem| mem.close_popup());
         response.request_focus();
     }
 
@@ -649,6 +650,7 @@ fn main_ui(
 
     if ui.input(|input| input.modifiers.ctrl && input.key_pressed(Key::R)) {
         *state = UiState::default();
+        ui.memory_mut(|mem| mem.close_popup());
         refresh();
     }
     if !active_entries(entries, state).is_empty() && ui.memory(|mem| !mem.any_popup_open()) {
