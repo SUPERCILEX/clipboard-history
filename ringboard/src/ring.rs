@@ -114,7 +114,8 @@ impl BucketEntry {
 #[derive(Debug)]
 pub struct Mmap {
     ptr: NonNull<u8>,
-    len: usize,
+    requested_len: usize,
+    backing_len: usize,
 }
 
 unsafe impl Send for Mmap {}
@@ -127,18 +128,12 @@ impl Mmap {
     }
 
     pub fn new<Fd: AsFd>(fd: Fd, len: usize) -> rustix::io::Result<Self> {
-        if len == 0 {
-            return Ok(Self {
-                ptr: NonNull::dangling(),
-                len,
-            });
-        }
-
+        let backing_len = len.max(4096);
         Ok(Self {
             ptr: unsafe {
                 NonNull::new_unchecked(mmap(
                     ptr::null_mut(),
-                    len,
+                    backing_len,
                     ProtFlags::READ,
                     MapFlags::SHARED_VALIDATE,
                     fd,
@@ -146,18 +141,12 @@ impl Mmap {
                 )?)
             }
             .cast(),
-            len,
+            requested_len: len,
+            backing_len,
         })
     }
 
     pub fn new_anon(len: usize) -> rustix::io::Result<Self> {
-        if len == 0 {
-            return Ok(Self {
-                ptr: NonNull::dangling(),
-                len,
-            });
-        }
-
         Ok(Self {
             ptr: unsafe {
                 NonNull::new_unchecked(mmap_anonymous(
@@ -168,23 +157,30 @@ impl Mmap {
                 )?)
             }
             .cast(),
-            len,
+            requested_len: len,
+            backing_len: len,
         })
     }
 
     pub fn remap(&mut self, len: usize) -> rustix::io::Result<()> {
+        if len >= self.requested_len && len <= self.backing_len {
+            self.requested_len = len;
+            return Ok(());
+        }
+
         self.ptr = unsafe {
             NonNull::new_unchecked(
                 mremap(
                     self.ptr.as_ptr().cast(),
-                    self.len,
+                    self.backing_len,
                     len,
                     MremapFlags::MAYMOVE,
                 )?
                 .cast(),
             )
         };
-        self.len = len;
+        self.requested_len = len;
+        self.backing_len = len;
         Ok(())
     }
 
@@ -195,12 +191,12 @@ impl Mmap {
 
     #[must_use]
     pub const fn len(&self) -> usize {
-        self.len
+        self.requested_len
     }
 
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.len == 0
+        self.requested_len == 0
     }
 }
 
@@ -220,7 +216,7 @@ impl AsRef<[u8]> for Mmap {
 
 impl Drop for Mmap {
     fn drop(&mut self) {
-        let _ = unsafe { munmap(self.ptr.as_ptr().cast(), self.len) };
+        let _ = unsafe { munmap(self.ptr.as_ptr().cast(), self.backing_len) };
     }
 }
 

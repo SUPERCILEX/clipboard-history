@@ -477,7 +477,7 @@ impl EntryReader {
             let mut maps = ArrayVec::new_const();
             for (i, fd) in buckets.into_iter().enumerate() {
                 maps.push(
-                    Mmap::new(fd, usize::try_from(lengths[i]).unwrap().max(4096))
+                    Mmap::new(fd, usize::try_from(lengths[i]).unwrap())
                         .map_io_err(|| "Failed to map memory.")?,
                 );
             }
