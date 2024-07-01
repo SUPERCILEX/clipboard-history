@@ -725,7 +725,7 @@ fn entry_ui(
         UiEntryCache::Binary { mime_type, context } => row_ui(
             ui,
             Label::new(format!(
-                "Unknown binary format of type {mime_type:?} from {context:?}."
+                "Unable to display format of type {mime_type:?} from {context:?}."
             ))
             .selectable(false),
             state,
