@@ -254,7 +254,7 @@ fn search_impl(
                                     )
                                 })?;
                         let mime_type = xattr_mime_type(&fd)?;
-                        if !mime_type.is_empty() || !TEXT_MIMES.contains(&&*mime_type) {
+                        if !is_searchable_mime(&mime_type) {
                             return Ok(None);
                         }
 
@@ -307,4 +307,8 @@ fn search_impl(
         },
         threads.into_iter(),
     )
+}
+
+fn is_searchable_mime(mime: &str) -> bool {
+    TEXT_MIMES.contains(&mime) || mime.starts_with("text/") || mime == "application/xml"
 }
