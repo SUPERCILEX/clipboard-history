@@ -669,11 +669,9 @@ fn main_ui(
     }
 
     let mut try_popup = false;
-    ui.input(|input| {
-        if input.key_pressed(Key::Space) {
-            try_popup = true;
-        }
-    });
+    if ui.input(|input| input.key_pressed(Key::Space)) && ui.memory(|mem| mem.focused().is_none()) {
+        try_popup = true;
+    }
 
     // TODO implement paste (by pressing enter or ctrl+N)
     ScrollArea::vertical().show(ui, |ui| {
