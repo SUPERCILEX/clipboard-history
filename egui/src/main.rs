@@ -707,18 +707,34 @@ fn entry_ui(
                 state,
                 requests,
                 refresh,
-                entry.entry,
+                entry,
                 try_scroll,
                 try_popup,
             )
         }
-        // TODO make this stuff look like text entries with the popup and stuff
-        UiEntryCache::Image { uri } => {
-            ui.add(Image::new(uri).max_height(250.).fit_to_original_size(1.))
-        }
-        UiEntryCache::Binary { mime_type, context } => ui.label(format!(
-            "Unknown binary format of type {mime_type:?} from {context}."
-        )),
+        UiEntryCache::Image { uri } => row_ui(
+            ui,
+            Image::new(uri).max_height(250.).fit_to_original_size(1.),
+            state,
+            requests,
+            refresh,
+            entry,
+            try_scroll,
+            try_popup,
+        ),
+        UiEntryCache::Binary { mime_type, context } => row_ui(
+            ui,
+            Label::new(format!(
+                "Unknown binary format of type {mime_type:?} from {context:?}."
+            ))
+            .selectable(false),
+            state,
+            requests,
+            refresh,
+            entry,
+            try_scroll,
+            try_popup,
+        ),
         UiEntryCache::Error(e) => {
             ui.label(e);
             return;
@@ -736,11 +752,11 @@ fn row_ui(
     state: &mut UiState,
     requests: &Sender<Command>,
     mut refresh: impl FnMut(),
-    entry: Entry,
+    entry: &UiEntry,
     try_scroll: bool,
     try_popup: bool,
 ) -> Response {
-    let entry_id = entry.id();
+    let entry_id = entry.entry.id();
 
     let frame_data = egui::Frame::default().inner_margin(5.);
     let mut frame = frame_data.begin(ui);
@@ -780,8 +796,8 @@ fn row_ui(
             state.details_requested = Some(entry_id);
             state.detailed_entry = None;
             let _ = requests.send(Command::GetDetails {
-                entry,
-                with_text: true,
+                entry: entry.entry,
+                with_text: matches!(entry.cache, UiEntryCache::Text { .. }),
             });
         }
 
@@ -789,7 +805,7 @@ fn row_ui(
 
         ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
             ui.horizontal(|ui| {
-                match entry.ring() {
+                match entry.entry.ring() {
                     RingKind::Favorites => {
                         if ui.button("Unfavorite").clicked() {
                             let _ = requests.send(Command::Unfavorite(entry_id));
