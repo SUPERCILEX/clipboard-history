@@ -590,7 +590,7 @@ fn search_ui(
         response.surrender_focus();
     }
     if ui.input(|input| input.key_pressed(Key::Slash)) {
-        ui.memory_mut(|mem| mem.close_popup());
+        ui.memory_mut(egui::Memory::close_popup);
         response.request_focus();
     }
 
@@ -654,7 +654,7 @@ fn main_ui(
 
     if ui.input(|input| input.modifiers.ctrl && input.key_pressed(Key::R)) {
         *state = UiState::default();
-        ui.memory_mut(|mem| mem.close_popup());
+        ui.memory_mut(egui::Memory::close_popup);
         refresh();
     }
     if !active_entries(entries, state).is_empty() && ui.memory(|mem| !mem.any_popup_open()) {
@@ -668,10 +668,8 @@ fn main_ui(
         });
     }
 
-    let mut try_popup = false;
-    if ui.input(|input| input.key_pressed(Key::Space)) && ui.memory(|mem| mem.focused().is_none()) {
-        try_popup = true;
-    }
+    let try_popup =
+        ui.input(|input| input.key_pressed(Key::Space)) && ui.memory(|mem| mem.focused().is_none());
 
     // TODO implement paste (by pressing enter or ctrl+N)
     ScrollArea::vertical().show(ui, |ui| {
