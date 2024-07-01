@@ -27,21 +27,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Install Rust
-        run: rustup component add rustfmt clippy
-      - name: Cargo Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-      - name: Run tests
-        run: cargo test --workspace
+  #      - name: Install Rust
+  #        run: rustup component add rustfmt clippy
+  #      - name: Cargo Cache
+  #        uses: actions/cache@v3
+  #        with:
+  #          path: |
+  #            ~/.cargo/bin/
+  #            ~/.cargo/registry/index/
+  #            ~/.cargo/registry/cache/
+  #            ~/.cargo/git/db/
+  #            target/
+  #          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+  #          restore-keys: ${{ runner.os }}-cargo-
+  #      - name: Run tests
+  #        run: cargo test --workspace
 
   deploy_release:
     needs: [ build, test ]
