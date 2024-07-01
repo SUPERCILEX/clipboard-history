@@ -574,7 +574,8 @@ fn search_ui(
     let response = ui.add(
         TextEdit::singleline(&mut state.query)
             .hint_text("Search")
-            .desired_width(f32::INFINITY),
+            .desired_width(f32::INFINITY)
+            .cursor_at_end(true),
     );
     let mut reset = |state: &mut UiState| {
         state.query = String::new();
@@ -584,6 +585,9 @@ fn search_ui(
 
     if ui.input(|input| input.key_pressed(Key::Escape)) && ui.memory(|mem| !mem.any_popup_open()) {
         reset(state);
+    }
+    if ui.input(|i| i.key_pressed(Key::ArrowUp) || i.key_pressed(Key::ArrowDown)) {
+        response.surrender_focus();
     }
     if ui.input(|input| input.key_pressed(Key::Slash)) {
         ui.memory_mut(|mem| mem.close_popup());
