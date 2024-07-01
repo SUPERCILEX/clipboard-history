@@ -435,6 +435,7 @@ struct UiState {
 
     query: String,
     search_highlighted_id: Option<u64>,
+    search_with_regex: bool,
 
     was_focused: bool,
     skipped_first_focus: bool,
@@ -573,7 +574,11 @@ fn search_ui(
 ) {
     let response = ui.add(
         TextEdit::singleline(&mut state.query)
-            .hint_text("Search")
+            .hint_text(if state.search_with_regex {
+                "Search with RegEx"
+            } else {
+                "Search"
+            })
             .desired_width(f32::INFINITY)
             .cursor_at_end(true),
     );
@@ -593,6 +598,9 @@ fn search_ui(
         ui.memory_mut(egui::Memory::close_popup);
         response.request_focus();
     }
+    if ui.input(|i| i.modifiers.alt && i.key_pressed(Key::X)) {
+        state.search_with_regex ^= true;
+    }
 
     if !response.changed() {
         return;
@@ -604,7 +612,7 @@ fn search_ui(
 
     let _ = requests.send(Command::Search {
         query: state.query.clone(),
-        regex: false,
+        regex: state.search_with_regex,
     });
 }
 
