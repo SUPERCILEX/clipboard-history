@@ -434,6 +434,7 @@ struct UiState {
     detailed_entry: Option<Result<DetailedEntry, CoreError>>,
 
     query: String,
+    search_highlighted_id: Option<u64>,
 
     was_focused: bool,
     skipped_first_focus: bool,
@@ -537,6 +538,7 @@ fn handle_message(message: Message, ui_entries: &mut UiEntries, state: &mut UiSt
         }
         Message::EntryDetails(r) => state.detailed_entry = Some(r),
         Message::SearchResults(entries) => {
+            state.search_highlighted_id = entries.first().map(|e| e.entry.id());
             ui_entries.search_results = entries;
         }
     }
@@ -574,10 +576,14 @@ fn search_ui(
             .hint_text("Search")
             .desired_width(f32::INFINITY),
     );
-
-    if ui.input(|input| input.key_pressed(Key::Escape)) && ui.memory(|mem| !mem.any_popup_open()) {
+    let mut reset = |state: &mut UiState| {
         state.query = String::new();
         entries.search_results = Vec::new();
+        state.search_highlighted_id = None;
+    };
+
+    if ui.input(|input| input.key_pressed(Key::Escape)) && ui.memory(|mem| !mem.any_popup_open()) {
+        reset(state);
     }
     if ui.input(|input| input.key_pressed(Key::Slash)) {
         response.request_focus();
@@ -587,7 +593,7 @@ fn search_ui(
         return;
     }
     if state.query.is_empty() {
-        entries.search_results = Vec::new();
+        reset(state);
         return;
     }
 
@@ -595,6 +601,16 @@ fn search_ui(
         query: state.query.clone(),
         regex: false,
     });
+}
+
+macro_rules! active_highlighted_id {
+    ($state:ident) => {{
+        if $state.query.is_empty() {
+            &mut $state.highlighted_id
+        } else {
+            &mut $state.search_highlighted_id
+        }
+    }};
 }
 
 #[allow(clippy::too_many_lines)]
@@ -635,8 +651,13 @@ fn main_ui(
             *state = UiState::default();
             refresh();
         }
-        if !entries.loaded_entries.is_empty() {
-            handle_arrow_keys(entries, state, &mut try_scroll, input);
+        if !active_entries(entries, state).is_empty() {
+            handle_arrow_keys(
+                active_entries(entries, state),
+                active_highlighted_id!(state),
+                &mut try_scroll,
+                input,
+            );
         }
     });
 
@@ -650,11 +671,7 @@ fn main_ui(
     // TODO implement paste (by pressing enter or ctrl+N)
     ScrollArea::vertical().show(ui, |ui| {
         let mut prev_was_favorites = false;
-        for entry in if state.query.is_empty() {
-            &entries.loaded_entries
-        } else {
-            &entries.search_results
-        } {
+        for entry in active_entries(entries, state) {
             let next_was_favorites = entry.entry.ring() == RingKind::Favorites;
             if prev_was_favorites && !next_was_favorites {
                 ui.separator();
@@ -674,6 +691,14 @@ fn main_ui(
         }
         // TODO support pages
     });
+}
+
+fn active_entries<'a>(entries: &'a UiEntries, state: &UiState) -> &'a [UiEntry] {
+    if state.query.is_empty() {
+        &entries.loaded_entries
+    } else {
+        &entries.search_results
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -769,14 +794,16 @@ fn row_ui(
             .expand_rect(frame.content_ui.min_rect()),
         Sense::click(),
     );
+    let highlighted_id = active_highlighted_id!(state);
+
     if try_scroll {
-        if state.highlighted_id == Some(entry_id) {
+        if *highlighted_id == Some(entry_id) {
             response.scroll_to_me(None);
         }
     } else if response.hovered() && ui.input(|i| i.pointer.delta() != Vec2::ZERO) {
-        state.highlighted_id = Some(entry_id);
+        *highlighted_id = Some(entry_id);
     }
-    if state.highlighted_id == Some(entry_id) {
+    if *highlighted_id == Some(entry_id) {
         frame.frame.fill = ui
             .style()
             .visuals
@@ -788,7 +815,7 @@ fn row_ui(
     frame.paint(ui);
 
     let popup_id = ui.make_persistent_id(entry_id);
-    if response.secondary_clicked() || (try_popup && state.highlighted_id == Some(entry_id)) {
+    if response.secondary_clicked() || (try_popup && *highlighted_id == Some(entry_id)) {
         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
     }
     egui::popup::popup_below_widget(ui, popup_id, &response, |ui| {
@@ -859,47 +886,39 @@ fn row_ui(
 }
 
 fn handle_arrow_keys(
-    entries: &UiEntries,
-    state: &mut UiState,
+    entries: &[UiEntry],
+    highlighted_id: &mut Option<u64>,
     try_scroll: &mut bool,
     input: &InputState,
 ) {
     if input.key_pressed(Key::ArrowUp) {
         *try_scroll = true;
-        if let Some(id) = state.highlighted_id {
-            let idx = entries
-                .loaded_entries
-                .iter()
-                .position(|e| e.entry.id() == id);
+        *highlighted_id = if let &mut Some(id) = highlighted_id {
+            let idx = entries.iter().position(|e| e.entry.id() == id);
             if idx == Some(0) || idx.is_none() {
-                state.highlighted_id = entries.loaded_entries.last().map(|e| e.entry.id());
+                entries.last().map(|e| e.entry.id())
             } else {
-                state.highlighted_id = idx
-                    .map(|idx| idx - 1)
-                    .and_then(|idx| entries.loaded_entries.get(idx))
-                    .map(|e| e.entry.id());
+                idx.map(|idx| idx - 1)
+                    .and_then(|idx| entries.get(idx))
+                    .map(|e| e.entry.id())
             }
         } else {
-            state.highlighted_id = entries.loaded_entries.last().map(|e| e.entry.id());
+            entries.last().map(|e| e.entry.id())
         }
     }
     if input.key_pressed(Key::ArrowDown) {
         *try_scroll = true;
-        if let Some(id) = state.highlighted_id {
-            let idx = entries
-                .loaded_entries
-                .iter()
-                .position(|e| e.entry.id() == id);
-            if idx == Some(entries.loaded_entries.len() - 1) || idx.is_none() {
-                state.highlighted_id = entries.loaded_entries.first().map(|e| e.entry.id());
+        *highlighted_id = if let &mut Some(id) = highlighted_id {
+            let idx = entries.iter().position(|e| e.entry.id() == id);
+            if idx == Some(entries.len() - 1) || idx.is_none() {
+                entries.first().map(|e| e.entry.id())
             } else {
-                state.highlighted_id = idx
-                    .map(|idx| idx + 1)
-                    .and_then(|idx| entries.loaded_entries.get(idx))
-                    .map(|e| e.entry.id());
+                idx.map(|idx| idx + 1)
+                    .and_then(|idx| entries.get(idx))
+                    .map(|e| e.entry.id())
             }
         } else {
-            state.highlighted_id = entries.loaded_entries.first().map(|e| e.entry.id());
+            entries.first().map(|e| e.entry.id())
         }
     }
 }
