@@ -749,10 +749,10 @@ fn main_ui(
 
                     response
                 }
-                // TODO why is this so broken? Loads in weird sizes and doesn't work after the first
-                //  load.
                 // TODO make this stuff look like text entries with the popup and stuff
-                UiEntryCache::Image { uri } => ui.add(Image::new(uri)),
+                UiEntryCache::Image { uri } => {
+                    ui.add(Image::new(uri).max_height(250.).fit_to_original_size(1.))
+                }
                 UiEntryCache::Binary { mime_type, context } => ui.label(format!(
                     "Unknown binary format of type {mime_type:?} from {context}."
                 )),
