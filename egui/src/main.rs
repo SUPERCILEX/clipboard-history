@@ -575,7 +575,7 @@ fn search_ui(
             .desired_width(f32::INFINITY),
     );
 
-    if ui.input(|input| input.key_pressed(Key::Escape)) {
+    if ui.input(|input| input.key_pressed(Key::Escape)) && ui.memory(|mem| !mem.any_popup_open()) {
         state.query = String::new();
         entries.search_results = Vec::new();
     }
