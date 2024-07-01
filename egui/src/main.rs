@@ -18,7 +18,8 @@ use eframe::{
     egui,
     egui::{
         text::LayoutJob, Align, CentralPanel, FontId, Image, InputState, Key, Label, Layout, Pos2,
-        ScrollArea, Sense, TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder,
+        Response, ScrollArea, Sense, TextEdit, TextFormat, TopBottomPanel, Ui, Vec2,
+        ViewportBuilder, Widget,
     },
     epaint::FontFamily,
 };
@@ -414,20 +415,25 @@ struct App {
     row_font: FontFamily,
 
     state: UiState,
+    entries: UiEntries,
+}
+
+#[derive(Default)]
+struct UiEntries {
+    loaded_entries: Vec<UiEntry>,
+    search_results: Vec<UiEntry>,
 }
 
 #[derive(Default)]
 struct UiState {
     fatal_error: Option<ClientError>,
     last_error: Option<CommandError>,
-    loaded_entries: Vec<UiEntry>,
     highlighted_id: Option<u64>,
 
     details_requested: Option<u64>,
     detailed_entry: Option<Result<DetailedEntry, CoreError>>,
 
     query: String,
-    search_results: Vec<UiEntry>,
 
     was_focused: bool,
     skipped_first_focus: bool,
@@ -450,6 +456,7 @@ impl App {
             responses,
             row_font,
 
+            entries: UiEntries::default(),
             state: UiState::default(),
         }
     }
@@ -514,7 +521,7 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
     Ok(entry)
 }
 
-fn handle_message(message: Message, state: &mut UiState) {
+fn handle_message(message: Message, ui_entries: &mut UiEntries, state: &mut UiState) {
     match message {
         Message::FatalDbOpen(e) => state.fatal_error = Some(e.into()),
         Message::FatalServerConnect(e) => state.fatal_error = Some(e),
@@ -523,14 +530,14 @@ fn handle_message(message: Message, state: &mut UiState) {
             entries,
             first_non_favorite_id,
         } => {
-            state.loaded_entries = entries;
+            ui_entries.loaded_entries = entries;
             if state.highlighted_id.is_none() {
                 state.highlighted_id = first_non_favorite_id;
             }
         }
         Message::EntryDetails(r) => state.detailed_entry = Some(r),
         Message::SearchResults(entries) => {
-            state.search_results = entries;
+            ui_entries.search_results = entries;
         }
     }
 }
@@ -538,19 +545,30 @@ fn handle_message(message: Message, state: &mut UiState) {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         for message in self.responses.try_iter() {
-            handle_message(message, &mut self.state);
+            handle_message(message, &mut self.entries, &mut self.state);
         }
 
         TopBottomPanel::top("search_bar").show(ctx, |ui| {
-            search_ui(ui, &mut self.state, &self.requests);
+            search_ui(ui, &mut self.entries, &mut self.state, &self.requests);
         });
         CentralPanel::default().show(ctx, |ui| {
-            main_ui(ui, &self.row_font, &mut self.state, &self.requests);
+            main_ui(
+                ui,
+                &self.row_font,
+                &self.entries,
+                &mut self.state,
+                &self.requests,
+            );
         });
     }
 }
 
-fn search_ui(ui: &mut Ui, state: &mut UiState, requests: &Sender<Command>) {
+fn search_ui(
+    ui: &mut Ui,
+    entries: &mut UiEntries,
+    state: &mut UiState,
+    requests: &Sender<Command>,
+) {
     let response = ui.add(
         TextEdit::singleline(&mut state.query)
             .hint_text("Search")
@@ -559,7 +577,7 @@ fn search_ui(ui: &mut Ui, state: &mut UiState, requests: &Sender<Command>) {
 
     if ui.input(|input| input.key_pressed(Key::Escape)) {
         state.query = String::new();
-        state.search_results = Vec::new();
+        entries.search_results = Vec::new();
     }
     if ui.input(|input| input.key_pressed(Key::Slash)) {
         response.request_focus();
@@ -569,7 +587,7 @@ fn search_ui(ui: &mut Ui, state: &mut UiState, requests: &Sender<Command>) {
         return;
     }
     if state.query.is_empty() {
-        state.search_results = Vec::new();
+        entries.search_results = Vec::new();
         return;
     }
 
@@ -583,6 +601,7 @@ fn search_ui(ui: &mut Ui, state: &mut UiState, requests: &Sender<Command>) {
 fn main_ui(
     ui: &mut Ui,
     entry_text_font: &FontFamily,
+    entries: &UiEntries,
     state: &mut UiState,
     requests: &Sender<Command>,
 ) {
@@ -616,8 +635,8 @@ fn main_ui(
             *state = UiState::default();
             refresh();
         }
-        if !state.loaded_entries.is_empty() {
-            handle_arrow_keys(state, &mut try_scroll, input);
+        if !entries.loaded_entries.is_empty() {
+            handle_arrow_keys(entries, state, &mut try_scroll, input);
         }
     });
 
@@ -630,147 +649,11 @@ fn main_ui(
 
     // TODO implement paste (by pressing enter or ctrl+N)
     ScrollArea::vertical().show(ui, |ui| {
-        let mut show_entry = |ui: &mut Ui, entry: &UiEntry| {
-            let entry_id = entry.entry.id();
-            let response = match entry.cache.clone() {
-                UiEntryCache::Text { one_liner } => {
-                    let mut job = LayoutJob::single_section(
-                        one_liner,
-                        TextFormat {
-                            font_id: FontId::new(16., entry_text_font.clone()),
-                            ..Default::default()
-                        },
-                    );
-                    job.wrap = egui::text::TextWrapping {
-                        max_rows: 1,
-                        break_anywhere: true,
-                        ..Default::default()
-                    };
-                    let frame_data = egui::Frame::default().inner_margin(5.);
-                    let mut frame = frame_data.begin(ui);
-                    frame.content_ui.add(Label::new(job).selectable(false));
-                    frame.content_ui.set_min_width(
-                        frame.content_ui.available_width() - frame_data.inner_margin.right,
-                    );
-                    let response = ui.allocate_rect(
-                        (frame_data.inner_margin + frame_data.outer_margin)
-                            .expand_rect(frame.content_ui.min_rect()),
-                        Sense::click(),
-                    );
-                    if try_scroll {
-                        if state.highlighted_id == Some(entry_id) {
-                            response.scroll_to_me(None);
-                        }
-                    } else if response.hovered() && ui.input(|i| i.pointer.delta() != Vec2::ZERO) {
-                        state.highlighted_id = Some(entry_id);
-                    }
-                    if state.highlighted_id == Some(entry_id) {
-                        frame.frame.fill = ui
-                            .style()
-                            .visuals
-                            .widgets
-                            .hovered
-                            .bg_fill
-                            .linear_multiply(0.1);
-                    }
-                    frame.paint(ui);
-
-                    let popup_id = ui.make_persistent_id(entry_id);
-                    if response.secondary_clicked()
-                        || (try_popup && state.highlighted_id == Some(entry_id))
-                    {
-                        ui.memory_mut(|mem| mem.toggle_popup(popup_id));
-                    }
-                    egui::popup::popup_below_widget(ui, popup_id, &response, |ui| {
-                        if state.details_requested != Some(entry_id) {
-                            state.details_requested = Some(entry_id);
-                            state.detailed_entry = None;
-                            let _ = requests.send(Command::GetDetails {
-                                entry: entry.entry,
-                                with_text: true,
-                            });
-                        }
-
-                        ui.set_min_width(200.);
-
-                        ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
-                            ui.horizontal(|ui| {
-                                match entry.entry.ring() {
-                                    RingKind::Favorites => {
-                                        if ui.button("Unfavorite").clicked() {
-                                            let _ = requests.send(Command::Unfavorite(entry_id));
-                                            refresh();
-                                        }
-                                    }
-                                    RingKind::Main => {
-                                        if ui.button("Favorite").clicked() {
-                                            let _ = requests.send(Command::Favorite(entry_id));
-                                            refresh();
-                                        }
-                                    }
-                                }
-                                if ui.button("Delete").clicked() {
-                                    let _ = requests.send(Command::Delete(entry_id));
-                                    refresh();
-                                }
-                            });
-                            ui.separator();
-
-                            ui.label(format!("Id: {entry_id}"));
-                            match &state.detailed_entry {
-                                None => {
-                                    ui.label("Loading…");
-                                }
-                                Some(Ok(DetailedEntry {
-                                    mime_type,
-                                    full_text,
-                                })) => {
-                                    if !mime_type.is_empty() {
-                                        ui.label(format!("Mime type: {mime_type}"));
-                                    }
-                                    ui.separator();
-                                    if let Some(full) = full_text {
-                                        ScrollArea::both().auto_shrink([false, true]).show(
-                                            ui,
-                                            |ui| {
-                                                ui.label(full);
-                                            },
-                                        );
-                                    } else {
-                                        ui.label("Binary data.");
-                                    }
-                                }
-                                Some(Err(e)) => {
-                                    ui.label(format!("Failed to get entry details:\n{e}"));
-                                }
-                            }
-                        });
-                    });
-
-                    response
-                }
-                // TODO make this stuff look like text entries with the popup and stuff
-                UiEntryCache::Image { uri } => {
-                    ui.add(Image::new(uri).max_height(250.).fit_to_original_size(1.))
-                }
-                UiEntryCache::Binary { mime_type, context } => ui.label(format!(
-                    "Unknown binary format of type {mime_type:?} from {context}."
-                )),
-                UiEntryCache::Error(e) => {
-                    ui.label(e);
-                    return;
-                }
-            };
-            if response.clicked() {
-                // TODO
-            }
-        };
-
         let mut prev_was_favorites = false;
         for entry in if state.query.is_empty() {
-            &state.loaded_entries
+            &entries.loaded_entries
         } else {
-            &state.search_results
+            &entries.search_results
         } {
             let next_was_favorites = entry.entry.ring() == RingKind::Favorites;
             if prev_was_favorites && !next_was_favorites {
@@ -778,43 +661,229 @@ fn main_ui(
             }
             prev_was_favorites = next_was_favorites;
 
-            show_entry(ui, entry);
+            entry_ui(
+                ui,
+                entry_text_font,
+                entry,
+                state,
+                requests,
+                refresh,
+                try_scroll,
+                try_popup,
+            );
         }
         // TODO support pages
     });
 }
 
-fn handle_arrow_keys(state: &mut UiState, try_scroll: &mut bool, input: &InputState) {
+#[allow(clippy::too_many_arguments)]
+fn entry_ui(
+    ui: &mut Ui,
+    entry_text_font: &FontFamily,
+    entry: &UiEntry,
+    state: &mut UiState,
+    requests: &Sender<Command>,
+    refresh: impl FnMut(),
+    try_scroll: bool,
+    try_popup: bool,
+) {
+    let response = match entry.cache.clone() {
+        UiEntryCache::Text { one_liner } => {
+            let mut job = LayoutJob::single_section(
+                one_liner,
+                TextFormat {
+                    font_id: FontId::new(16., entry_text_font.clone()),
+                    ..Default::default()
+                },
+            );
+            job.wrap = egui::text::TextWrapping {
+                max_rows: 1,
+                break_anywhere: true,
+                ..Default::default()
+            };
+            row_ui(
+                ui,
+                Label::new(job).selectable(false),
+                state,
+                requests,
+                refresh,
+                entry.entry,
+                try_scroll,
+                try_popup,
+            )
+        }
+        // TODO make this stuff look like text entries with the popup and stuff
+        UiEntryCache::Image { uri } => {
+            ui.add(Image::new(uri).max_height(250.).fit_to_original_size(1.))
+        }
+        UiEntryCache::Binary { mime_type, context } => ui.label(format!(
+            "Unknown binary format of type {mime_type:?} from {context}."
+        )),
+        UiEntryCache::Error(e) => {
+            ui.label(e);
+            return;
+        }
+    };
+    if response.clicked() {
+        // TODO
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn row_ui(
+    ui: &mut Ui,
+    widget: impl Widget,
+    state: &mut UiState,
+    requests: &Sender<Command>,
+    mut refresh: impl FnMut(),
+    entry: Entry,
+    try_scroll: bool,
+    try_popup: bool,
+) -> Response {
+    let entry_id = entry.id();
+
+    let frame_data = egui::Frame::default().inner_margin(5.);
+    let mut frame = frame_data.begin(ui);
+    frame.content_ui.add(widget);
+    frame
+        .content_ui
+        .set_min_width(frame.content_ui.available_width() - frame_data.inner_margin.right);
+    let response = ui.allocate_rect(
+        (frame_data.inner_margin + frame_data.outer_margin)
+            .expand_rect(frame.content_ui.min_rect()),
+        Sense::click(),
+    );
+    if try_scroll {
+        if state.highlighted_id == Some(entry_id) {
+            response.scroll_to_me(None);
+        }
+    } else if response.hovered() && ui.input(|i| i.pointer.delta() != Vec2::ZERO) {
+        state.highlighted_id = Some(entry_id);
+    }
+    if state.highlighted_id == Some(entry_id) {
+        frame.frame.fill = ui
+            .style()
+            .visuals
+            .widgets
+            .hovered
+            .bg_fill
+            .linear_multiply(0.1);
+    }
+    frame.paint(ui);
+
+    let popup_id = ui.make_persistent_id(entry_id);
+    if response.secondary_clicked() || (try_popup && state.highlighted_id == Some(entry_id)) {
+        ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+    }
+    egui::popup::popup_below_widget(ui, popup_id, &response, |ui| {
+        if state.details_requested != Some(entry_id) {
+            state.details_requested = Some(entry_id);
+            state.detailed_entry = None;
+            let _ = requests.send(Command::GetDetails {
+                entry,
+                with_text: true,
+            });
+        }
+
+        ui.set_min_width(200.);
+
+        ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
+            ui.horizontal(|ui| {
+                match entry.ring() {
+                    RingKind::Favorites => {
+                        if ui.button("Unfavorite").clicked() {
+                            let _ = requests.send(Command::Unfavorite(entry_id));
+                            refresh();
+                        }
+                    }
+                    RingKind::Main => {
+                        if ui.button("Favorite").clicked() {
+                            let _ = requests.send(Command::Favorite(entry_id));
+                            refresh();
+                        }
+                    }
+                }
+                if ui.button("Delete").clicked() {
+                    let _ = requests.send(Command::Delete(entry_id));
+                    refresh();
+                }
+            });
+            ui.separator();
+
+            ui.label(format!("Id: {entry_id}"));
+            match &state.detailed_entry {
+                None => {
+                    ui.label("Loading…");
+                }
+                Some(Ok(DetailedEntry {
+                    mime_type,
+                    full_text,
+                })) => {
+                    if !mime_type.is_empty() {
+                        ui.label(format!("Mime type: {mime_type}"));
+                    }
+                    ui.separator();
+                    if let Some(full) = full_text {
+                        ScrollArea::both()
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                ui.label(full);
+                            });
+                    } else {
+                        ui.label("Binary data.");
+                    }
+                }
+                Some(Err(e)) => {
+                    ui.label(format!("Failed to get entry details:\n{e}"));
+                }
+            }
+        });
+    });
+    response
+}
+
+fn handle_arrow_keys(
+    entries: &UiEntries,
+    state: &mut UiState,
+    try_scroll: &mut bool,
+    input: &InputState,
+) {
     if input.key_pressed(Key::ArrowUp) {
         *try_scroll = true;
         if let Some(id) = state.highlighted_id {
-            let idx = state.loaded_entries.iter().position(|e| e.entry.id() == id);
+            let idx = entries
+                .loaded_entries
+                .iter()
+                .position(|e| e.entry.id() == id);
             if idx == Some(0) || idx.is_none() {
-                state.highlighted_id = state.loaded_entries.last().map(|e| e.entry.id());
+                state.highlighted_id = entries.loaded_entries.last().map(|e| e.entry.id());
             } else {
                 state.highlighted_id = idx
                     .map(|idx| idx - 1)
-                    .and_then(|idx| state.loaded_entries.get(idx))
+                    .and_then(|idx| entries.loaded_entries.get(idx))
                     .map(|e| e.entry.id());
             }
         } else {
-            state.highlighted_id = state.loaded_entries.last().map(|e| e.entry.id());
+            state.highlighted_id = entries.loaded_entries.last().map(|e| e.entry.id());
         }
     }
     if input.key_pressed(Key::ArrowDown) {
         *try_scroll = true;
         if let Some(id) = state.highlighted_id {
-            let idx = state.loaded_entries.iter().position(|e| e.entry.id() == id);
-            if idx == Some(state.loaded_entries.len() - 1) || idx.is_none() {
-                state.highlighted_id = state.loaded_entries.first().map(|e| e.entry.id());
+            let idx = entries
+                .loaded_entries
+                .iter()
+                .position(|e| e.entry.id() == id);
+            if idx == Some(entries.loaded_entries.len() - 1) || idx.is_none() {
+                state.highlighted_id = entries.loaded_entries.first().map(|e| e.entry.id());
             } else {
                 state.highlighted_id = idx
                     .map(|idx| idx + 1)
-                    .and_then(|idx| state.loaded_entries.get(idx))
+                    .and_then(|idx| entries.loaded_entries.get(idx))
                     .map(|e| e.entry.id());
             }
         } else {
-            state.highlighted_id = state.loaded_entries.first().map(|e| e.entry.id());
+            state.highlighted_id = entries.loaded_entries.first().map(|e| e.entry.id());
         }
     }
 }
