@@ -873,6 +873,7 @@ fn stats() -> Result<(), CliError> {
     #[derive(Default, Debug)]
     struct RingStats {
         capacity: u32,
+        len: u32,
         bucketed_entry_count: u32,
         file_entry_count: u32,
         num_duplicates: u32,
@@ -922,7 +923,8 @@ fn stats() -> Result<(), CliError> {
                         for (
                             kind,
                             &RingStats {
-                                capacity,
+                                capacity: _,
+                                len,
                                 bucketed_entry_count,
                                 file_entry_count,
                                 num_duplicates: _,
@@ -936,7 +938,7 @@ fn stats() -> Result<(), CliError> {
                                 let num_entries = bucketed_entry_count + file_entry_count;
                                 let mut s = f.debug_struct("Ring");
                                 s.field("num_entries", &num_entries)
-                                    .field("uninitialized_entry_count", &(capacity - num_entries))
+                                    .field("uninitialized_entry_count", &(len - num_entries))
                                     .field(
                                         "mean_entry_size",
                                         &(owned_bytes as f64 / f64::from(num_entries)),
@@ -1028,6 +1030,7 @@ fn stats() -> Result<(), CliError> {
         let mut ring_stats = RingStats::default();
         let RingStats {
             capacity,
+            len,
             bucketed_entry_count,
             file_entry_count,
             num_duplicates,
@@ -1036,6 +1039,7 @@ fn stats() -> Result<(), CliError> {
             owned_bytes: ring_owned_bytes,
         } = &mut ring_stats;
         *capacity = ring_reader.ring().capacity();
+        *len = ring_reader.ring().len();
         *min_entry_size = u64::MAX;
         let kind = ring_reader.kind();
 
