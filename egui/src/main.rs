@@ -700,7 +700,6 @@ fn main_ui(
                 try_popup,
             );
         }
-        // TODO support pages
     });
 }
 
