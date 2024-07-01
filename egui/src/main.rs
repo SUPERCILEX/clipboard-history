@@ -294,10 +294,12 @@ fn handle_command(
             }
 
             let query = if regex {
-                Query::Regex(Regex::new(query.trim())?)
-            } else {
+                Query::Regex(Regex::new(&query)?)
+            } else if query.chars().all(char::is_lowercase) {
                 query.make_ascii_lowercase();
                 Query::PlainIgnoreCase(query.trim().as_bytes())
+            } else {
+                Query::Plain(query.trim().as_bytes())
             };
             Ok(Some(Message::SearchResults(do_search(
                 query,
