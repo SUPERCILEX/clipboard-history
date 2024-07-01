@@ -646,20 +646,21 @@ fn main_ui(
     }
 
     let mut try_scroll = false;
-    ui.input(|input| {
-        if input.modifiers.ctrl && input.key_pressed(Key::R) {
-            *state = UiState::default();
-            refresh();
-        }
-        if !active_entries(entries, state).is_empty() {
+
+    if ui.input(|input| input.modifiers.ctrl && input.key_pressed(Key::R)) {
+        *state = UiState::default();
+        refresh();
+    }
+    if !active_entries(entries, state).is_empty() && ui.memory(|mem| !mem.any_popup_open()) {
+        ui.input(|input| {
             handle_arrow_keys(
                 active_entries(entries, state),
                 active_highlighted_id!(state),
                 &mut try_scroll,
                 input,
             );
-        }
-    });
+        });
+    }
 
     let mut try_popup = false;
     ui.input(|input| {
