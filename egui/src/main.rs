@@ -282,18 +282,6 @@ fn handle_command(
             Ok(None)
         }
         Command::Search { mut query, regex } => {
-            if reverse_index_cache.is_empty() {
-                for entry in database.favorites().chain(database.main()) {
-                    let Kind::Bucket(bucket) = entry.kind() else {
-                        continue;
-                    };
-                    reverse_index_cache.insert(
-                        BucketAndIndex::new(size_to_bucket(bucket.size()), bucket.index()),
-                        RingAndIndex::new(entry.ring(), entry.index()),
-                    );
-                }
-            }
-
             let query = if regex {
                 Query::Regex(Regex::new(&query)?)
             } else if query.chars().all(char::is_lowercase) {
@@ -316,7 +304,7 @@ fn do_search(
     query: Query,
     reader_: &mut Option<EntryReader>,
     database: &mut DatabaseReader,
-    reverse_index_cache: &HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
+    reverse_index_cache: &mut HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
 ) -> Vec<UiEntry> {
     const MAX_SEARCH_ENTRIES: usize = 256;
 
@@ -345,6 +333,19 @@ fn do_search(
     let reader = Arc::new(reader_.take().unwrap());
 
     let (result_stream, threads) = ringboard_sdk::search(query, reader.clone());
+
+    if reverse_index_cache.is_empty() {
+        for entry in database.favorites().chain(database.main()) {
+            let Kind::Bucket(bucket) = entry.kind() else {
+                continue;
+            };
+            reverse_index_cache.insert(
+                BucketAndIndex::new(size_to_bucket(bucket.size()), bucket.index()),
+                RingAndIndex::new(entry.ring(), entry.index()),
+            );
+        }
+    }
+
     let mut results = BinaryHeap::new();
     for entry in result_stream
         .map(|r| {
