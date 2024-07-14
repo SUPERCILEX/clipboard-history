@@ -17,8 +17,8 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        text::LayoutJob, Align, CentralPanel, FontId, Image, InputState, Key, Label, Layout,
-        PopupCloseBehavior, Pos2, Response, ScrollArea, Sense, TextEdit, TextFormat,
+        text::LayoutJob, Align, CentralPanel, Event, FontId, Image, InputState, Key, Label, Layout,
+        Modifiers, PopupCloseBehavior, Pos2, Response, ScrollArea, Sense, TextEdit, TextFormat,
         TopBottomPanel, Ui, Vec2, ViewportBuilder, Widget,
     },
     epaint::FontFamily,
@@ -577,6 +577,11 @@ fn search_ui(
     state: &mut UiState,
     requests: &Sender<Command>,
 ) {
+    if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::X)) {
+        state.search_with_regex ^= true;
+        ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))))
+    }
+
     let response = ui.add(
         TextEdit::singleline(&mut state.query)
             .hint_text(if state.search_with_regex {
@@ -602,9 +607,6 @@ fn search_ui(
     if ui.input(|input| input.key_pressed(Key::Slash)) {
         ui.memory_mut(egui::Memory::close_popup);
         response.request_focus();
-    }
-    if ui.input(|i| i.modifiers.alt && i.key_pressed(Key::X)) {
-        state.search_with_regex ^= true;
     }
 
     if !response.changed() {
@@ -665,7 +667,7 @@ fn main_ui(
 
     let mut try_scroll = false;
 
-    if ui.input(|input| input.modifiers.ctrl && input.key_pressed(Key::R)) {
+    if ui.input_mut(|input| input.consume_key(Modifiers::CTRL, Key::R)) {
         *state = UiState::default();
         ui.memory_mut(egui::Memory::close_popup);
         refresh();
