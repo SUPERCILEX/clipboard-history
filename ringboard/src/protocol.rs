@@ -42,7 +42,7 @@ pub enum Request {
     Swap { id1: u64, id2: u64 },
     Remove { id: u64 },
     ReloadSettings,
-    GarbageCollect,
+    GarbageCollect { max_wasted_bytes: u64 },
 }
 
 const _: () = assert!(size_of::<Request>() == 128);
@@ -122,3 +122,4 @@ impl AsBytes for MoveToFrontResponse {}
 impl AsBytes for SwapResponse {}
 impl AsBytes for RemoveResponse {}
 impl AsBytes for ReloadSettingsResponse {}
+impl AsBytes for GarbageCollectResponse {}

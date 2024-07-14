@@ -132,6 +132,7 @@ pub clipboard_history_core::protocol::Request::Add
 pub clipboard_history_core::protocol::Request::Add::mime_type: clipboard_history_core::protocol::MimeType
 pub clipboard_history_core::protocol::Request::Add::to: clipboard_history_core::protocol::RingKind
 pub clipboard_history_core::protocol::Request::GarbageCollect
+pub clipboard_history_core::protocol::Request::GarbageCollect::max_wasted_bytes: u64
 pub clipboard_history_core::protocol::Request::MoveToFront
 pub clipboard_history_core::protocol::Request::MoveToFront::id: u64
 pub clipboard_history_core::protocol::Request::MoveToFront::to: core::option::Option<clipboard_history_core::protocol::RingKind>
@@ -226,6 +227,7 @@ impl<T> core::convert::From<T> for clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_core::protocol::RingKind::from(t: T) -> T
 #[repr(C)] pub struct clipboard_history_core::protocol::GarbageCollectResponse
 pub clipboard_history_core::protocol::GarbageCollectResponse::bytes_freed: u64
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::GarbageCollectResponse
 impl core::clone::Clone for clipboard_history_core::protocol::GarbageCollectResponse
 pub fn clipboard_history_core::protocol::GarbageCollectResponse::clone(&self) -> clipboard_history_core::protocol::GarbageCollectResponse
 impl core::fmt::Debug for clipboard_history_core::protocol::GarbageCollectResponse
@@ -610,8 +612,8 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::Ring where 
 pub fn clipboard_history_core::ring::Ring::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::ring::Ring
 pub fn clipboard_history_core::ring::Ring::from(t: T) -> T
-pub const clipboard_history_core::ring::MAGIC: 
-pub const clipboard_history_core::ring::MAX_ENTRIES: 
+pub const clipboard_history_core::ring::MAGIC: [u8; 3]
+pub const clipboard_history_core::ring::MAX_ENTRIES: u32
 pub const clipboard_history_core::ring::VERSION: u8
 pub fn clipboard_history_core::ring::entries_to_offset(entries: u32) -> u64
 pub fn clipboard_history_core::ring::offset_to_entries(offset: usize) -> u32
@@ -755,10 +757,11 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::StringView<'a> wh
 pub fn clipboard_history_core::StringView<'a>::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::StringView<'a>
 pub fn clipboard_history_core::StringView<'a>::from(t: T) -> T
-pub const clipboard_history_core::TEXT_MIMES: 
+pub const clipboard_history_core::TEXT_MIMES: &[&str]
 pub trait clipboard_history_core::AsBytes: core::marker::Sized
 pub fn clipboard_history_core::AsBytes::as_bytes(&self) -> &[u8]
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::AddResponse
+impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::GarbageCollectResponse
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::MoveToFrontResponse
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::ReloadSettingsResponse
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::RemoveResponse

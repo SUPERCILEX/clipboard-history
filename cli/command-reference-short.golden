@@ -159,10 +159,13 @@ Options:
 
 Run garbage collection on the database
 
-Usage: clipboard-history garbage-collect
+Usage: clipboard-history garbage-collect [OPTIONS]
 
 Options:
-  -h, --help  Print help (use `--help` for more detail)
+  -m, --max-wasted-bytes <MAX_WASTED_BYTES>
+          The maximum amount of garbage (in bytes) that is tolerable [default: 0]
+  -h, --help
+          Print help (use `--help` for more detail)
 
 ---
 

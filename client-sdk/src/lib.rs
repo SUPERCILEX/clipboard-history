@@ -200,8 +200,14 @@ pub fn remove<Server: AsFd>(
 pub fn garbage_collect<Server: AsFd>(
     server: Server,
     addr: &SocketAddrUnix,
+    max_wasted_bytes: u64,
 ) -> Result<GarbageCollectResponse, ClientError> {
-    request(&server, addr, Request::GarbageCollect, SendFlags::empty())?;
+    request(
+        &server,
+        addr,
+        Request::GarbageCollect { max_wasted_bytes },
+        SendFlags::empty(),
+    )?;
     unsafe { response!(GarbageCollectResponse)(&server, RecvFlags::empty()) }
 }
 

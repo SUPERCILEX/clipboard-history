@@ -144,7 +144,7 @@ enum Cmd {
     ///
     /// Prints the amount of freed space.
     #[command(aliases = ["gc", "clean"])]
-    GarbageCollect,
+    GarbageCollect(GarbageCollect),
 
     /// Debugging tools for developers.
     #[command(aliases = ["d", "dev"])]
@@ -283,6 +283,17 @@ enum MigrateFromClipboard {
     ///
     /// Note that the IDs are ignored and may be omitted.
     Json,
+}
+
+#[derive(Args, Debug)]
+struct GarbageCollect {
+    /// The maximum amount of garbage (in bytes) that is tolerable.
+    ///
+    /// A value of zero will perform maximal compaction including entry
+    /// deduplication.
+    #[arg(short, long)]
+    #[arg(default_value_t = 0)]
+    max_wasted_bytes: u64,
 }
 
 #[derive(Args, Debug)]
@@ -442,7 +453,9 @@ fn run() -> Result<(), CliError> {
         Cmd::ReloadSettings(data) => {
             reload_settings(connect_to_server(&server_addr)?, &server_addr, data)
         }
-        Cmd::GarbageCollect => garbage_collect(connect_to_server(&server_addr)?, &server_addr),
+        Cmd::GarbageCollect(data) => {
+            garbage_collect(connect_to_server(&server_addr)?, &server_addr, data)
+        }
         Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump(Dump { watch: false })) => dump(),
@@ -712,8 +725,13 @@ fn reload_settings(
     todo!()
 }
 
-fn garbage_collect(server: OwnedFd, addr: &SocketAddrUnix) -> Result<(), CliError> {
-    let GarbageCollectResponse { bytes_freed } = ringboard_sdk::garbage_collect(server, addr)?;
+fn garbage_collect(
+    server: OwnedFd,
+    addr: &SocketAddrUnix,
+    GarbageCollect { max_wasted_bytes }: GarbageCollect,
+) -> Result<(), CliError> {
+    let GarbageCollectResponse { bytes_freed } =
+        ringboard_sdk::garbage_collect(server, addr, max_wasted_bytes)?;
     println!("{bytes_freed} bytes of garbage freed.");
     Ok(())
 }

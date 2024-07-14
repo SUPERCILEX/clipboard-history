@@ -228,9 +228,16 @@ Run garbage collection on the database.
 
 Prints the amount of freed space.
 
-Usage: clipboard-history garbage-collect
+Usage: clipboard-history garbage-collect [OPTIONS]
 
 Options:
+  -m, --max-wasted-bytes <MAX_WASTED_BYTES>
+          The maximum amount of garbage (in bytes) that is tolerable.
+          
+          A value of zero will perform maximal compaction including entry deduplication.
+          
+          [default: 0]
+
   -h, --help
           Print help (use `-h` for a summary)
 

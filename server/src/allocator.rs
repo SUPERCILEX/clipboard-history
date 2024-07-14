@@ -17,8 +17,8 @@ use log::{debug, error, info, warn};
 use ringboard_core::{
     bucket_to_length, copy_file_range_all, direct_file_name, open_buckets,
     protocol::{
-        composite_id, decompose_id, AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
-        RemoveResponse, RingKind, SwapResponse,
+        composite_id, decompose_id, AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType,
+        MoveToFrontResponse, RemoveResponse, RingKind, SwapResponse,
     },
     ring,
     ring::{entries_to_offset, BucketEntry, Entry, Header, RawEntry, Ring},
@@ -517,6 +517,34 @@ impl Allocator {
         self.data.free(entry, ring, id)?;
 
         Ok(RemoveResponse { error: None })
+    }
+
+    pub fn gc(&mut self, max_wasted_bytes: u64) -> Result<GarbageCollectResponse, CliError> {
+        let wasted_bucket_bytes = self
+            .data
+            .buckets
+            .free_lists
+            .lists
+            .0
+            .iter()
+            .enumerate()
+            .map(|(i, v)| u64::try_from(v.len()).unwrap() * u64::from(bucket_to_length(i)))
+            .sum::<u64>();
+        if wasted_bucket_bytes <= max_wasted_bytes {
+            return Ok(GarbageCollectResponse { bytes_freed: 0 });
+        }
+
+        // TODO eliminate duplicates while building reverse mapping of BucketAndIndex to
+        //  RingAndIndex
+
+        let Buckets {
+            files,
+            slot_counts,
+            free_lists,
+        } = &mut self.data.buckets;
+        // TODO pop every free slot and fill it with the furthest allocated slot
+
+        todo!()
     }
 
     pub fn shutdown(mut self) -> Result<(), CliError> {
