@@ -590,7 +590,9 @@ fn search_ui(
                 "Search"
             })
             .desired_width(f32::INFINITY)
-            .cursor_at_end(true),
+            .cursor_at_end(true)
+            .frame(false)
+            .margin(5.),
     );
     let mut reset = |state: &mut UiState| {
         state.query = String::new();
