@@ -17,9 +17,9 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        text::LayoutJob, Align, CentralPanel, FontId, Image, InputState, Key, Label, Layout, Pos2,
-        Response, ScrollArea, Sense, TextEdit, TextFormat, TopBottomPanel, Ui, Vec2,
-        ViewportBuilder, Widget,
+        text::LayoutJob, Align, CentralPanel, FontId, Image, InputState, Key, Label, Layout,
+        PopupCloseBehavior, Pos2, Response, ScrollArea, Sense, TextEdit, TextFormat,
+        TopBottomPanel, Ui, Vec2, ViewportBuilder, Widget,
     },
     epaint::FontFamily,
 };
@@ -93,7 +93,11 @@ fn main() -> Result<(), eframe::Error> {
                 let ctx = cc.egui_ctx.clone();
                 move || controller(&ctx, &command_receiver, &response_sender)
             });
-            Box::new(App::start(cascadia, command_sender, response_receiver))
+            Ok(Box::new(App::start(
+                cascadia,
+                command_sender,
+                response_receiver,
+            )))
         }),
     )
 }
@@ -801,8 +805,7 @@ fn row_ui(
         .content_ui
         .set_min_width(frame.content_ui.available_width() - frame_data.inner_margin.right);
     let response = ui.allocate_rect(
-        (frame_data.inner_margin + frame_data.outer_margin)
-            .expand_rect(frame.content_ui.min_rect()),
+        frame.content_ui.min_rect() + (frame_data.inner_margin + frame_data.outer_margin),
         Sense::click(),
     );
     let highlighted_id = active_highlighted_id!(state);
@@ -829,70 +832,76 @@ fn row_ui(
     if response.secondary_clicked() || (try_popup && *highlighted_id == Some(entry_id)) {
         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
     }
-    egui::popup::popup_below_widget(ui, popup_id, &response, |ui| {
-        if state.details_requested != Some(entry_id) {
-            state.details_requested = Some(entry_id);
-            state.detailed_entry = None;
-            let _ = requests.send(Command::GetDetails {
-                entry: entry.entry,
-                with_text: matches!(entry.cache, UiEntryCache::Text { .. }),
-            });
-        }
-
-        ui.set_min_width(200.);
-
-        ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
-            ui.horizontal(|ui| {
-                match entry.entry.ring() {
-                    RingKind::Favorites => {
-                        if ui.button("Unfavorite").clicked() {
-                            let _ = requests.send(Command::Unfavorite(entry_id));
-                            refresh();
-                        }
-                    }
-                    RingKind::Main => {
-                        if ui.button("Favorite").clicked() {
-                            let _ = requests.send(Command::Favorite(entry_id));
-                            refresh();
-                        }
-                    }
-                }
-                if ui.button("Delete").clicked() {
-                    let _ = requests.send(Command::Delete(entry_id));
-                    refresh();
-                }
-            });
-            ui.separator();
-
-            ui.label(format!("Id: {entry_id}"));
-            match &state.detailed_entry {
-                None => {
-                    ui.label("Loading…");
-                }
-                Some(Ok(DetailedEntry {
-                    mime_type,
-                    full_text,
-                })) => {
-                    if !mime_type.is_empty() {
-                        ui.label(format!("Mime type: {mime_type}"));
-                    }
-                    ui.separator();
-                    if let Some(full) = full_text {
-                        ScrollArea::both()
-                            .auto_shrink([false, true])
-                            .show(ui, |ui| {
-                                ui.label(full);
-                            });
-                    } else {
-                        ui.label("Binary data.");
-                    }
-                }
-                Some(Err(e)) => {
-                    ui.label(format!("Failed to get entry details:\n{e}"));
-                }
+    egui::popup::popup_below_widget(
+        ui,
+        popup_id,
+        &response,
+        PopupCloseBehavior::CloseOnClickOutside,
+        |ui| {
+            if state.details_requested != Some(entry_id) {
+                state.details_requested = Some(entry_id);
+                state.detailed_entry = None;
+                let _ = requests.send(Command::GetDetails {
+                    entry: entry.entry,
+                    with_text: matches!(entry.cache, UiEntryCache::Text { .. }),
+                });
             }
-        });
-    });
+
+            ui.set_min_width(200.);
+
+            ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
+                ui.horizontal(|ui| {
+                    match entry.entry.ring() {
+                        RingKind::Favorites => {
+                            if ui.button("Unfavorite").clicked() {
+                                let _ = requests.send(Command::Unfavorite(entry_id));
+                                refresh();
+                            }
+                        }
+                        RingKind::Main => {
+                            if ui.button("Favorite").clicked() {
+                                let _ = requests.send(Command::Favorite(entry_id));
+                                refresh();
+                            }
+                        }
+                    }
+                    if ui.button("Delete").clicked() {
+                        let _ = requests.send(Command::Delete(entry_id));
+                        refresh();
+                    }
+                });
+                ui.separator();
+
+                ui.label(format!("Id: {entry_id}"));
+                match &state.detailed_entry {
+                    None => {
+                        ui.label("Loading…");
+                    }
+                    Some(Ok(DetailedEntry {
+                        mime_type,
+                        full_text,
+                    })) => {
+                        if !mime_type.is_empty() {
+                            ui.label(format!("Mime type: {mime_type}"));
+                        }
+                        ui.separator();
+                        if let Some(full) = full_text {
+                            ScrollArea::both()
+                                .auto_shrink([false, true])
+                                .show(ui, |ui| {
+                                    ui.label(full);
+                                });
+                        } else {
+                            ui.label("Binary data.");
+                        }
+                    }
+                    Some(Err(e)) => {
+                        ui.label(format!("Failed to get entry details:\n{e}"));
+                    }
+                }
+            });
+        },
+    );
     response
 }
 
