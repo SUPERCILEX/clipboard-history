@@ -758,7 +758,10 @@ fn entry_ui(
         }
         UiEntryCache::Image { uri } => row_ui(
             ui,
-            Image::new(uri).max_height(250.).fit_to_original_size(1.),
+            Image::new(uri)
+                .max_height(250.)
+                .max_width(ui.available_width())
+                .fit_to_original_size(1.),
             state,
             requests,
             refresh,
