@@ -882,6 +882,7 @@ fn row_ui(
                 ui.label(format!("Id: {entry_id}"));
                 match &state.detailed_entry {
                     None => {
+                        ui.separator();
                         ui.label("Loading…");
                     }
                     Some(Ok(DetailedEntry {
@@ -897,6 +898,16 @@ fn row_ui(
                                 .auto_shrink([false, true])
                                 .show(ui, |ui| {
                                     ui.label(full);
+                                });
+                        } else if let UiEntryCache::Image { uri } = &entry.cache {
+                            ScrollArea::vertical()
+                                .auto_shrink([false, true])
+                                .show(ui, |ui| {
+                                    ui.add(
+                                        Image::new(uri)
+                                            .max_width(ui.available_width())
+                                            .fit_to_original_size(1.),
+                                    );
                                 });
                         } else {
                             ui.label("Binary data.");
