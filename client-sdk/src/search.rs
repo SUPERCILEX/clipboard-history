@@ -28,8 +28,6 @@ use crate::{ring_reader::xattr_mime_type, EntryReader};
 
 #[derive(Clone, Debug)]
 pub enum Query<'a> {
-    // TODO for the plain text matches, consider adding an incremental search API.
-    //  That is, pass in a set of already found locations and begin searching from those.
     Plain(&'a [u8]),
     PlainIgnoreCase(&'a [u8]),
     Regex(Regex),

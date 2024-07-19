@@ -719,8 +719,6 @@ fn reload_settings(
     ReloadSettings { .. }: ReloadSettings,
 ) -> Result<(), CliError> {
     // TODO send config as ancillary data
-    // TODO make config not an option by computing its default location at runtime
-    // (if possible)
     drop(server);
     todo!()
 }
