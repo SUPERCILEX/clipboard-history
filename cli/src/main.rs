@@ -743,13 +743,30 @@ fn garbage_collect(
         let (database, mut reader) = open_db()?;
         let mut duplicates = DuplicateDetector::default();
 
+        let recv = |flags| {
+            unsafe { RemoveRequest::recv(&server, flags) }.and_then(|RemoveResponse { error }| {
+                if let Some(e) = error {
+                    Err(e.into())
+                } else {
+                    Ok(())
+                }
+            })
+        };
+        let mut pending_requests = 0;
         for entry in database.favorites().rev().chain(database.main().rev()) {
             if duplicates.add_entry(&entry, &database, &mut reader)? {
-                let RemoveResponse { error } = RemoveRequest::response(&server, addr, entry.id())?;
-                if let Some(e) = error {
-                    return Err(e.into());
+                unsafe {
+                    pipeline_request(
+                        |flags| RemoveRequest::send(&server, addr, entry.id(), flags),
+                        recv,
+                        &mut pending_requests,
+                    )?;
                 }
             }
+        }
+
+        unsafe {
+            drain_requests(recv, true, &mut pending_requests)?;
         }
     }
 
@@ -1484,11 +1501,11 @@ fn fuzz(
 unsafe fn pipeline_request<T>(
     mut send: impl FnMut(SendFlags) -> Result<(), ClientError>,
     mut recv: impl FnMut(RecvFlags) -> Result<T, ClientError>,
-    pending_adds: &mut u32,
+    pending_requests: &mut u32,
 ) -> Result<(), CliError> {
     let mut retry = false;
     loop {
-        match send(if *pending_adds == 0 {
+        match send(if *pending_requests == 0 {
             SendFlags::empty()
         } else {
             SendFlags::DONTWAIT
@@ -1496,13 +1513,13 @@ unsafe fn pipeline_request<T>(
             Err(ClientError::Core(CoreError::Io { error: e, .. }))
                 if e.kind() == ErrorKind::WouldBlock =>
             {
-                debug_assert!(*pending_adds > 0);
-                drain_requests(&mut recv, retry, pending_adds)?;
+                debug_assert!(*pending_requests > 0);
+                drain_requests(&mut recv, retry, pending_requests)?;
                 retry = true;
             }
             r => {
                 r?;
-                *pending_adds += 1;
+                *pending_requests += 1;
                 break;
             }
         };
@@ -1513,9 +1530,9 @@ unsafe fn pipeline_request<T>(
 unsafe fn drain_requests<T>(
     mut recv: impl FnMut(RecvFlags) -> Result<T, ClientError>,
     all: bool,
-    pending_adds: &mut u32,
+    pending_requests: &mut u32,
 ) -> Result<(), CliError> {
-    while *pending_adds > 0 {
+    while *pending_requests > 0 {
         match recv(if all {
             RecvFlags::empty()
         } else {
@@ -1529,7 +1546,7 @@ unsafe fn drain_requests<T>(
             }
             r => r?,
         };
-        *pending_adds -= 1;
+        *pending_requests -= 1;
     }
     Ok(())
 }
