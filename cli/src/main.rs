@@ -1498,9 +1498,9 @@ fn fuzz(
     }
 }
 
-unsafe fn pipeline_request<T>(
+unsafe fn pipeline_request(
     mut send: impl FnMut(SendFlags) -> Result<(), ClientError>,
-    mut recv: impl FnMut(RecvFlags) -> Result<T, ClientError>,
+    mut recv: impl FnMut(RecvFlags) -> Result<(), ClientError>,
     pending_requests: &mut u32,
 ) -> Result<(), CliError> {
     let mut retry = false;
@@ -1527,8 +1527,8 @@ unsafe fn pipeline_request<T>(
     Ok(())
 }
 
-unsafe fn drain_requests<T>(
-    mut recv: impl FnMut(RecvFlags) -> Result<T, ClientError>,
+unsafe fn drain_requests(
+    mut recv: impl FnMut(RecvFlags) -> Result<(), ClientError>,
     all: bool,
     pending_requests: &mut u32,
 ) -> Result<(), CliError> {
@@ -1554,9 +1554,9 @@ unsafe fn drain_requests<T>(
 fn pipelined_add_recv<'a>(
     server: impl AsFd + 'a,
     mut translation: Option<&'a mut Vec<u64>>,
-) -> impl FnMut(RecvFlags) -> Result<AddResponse, ClientError> + 'a {
+) -> impl FnMut(RecvFlags) -> Result<(), ClientError> + 'a {
     move |flags| {
-        unsafe { AddRequest::recv(&server, flags) }.inspect(|&AddResponse::Success { id }| {
+        unsafe { AddRequest::recv(&server, flags) }.map(|AddResponse::Success { id }| {
             if let Some(translation) = translation.as_deref_mut() {
                 translation.push(id);
             }
