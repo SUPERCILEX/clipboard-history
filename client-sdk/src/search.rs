@@ -174,7 +174,7 @@ fn search_impl(
     let mut threads = ArrayVec::<_, 12>::new_const();
 
     for bucket in usize::from(size_to_bucket(
-        u32::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u32::MAX),
+        u16::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u16::MAX),
     ))..reader.buckets().len()
     {
         let mut query = query.clone();
@@ -183,7 +183,7 @@ fn search_impl(
         let stop = stop.clone();
         threads.push(thread::spawn(move || {
             for (index, entry) in reader.buckets()[bucket]
-                .chunks_exact(usize::try_from(bucket_to_length(bucket)).unwrap())
+                .chunks_exact(usize::from(bucket_to_length(bucket)))
                 .enumerate()
             {
                 if stop.load(Ordering::Relaxed) {

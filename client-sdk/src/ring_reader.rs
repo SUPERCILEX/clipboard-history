@@ -521,10 +521,10 @@ fn bucket_entry_to_slice(
     entry: BucketEntry,
 ) -> Result<&[u8], BucketTooShort> {
     let index = usize::try_from(entry.index()).unwrap();
-    let size = usize::try_from(entry.size()).unwrap();
+    let size = usize::from(entry.size());
     let bucket = usize::from(size_to_bucket(entry.size()));
 
-    let size_class = usize::try_from(bucket_to_length(bucket)).unwrap();
+    let size_class = usize::from(bucket_to_length(bucket));
     let start = size_class * index;
     let mem = &reader.buckets[bucket];
     if start + size > mem.len() {

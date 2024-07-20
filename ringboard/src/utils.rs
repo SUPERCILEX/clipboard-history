@@ -128,7 +128,7 @@ pub fn open_buckets<F: FnMut(&str) -> Result<OwnedFd>>(
 }
 
 #[must_use]
-pub fn size_to_bucket(bytes: u32) -> u8 {
+pub fn size_to_bucket(bytes: u16) -> u8 {
     u8::try_from(
         bytes
             .saturating_sub(1)
@@ -139,8 +139,11 @@ pub fn size_to_bucket(bytes: u32) -> u8 {
     .unwrap()
 }
 
+const _: () = assert!(NUM_BUCKETS + 2 < u16::BITS as usize);
+
 #[must_use]
-pub const fn bucket_to_length(bucket: usize) -> u32 {
+pub const fn bucket_to_length(bucket: usize) -> u16 {
+    debug_assert!(bucket < NUM_BUCKETS);
     1 << (bucket + 2)
 }
 

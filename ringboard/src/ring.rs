@@ -54,19 +54,20 @@ impl From<Entry> for RawEntry {
     fn from(value: Entry) -> Self {
         match value {
             Entry::Uninitialized => Self(0),
-            Entry::Bucketed(BucketEntry { size, index }) => Self((index << 12) | size),
+            Entry::Bucketed(BucketEntry { size, index }) => Self((index << 12) | u32::from(size)),
             Entry::File => Self(1 << (u32::BITS - 1)),
         }
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<RawEntry> for Entry {
     fn from(RawEntry(value): RawEntry) -> Self {
         if value == 0 {
             return Self::Uninitialized;
         }
 
-        let size = value & ((1 << 12) - 1);
+        let size = u16::try_from(value & ((1 << 12) - 1)).unwrap();
         let index = value >> 12;
 
         if size == 0 {
@@ -86,13 +87,13 @@ pub enum Entry {
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct BucketEntry {
-    size: u32,
+    size: u16,
     index: u32,
 }
 
 impl BucketEntry {
     #[must_use]
-    pub const fn new(size: u32, index: u32) -> Option<Self> {
+    pub const fn new(size: u16, index: u32) -> Option<Self> {
         if size > 0 && size < (1 << 12) && index < (1 << 20) {
             Some(Self { size, index })
         } else {
@@ -101,7 +102,7 @@ impl BucketEntry {
     }
 
     #[must_use]
-    pub const fn size(&self) -> u32 {
+    pub const fn size(&self) -> u16 {
         self.size
     }
 

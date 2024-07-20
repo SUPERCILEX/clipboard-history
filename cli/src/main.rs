@@ -1086,8 +1086,7 @@ fn stats() -> Result<(), CliError> {
     ) in buckets.iter_mut().zip(reader.buckets()).enumerate()
     {
         *size_class = i + 2;
-        *num_slots =
-            u32::try_from(mem.len() / usize::try_from(bucket_to_length(i)).unwrap()).unwrap();
+        *num_slots = u32::try_from(mem.len() / usize::from(bucket_to_length(i))).unwrap();
     }
 
     for ring_reader in [database.main(), database.favorites()] {

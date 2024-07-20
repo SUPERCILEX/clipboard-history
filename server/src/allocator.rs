@@ -577,7 +577,7 @@ impl AllocatorData {
 
         if TEXT_MIMES.iter().any(|b| mime_type.eq_ignore_ascii_case(b)) {
             if size > 0 && size < 4096 {
-                self.alloc_bucket(received, u32::try_from(size).unwrap())
+                self.alloc_bucket(received, u16::try_from(size).unwrap())
             } else {
                 self.alloc_direct(received, &MimeType::new(), to, id)
             }
@@ -586,7 +586,7 @@ impl AllocatorData {
         }
     }
 
-    fn alloc_bucket(&mut self, data: File, size: u32) -> Result<Entry, CliError> {
+    fn alloc_bucket(&mut self, data: File, size: u16) -> Result<Entry, CliError> {
         debug!("Allocating {size} byte bucket slot.");
         let bucket = usize::from(size_to_bucket(size));
         let Buckets {
@@ -614,7 +614,7 @@ impl AllocatorData {
                 Some(&mut 0),
                 &files[bucket],
                 Some(&mut offset),
-                usize::try_from(size).unwrap(),
+                usize::from(size),
             )
             .map_io_err(|| format!("Failed to copy data to bucket {bucket}."))?;
             if size < bucket_len {
