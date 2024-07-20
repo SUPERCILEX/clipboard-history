@@ -1363,15 +1363,15 @@ fn fuzz(
                 match action {
                     2 => {
                         writeln!(out, "Adding.").unwrap();
-                        let mime_type = if rng.gen() {
-                            MimeType::new()
-                        } else {
+                        let mime_type = if rng.gen_range(0..50) == 0 {
                             let len = rng.gen_range(1..=MimeType::new_const().capacity());
                             Alphanumeric.append_string(&mut rng, &mut buf, len);
 
                             let mime = MimeType::from(&buf).unwrap();
                             buf.clear();
                             mime
+                        } else {
+                            MimeType::new()
                         };
 
                         let (file, file_len) =
