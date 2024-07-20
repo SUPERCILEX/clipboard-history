@@ -5,9 +5,10 @@ use crate::AsBytes;
 pub const VERSION: u8 = 0;
 
 #[repr(u8)]
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Default, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum RingKind {
     Favorites,
+    #[default]
     Main,
 }
 

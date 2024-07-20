@@ -40,8 +40,8 @@ use ringboard_sdk::{
         bucket_to_length, copy_file_range_all,
         dirs::{data_dir, socket_file},
         protocol::{
-            AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
-            RemoveResponse, RingKind, SwapResponse,
+            decompose_id, AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType,
+            MoveToFrontResponse, RemoveResponse, RingKind, SwapResponse,
         },
         read_server_pid,
         ring::Mmap,
@@ -838,6 +838,7 @@ fn migrate_from_gch(
                     &server,
                     addr,
                     data,
+                    RingKind::Main,
                     MimeType::new(),
                     Some(&mut translation),
                     &mut pending_adds,
@@ -1184,7 +1185,7 @@ fn migrate_from_ringboard_export(
 
     let mut pending_adds = 0;
     let mut process = |ExportEntry {
-                           id: _,
+                           id,
                            data,
                            mime_type,
                        }|
@@ -1194,7 +1195,8 @@ fn migrate_from_ringboard_export(
             ExportData::Bytes(bytes) => bytes,
         })?;
 
-        pipeline_add_request(&server, addr, data, mime_type, None, &mut pending_adds)
+        let (to, _) = decompose_id(id).unwrap_or_default();
+        pipeline_add_request(&server, addr, data, to, mime_type, None, &mut pending_adds)
     };
 
     if dump_file == Path::new("-") {
@@ -1233,6 +1235,17 @@ fn generate(
         cv_size,
     }: Generate,
 ) -> Result<(), CliError> {
+    struct GenerateRingKind(RingKind);
+
+    impl Distribution<GenerateRingKind> for Standard {
+        fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> GenerateRingKind {
+            match rng.gen_range(0..100) {
+                0 => GenerateRingKind(RingKind::Favorites),
+                _ => GenerateRingKind(RingKind::Main),
+            }
+        }
+    }
+
     let distr = LogNormal::from_mean_cv(f64::from(mean_size), f64::from(cv_size)).unwrap();
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(u64::from(num_entries));
     let mut pending_adds = 0;
@@ -1243,6 +1256,7 @@ fn generate(
             &server,
             addr,
             data,
+            rng.gen::<GenerateRingKind>().0,
             MimeType::new(),
             None,
             &mut pending_adds,
@@ -1266,9 +1280,8 @@ fn fuzz(
     impl Distribution<FuzzRingKind> for Standard {
         fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> FuzzRingKind {
             match rng.gen_range(0..=2) {
-                0 | 1 => FuzzRingKind(RingKind::Main),
-                2 => FuzzRingKind(RingKind::Favorites),
-                _ => unreachable!(),
+                0 => FuzzRingKind(RingKind::Favorites),
+                _ => FuzzRingKind(RingKind::Main),
             }
         }
     }
@@ -1436,6 +1449,7 @@ fn pipeline_add_request(
     server: impl AsFd,
     addr: &SocketAddrUnix,
     data: impl AsFd,
+    to: RingKind,
     mime_type: MimeType,
     mut translation: Option<&mut Vec<u64>>,
     pending_adds: &mut u32,
@@ -1445,7 +1459,7 @@ fn pipeline_add_request(
         match ringboard_sdk::send_add(
             &server,
             addr,
-            RingKind::Main,
+            to,
             mime_type,
             &data,
             if *pending_adds == 0 {
