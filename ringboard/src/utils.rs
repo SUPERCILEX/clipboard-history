@@ -33,6 +33,7 @@ pub const TEXT_MIMES: &[&str] = &[
     "text/plain;charset=us-ascii",
     "text/plain;charset=unicode",
 ];
+pub const NUM_BUCKETS: usize = 11;
 
 pub fn read_server_pid<Fd: AsFd, P: Arg + Copy + Debug>(
     dir: Fd,
@@ -99,7 +100,7 @@ pub fn copy_file_range_all<InFd: AsFd, OutFd: AsFd>(
 
 pub fn open_buckets<F: FnMut(&str) -> Result<OwnedFd>>(
     mut open: F,
-) -> Result<([OwnedFd; 11], [u64; 11])> {
+) -> Result<([OwnedFd; NUM_BUCKETS], [u64; NUM_BUCKETS])> {
     let mut buckets = ArrayVec::new_const();
 
     buckets.push(open("(0, 4]")?);

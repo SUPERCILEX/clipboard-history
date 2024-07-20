@@ -48,7 +48,7 @@ use ringboard_sdk::{
         },
         read_server_pid,
         ring::Mmap,
-        size_to_bucket, Error as CoreError, IoErr,
+        size_to_bucket, Error as CoreError, IoErr, NUM_BUCKETS,
     },
     duplicate_detection::DuplicateDetector,
     search::{BucketAndIndex, EntryLocation, Query, QueryResult},
@@ -965,7 +965,7 @@ fn stats() -> Result<(), CliError> {
     #[derive(Default, Debug)]
     struct Stats {
         rings: HashMap<RingKind, RingStats, BuildHasherDefault<FxHasher>>,
-        buckets: [BucketStats; 11],
+        buckets: [BucketStats; NUM_BUCKETS],
         direct_files: DirectFileStats,
     }
 

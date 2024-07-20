@@ -18,7 +18,7 @@ use ringboard_core::{
     bucket_to_length, direct_file_name, open_buckets,
     protocol::{composite_id, decompose_id, IdNotFoundError, MimeType, RingKind},
     ring::{BucketEntry, Mmap, Ring},
-    size_to_bucket, IoErr, PathView,
+    size_to_bucket, IoErr, PathView, NUM_BUCKETS,
 };
 use rustix::{
     fs::{fgetxattr, memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
@@ -460,7 +460,7 @@ impl Entry {
 
 #[derive(Debug)]
 pub struct EntryReader {
-    buckets: [Mmap; 11],
+    buckets: [Mmap; NUM_BUCKETS],
     direct: OwnedFd,
 }
 
@@ -497,7 +497,7 @@ impl EntryReader {
     }
 
     #[must_use]
-    pub fn buckets(&self) -> [&Mmap; 11] {
+    pub fn buckets(&self) -> [&Mmap; NUM_BUCKETS] {
         let mut buckets = ArrayVec::new_const();
         for bucket in &self.buckets {
             buckets.push(bucket);

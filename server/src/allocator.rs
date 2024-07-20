@@ -22,7 +22,7 @@ use ringboard_core::{
     },
     ring,
     ring::{entries_to_offset, BucketEntry, Entry, Header, RawEntry, Ring},
-    size_to_bucket, IoErr, PathView, TEXT_MIMES,
+    size_to_bucket, IoErr, PathView, NUM_BUCKETS, TEXT_MIMES,
 };
 use rustix::{
     fs::{
@@ -135,8 +135,8 @@ struct AllocatorData {
 
 #[derive(Debug)]
 struct Buckets {
-    files: [File; 11],
-    slot_counts: [u32; 11],
+    files: [File; NUM_BUCKETS],
+    slot_counts: [u32; NUM_BUCKETS],
     free_lists: FreeLists,
 }
 
@@ -147,7 +147,7 @@ struct FreeLists {
 }
 
 #[derive(Encode, Decode, Default, Debug)]
-struct RawFreeLists([Vec<u32>; 11]);
+struct RawFreeLists([Vec<u32>; NUM_BUCKETS]);
 
 struct BucketSlotGuard<'a> {
     id: u32,
@@ -208,7 +208,7 @@ impl FreeLists {
         drop(path);
         warn!("Reconstructing allocator free lists.");
 
-        let mut allocations = [BitVec::<usize, Lsb0>::EMPTY; 11];
+        let mut allocations = [BitVec::<usize, Lsb0>::EMPTY; NUM_BUCKETS];
         for ring in [RingKind::Favorites, RingKind::Main] {
             let ring = Ring::open(0, &*PathView::new(data_dir, ring.file_name()))?;
             for entry in (0..ring.len()).filter_map(|i| ring.get(i)) {
