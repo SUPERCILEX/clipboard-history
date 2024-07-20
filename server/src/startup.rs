@@ -49,7 +49,7 @@ pub fn claim_server_ownership(data_dir: &Path) -> Result<Option<OwnedServer>, Cl
             };
 
             match test_kill_process(pid) {
-                Err(e) if e == Errno::SRCH => {
+                Err(Errno::SRCH) => {
                     return Ok(None);
                 }
                 r => r.map_io_err(|| format!("Failed to check server status: {pid:?}."))?,

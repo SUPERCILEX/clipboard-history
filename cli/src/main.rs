@@ -58,6 +58,7 @@ use rustc_hash::FxHasher;
 use rustix::{
     event::{poll, PollFd, PollFlags},
     fs::{memfd_create, openat, statx, AtFlags, MemfdFlags, Mode, OFlags, StatxFlags, CWD},
+    io::Errno,
     net::{RecvFlags, SendFlags, SocketAddrUnix, SocketFlags},
     process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
     stdio::stdin,
@@ -694,19 +695,26 @@ fn wipe() -> Result<(), CliError> {
     let running_server = read_server_pid(CWD, &tmp_data_dir).ok().flatten();
     tmp_data_dir.pop();
 
-    if let Some(pid) = running_server {
-        let fd = pidfd_open(pid, PidfdFlags::empty())
-            .map_io_err(|| format!("Failed to get FD for server: {pid:?}"))?;
-        pidfd_send_signal(&fd, Signal::Quit)
-            .map_io_err(|| format!("Failed to send shut down signal to server: {pid:?}"))?;
+    'shutdown: {
+        if let Some(pid) = running_server {
+            let fd = match pidfd_open(pid, PidfdFlags::empty()) {
+                Err(Errno::SRCH) => {
+                    break 'shutdown;
+                }
+                r => r.map_io_err(|| format!("Failed to get FD for server: {pid:?}"))?,
+            };
 
-        let mut fds = [PollFd::new(&fd, PollFlags::IN)];
-        poll(&mut fds, -1).map_io_err(|| format!("Failed to wait for server exit: {pid:?}"))?;
-        if !fds[0].revents().contains(PollFlags::IN) {
-            return Err(CliError::Core(CoreError::Io {
-                error: io::Error::new(ErrorKind::InvalidInput, "Bad poll response."),
-                context: "Failed to receive server exit response.".into(),
-            }));
+            pidfd_send_signal(&fd, Signal::Quit)
+                .map_io_err(|| format!("Failed to send shut down signal to server: {pid:?}"))?;
+
+            let mut fds = [PollFd::new(&fd, PollFlags::IN)];
+            poll(&mut fds, -1).map_io_err(|| format!("Failed to wait for server exit: {pid:?}"))?;
+            if !fds[0].revents().contains(PollFlags::IN) {
+                return Err(CliError::Core(CoreError::Io {
+                    error: io::Error::new(ErrorKind::InvalidInput, "Bad poll response."),
+                    context: "Failed to receive server exit response.".into(),
+                }));
+            }
         }
     }
 
