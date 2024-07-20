@@ -739,6 +739,20 @@ fn garbage_collect(
     addr: &SocketAddrUnix,
     GarbageCollect { max_wasted_bytes }: GarbageCollect,
 ) -> Result<(), CliError> {
+    if max_wasted_bytes == 0 {
+        let (database, mut reader) = open_db()?;
+        let mut duplicates = DuplicateDetector::default();
+
+        for entry in database.favorites().rev().chain(database.main().rev()) {
+            if duplicates.add_entry(&entry, &database, &mut reader)? {
+                let RemoveResponse { error } = RemoveRequest::response(&server, addr, entry.id())?;
+                if let Some(e) = error {
+                    return Err(e.into());
+                }
+            }
+        }
+    }
+
     let GarbageCollectResponse { bytes_freed } =
         GarbageCollectRequest::response(server, addr, max_wasted_bytes)?;
     println!("{bytes_freed} bytes of garbage freed.");
