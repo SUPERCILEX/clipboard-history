@@ -52,7 +52,7 @@ use ringboard_sdk::{
     },
     duplicate_detection::DuplicateDetector,
     search::{BucketAndIndex, EntryLocation, Query, QueryResult},
-    DatabaseReader, EntryReader, Kind,
+    ClientError, DatabaseReader, EntryReader, Kind,
 };
 use rustc_hash::FxHasher;
 use rustix::{
@@ -817,7 +817,14 @@ fn migrate_from_gch(
             () => {{
                 let gch_id = gch_id!();
                 if translation.len() <= gch_id {
-                    drain_add_requests(&server, true, Some(&mut translation), &mut pending_adds)?;
+                    unsafe {
+                        drain_add_requests(
+                            &server,
+                            true,
+                            Some(&mut translation),
+                            &mut pending_adds,
+                        )?;
+                    }
                 }
                 translation[gch_id]
             }};
@@ -845,15 +852,17 @@ fn migrate_from_gch(
                 let data = generate_entry_file(&database, u64::try_from(i).unwrap(), raw_len)?;
                 i += 1 + raw_len;
 
-                pipeline_add_request(
-                    &server,
-                    addr,
-                    data,
-                    RingKind::Main,
-                    MimeType::new(),
-                    Some(&mut translation),
-                    &mut pending_adds,
-                )?;
+                unsafe {
+                    pipeline_add_request(
+                        &server,
+                        addr,
+                        data,
+                        RingKind::Main,
+                        MimeType::new(),
+                        Some(&mut translation),
+                        &mut pending_adds,
+                    )?;
+                }
             }
             OP_TYPE_DELETE_TEXT => {
                 if let RemoveResponse { error: Some(e) } =
@@ -893,7 +902,7 @@ fn migrate_from_gch(
         }
     }
 
-    drain_add_requests(server, true, None, &mut pending_adds)
+    unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
 }
 
 #[allow(clippy::too_many_lines, clippy::cast_precision_loss)]
@@ -1207,7 +1216,7 @@ fn migrate_from_ringboard_export(
         })?;
 
         let (to, _) = decompose_id(id).unwrap_or_default();
-        pipeline_add_request(&server, addr, data, to, mime_type, None, &mut pending_adds)
+        unsafe { pipeline_add_request(&server, addr, data, to, mime_type, None, &mut pending_adds) }
     };
 
     if dump_file == Path::new("-") {
@@ -1230,7 +1239,7 @@ fn migrate_from_ringboard_export(
         }
     };
 
-    drain_add_requests(server, true, None, &mut pending_adds)
+    unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
 }
 
 fn watch() -> Result<(), CliError> {
@@ -1263,18 +1272,20 @@ fn generate(
 
     for _ in 0..num_entries {
         let data = generate_random_entry_file(&mut rng, distr)?.0;
-        pipeline_add_request(
-            &server,
-            addr,
-            data,
-            rng.gen::<GenerateRingKind>().0,
-            MimeType::new(),
-            None,
-            &mut pending_adds,
-        )?;
+        unsafe {
+            pipeline_add_request(
+                &server,
+                addr,
+                data,
+                rng.gen::<GenerateRingKind>().0,
+                MimeType::new(),
+                None,
+                &mut pending_adds,
+            )?;
+        }
     }
 
-    drain_add_requests(server, true, None, &mut pending_adds)
+    unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1456,34 +1467,23 @@ fn fuzz(
     }
 }
 
-fn pipeline_add_request(
-    server: impl AsFd,
-    addr: &SocketAddrUnix,
-    data: impl AsFd,
-    to: RingKind,
-    mime_type: MimeType,
-    mut translation: Option<&mut Vec<u64>>,
+unsafe fn pipeline_request<T>(
+    mut send: impl FnMut(SendFlags) -> Result<(), ClientError>,
+    mut recv: impl FnMut(RecvFlags) -> Result<T, ClientError>,
     pending_adds: &mut u32,
 ) -> Result<(), CliError> {
     let mut retry = false;
     loop {
-        match AddRequest::send(
-            &server,
-            addr,
-            to,
-            mime_type,
-            &data,
-            if *pending_adds == 0 {
-                SendFlags::empty()
-            } else {
-                SendFlags::DONTWAIT
-            },
-        ) {
-            Err(ringboard_sdk::ClientError::Core(CoreError::Io { error: e, .. }))
+        match send(if *pending_adds == 0 {
+            SendFlags::empty()
+        } else {
+            SendFlags::DONTWAIT
+        }) {
+            Err(ClientError::Core(CoreError::Io { error: e, .. }))
                 if e.kind() == ErrorKind::WouldBlock =>
             {
                 debug_assert!(*pending_adds > 0);
-                drain_add_requests(&server, retry, translation.as_deref_mut(), pending_adds)?;
+                drain_requests(&mut recv, retry, pending_adds)?;
                 retry = true;
             }
             r => {
@@ -1496,24 +1496,18 @@ fn pipeline_add_request(
     Ok(())
 }
 
-fn drain_add_requests(
-    server: impl AsFd,
+unsafe fn drain_requests<T>(
+    mut recv: impl FnMut(RecvFlags) -> Result<T, ClientError>,
     all: bool,
-    mut translation: Option<&mut Vec<u64>>,
     pending_adds: &mut u32,
 ) -> Result<(), CliError> {
     while *pending_adds > 0 {
-        let AddResponse::Success { id } = match unsafe {
-            AddRequest::recv(
-                &server,
-                if all {
-                    RecvFlags::empty()
-                } else {
-                    RecvFlags::DONTWAIT
-                },
-            )
-        } {
-            Err(ringboard_sdk::ClientError::Core(CoreError::Io { error: e, .. }))
+        match recv(if all {
+            RecvFlags::empty()
+        } else {
+            RecvFlags::DONTWAIT
+        }) {
+            Err(ClientError::Core(CoreError::Io { error: e, .. }))
                 if e.kind() == ErrorKind::WouldBlock =>
             {
                 debug_assert!(!all);
@@ -1521,13 +1515,47 @@ fn drain_add_requests(
             }
             r => r?,
         };
-
         *pending_adds -= 1;
-        if let Some(translation) = translation.as_deref_mut() {
-            translation.push(id);
-        }
     }
     Ok(())
+}
+
+fn pipelined_add_recv<'a>(
+    server: impl AsFd + 'a,
+    mut translation: Option<&'a mut Vec<u64>>,
+) -> impl FnMut(RecvFlags) -> Result<AddResponse, ClientError> + 'a {
+    move |flags| {
+        unsafe { AddRequest::recv(&server, flags) }.inspect(|&AddResponse::Success { id }| {
+            if let Some(translation) = translation.as_deref_mut() {
+                translation.push(id);
+            }
+        })
+    }
+}
+
+unsafe fn pipeline_add_request(
+    server: impl AsFd + Copy,
+    addr: &SocketAddrUnix,
+    data: impl AsFd,
+    to: RingKind,
+    mime_type: MimeType,
+    translation: Option<&mut Vec<u64>>,
+    pending_adds: &mut u32,
+) -> Result<(), CliError> {
+    pipeline_request(
+        |flags| AddRequest::send(server, addr, to, mime_type, &data, flags),
+        pipelined_add_recv(server, translation),
+        pending_adds,
+    )
+}
+
+unsafe fn drain_add_requests(
+    server: impl AsFd,
+    all: bool,
+    translation: Option<&mut Vec<u64>>,
+    pending_adds: &mut u32,
+) -> Result<(), CliError> {
+    drain_requests(pipelined_add_recv(server, translation), all, pending_adds)
 }
 
 fn generate_random_entry_file(
