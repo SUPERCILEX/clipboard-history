@@ -354,7 +354,7 @@ enum CliError {
     #[error("{0}")]
     Core(#[from] CoreError),
     #[error("{0}")]
-    Sdk(#[from] ringboard_sdk::ClientError),
+    Sdk(#[from] ClientError),
     #[error("Failed to delete or copy files.")]
     Fuc(#[from] fuc_engine::Error),
     #[error(
@@ -382,7 +382,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
     run().map_err(|e| {
         let wrapper = Wrapper::W(e.to_string());
         match e {
-            CliError::Core(e) | CliError::Sdk(ringboard_sdk::ClientError::Core(e)) => match e {
+            CliError::Core(e) | CliError::Sdk(ClientError::Core(e)) => match e {
                 CoreError::Io { error, context } => Report::new(error)
                     .attach_printable(context)
                     .change_context(wrapper),
@@ -399,10 +399,10 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
-            CliError::Sdk(ringboard_sdk::ClientError::InvalidResponse { context }) => {
+            CliError::Sdk(ClientError::InvalidResponse { context }) => {
                 Report::new(wrapper).attach_printable(context)
             }
-            CliError::Sdk(ringboard_sdk::ClientError::VersionMismatch { actual: _ }) => {
+            CliError::Sdk(ClientError::VersionMismatch { actual: _ }) => {
                 Report::new(wrapper)
             }
             CliError::DatabaseNotFound(db) => {
@@ -755,19 +755,15 @@ fn garbage_collect(
         let mut pending_requests = 0;
         for entry in database.favorites().rev().chain(database.main().rev()) {
             if duplicates.add_entry(&entry, &database, &mut reader)? {
-                unsafe {
-                    pipeline_request(
-                        |flags| RemoveRequest::send(&server, addr, entry.id(), flags),
-                        recv,
-                        &mut pending_requests,
-                    )?;
-                }
+                pipeline_request(
+                    |flags| RemoveRequest::send(&server, addr, entry.id(), flags),
+                    recv,
+                    &mut pending_requests,
+                )?;
             }
         }
 
-        unsafe {
-            drain_requests(recv, true, &mut pending_requests)?;
-        }
+        drain_requests(recv, true, &mut pending_requests)?;
     }
 
     let GarbageCollectResponse { bytes_freed } =
@@ -1498,7 +1494,7 @@ fn fuzz(
     }
 }
 
-unsafe fn pipeline_request(
+fn pipeline_request(
     mut send: impl FnMut(SendFlags) -> Result<(), ClientError>,
     mut recv: impl FnMut(RecvFlags) -> Result<(), ClientError>,
     pending_requests: &mut u32,
@@ -1527,7 +1523,7 @@ unsafe fn pipeline_request(
     Ok(())
 }
 
-unsafe fn drain_requests(
+fn drain_requests(
     mut recv: impl FnMut(RecvFlags) -> Result<(), ClientError>,
     all: bool,
     pending_requests: &mut u32,
