@@ -25,7 +25,7 @@ use eframe::{
 };
 use regex::bytes::Regex;
 use ringboard_sdk::{
-    connect_to_server,
+    api::{connect_to_server, MoveToFrontRequest, RemoveRequest},
     core::{
         direct_file_name,
         dirs::{data_dir, socket_file},
@@ -263,7 +263,7 @@ fn handle_command(
             Ok(Some(Message::EntryDetails(run())))
         }
         ref c @ (Command::Favorite(id) | Command::Unfavorite(id)) => {
-            match ringboard_sdk::move_to_front(
+            match MoveToFrontRequest::response(
                 server.0,
                 server.1,
                 id,
@@ -279,7 +279,7 @@ fn handle_command(
             Ok(None)
         }
         Command::Delete(id) => {
-            match ringboard_sdk::remove(server.0, server.1, id)? {
+            match RemoveRequest::response(server.0, server.1, id)? {
                 RemoveResponse { error: Some(e) } => return Err(e.into()),
                 RemoveResponse { error: None } => {}
             }

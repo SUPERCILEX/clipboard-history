@@ -35,7 +35,10 @@ use rand_xoshiro::{
 };
 use regex::bytes::Regex;
 use ringboard_sdk::{
-    connect_to_server, connect_to_server_with,
+    api::{
+        connect_to_server, connect_to_server_with, AddRequest, GarbageCollectRequest,
+        MoveToFrontRequest, RemoveRequest, SwapRequest,
+    },
     core::{
         bucket_to_length, copy_file_range_all,
         dirs::{data_dir, socket_file},
@@ -605,7 +608,7 @@ fn add(
             )
         };
 
-        ringboard_sdk::add(
+        AddRequest::response(
             server,
             addr,
             target.into(),
@@ -625,7 +628,7 @@ fn move_to_front(
     EntryAction { id }: EntryAction,
     to: Option<RingKind>,
 ) -> Result<(), CliError> {
-    match ringboard_sdk::move_to_front(server, addr, id, to)? {
+    match MoveToFrontRequest::response(server, addr, id, to)? {
         MoveToFrontResponse::Success { id } => {
             println!("Entry moved: {id}");
         }
@@ -638,7 +641,7 @@ fn move_to_front(
 }
 
 fn swap(server: OwnedFd, addr: &SocketAddrUnix, Swap { id1, id2 }: Swap) -> Result<(), CliError> {
-    let SwapResponse { error1, error2 } = ringboard_sdk::swap(server, addr, id1, id2)?;
+    let SwapResponse { error1, error2 } = SwapRequest::response(server, addr, id1, id2)?;
     if let Some(e) = error1 {
         return Err(e.into());
     } else if let Some(e) = error2 {
@@ -654,7 +657,7 @@ fn remove(
     addr: &SocketAddrUnix,
     EntryAction { id }: EntryAction,
 ) -> Result<(), CliError> {
-    let RemoveResponse { error } = ringboard_sdk::remove(server, addr, id)?;
+    let RemoveResponse { error } = RemoveRequest::response(server, addr, id)?;
     if let Some(e) = error {
         return Err(e.into());
     }
@@ -729,7 +732,7 @@ fn garbage_collect(
     GarbageCollect { max_wasted_bytes }: GarbageCollect,
 ) -> Result<(), CliError> {
     let GarbageCollectResponse { bytes_freed } =
-        ringboard_sdk::garbage_collect(server, addr, max_wasted_bytes)?;
+        GarbageCollectRequest::response(server, addr, max_wasted_bytes)?;
     println!("{bytes_freed} bytes of garbage freed.");
     Ok(())
 }
@@ -846,14 +849,14 @@ fn migrate_from_gch(
             }
             OP_TYPE_DELETE_TEXT => {
                 if let RemoveResponse { error: Some(e) } =
-                    ringboard_sdk::remove(&server, addr, get_translation!())?
+                    RemoveRequest::response(&server, addr, get_translation!())?
                 {
                     api_error!(e);
                 }
                 i += 4;
             }
             OP_TYPE_FAVORITE_ITEM | OP_TYPE_UNFAVORITE_ITEM | OP_TYPE_MOVE_ITEM_TO_END => {
-                match ringboard_sdk::move_to_front(
+                match MoveToFrontRequest::response(
                     &server,
                     addr,
                     get_translation!(),
@@ -1340,7 +1343,7 @@ fn fuzz(
 
                         let (file, file_len) =
                             generate_random_entry_file(&mut rng, entry_size_distr)?;
-                        let AddResponse::Success { id } = ringboard_sdk::add_unchecked(
+                        let AddResponse::Success { id } = AddRequest::response_add_unchecked(
                             server,
                             addr,
                             rng.gen::<FuzzRingKind>().0,
@@ -1357,7 +1360,7 @@ fn fuzz(
                     3 => {
                         writeln!(out, "Moving.").unwrap();
                         let move_id = rng.gen_range(0..=max_id_seen);
-                        match ringboard_sdk::move_to_front(
+                        match MoveToFrontRequest::response(
                             server,
                             addr,
                             move_id,
@@ -1377,7 +1380,7 @@ fn fuzz(
                         writeln!(out, "Swapping.").unwrap();
                         let idx1 = rng.gen_range(0..=max_id_seen);
                         let idx2 = rng.gen_range(0..=max_id_seen);
-                        match ringboard_sdk::swap(server, addr, idx1, idx2)? {
+                        match SwapRequest::response(server, addr, idx1, idx2)? {
                             SwapResponse {
                                 error1: None,
                                 error2: None,
@@ -1406,7 +1409,7 @@ fn fuzz(
                     5 => {
                         writeln!(out, "Removing.").unwrap();
                         let index = rng.gen_range(0..=max_id_seen);
-                        match ringboard_sdk::remove(server, addr, index)? {
+                        match RemoveRequest::response(server, addr, index)? {
                             RemoveResponse { error: None } => {
                                 data.remove(&index);
                             }
@@ -1456,7 +1459,7 @@ fn pipeline_add_request(
 ) -> Result<(), CliError> {
     let mut retry = false;
     loop {
-        match ringboard_sdk::send_add(
+        match AddRequest::send(
             &server,
             addr,
             to,
@@ -1493,7 +1496,7 @@ fn drain_add_requests(
 ) -> Result<(), CliError> {
     while *pending_adds > 0 {
         let AddResponse::Success { id } = match unsafe {
-            ringboard_sdk::recv_add(
+            AddRequest::recv(
                 &server,
                 if all {
                     RecvFlags::empty()

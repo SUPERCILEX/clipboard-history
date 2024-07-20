@@ -5,10 +5,13 @@ use std::{fs::File, mem, os::unix::fs::FileExt};
 use arrayvec::ArrayVec;
 use error_stack::Report;
 use log::{debug, error, info, trace, warn};
-use ringboard_sdk::core::{
-    dirs::socket_file,
-    protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
-    Error, IoErr,
+use ringboard_sdk::{
+    api::{connect_to_server, AddRequest, MoveToFrontRequest},
+    core::{
+        dirs::socket_file,
+        protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
+        Error, IoErr,
+    },
 };
 use rustix::{
     fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
@@ -181,7 +184,7 @@ fn run() -> Result<(), CliError> {
         SocketAddrUnix::new(&socket_file)
             .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
     };
-    let server = ringboard_sdk::connect_to_server(&server_addr)?;
+    let server = connect_to_server(&server_addr)?;
     debug!("Ringboard connection established.");
 
     let (conn, root) = {
@@ -495,7 +498,7 @@ fn run() -> Result<(), CliError> {
                             {
                                 info!("Promoting duplicate small selection to front.");
                                 if let MoveToFrontResponse::Success { id } =
-                                    ringboard_sdk::move_to_front(
+                                    MoveToFrontRequest::response(
                                         &server,
                                         &server_addr,
                                         existing,
@@ -519,7 +522,7 @@ fn run() -> Result<(), CliError> {
                             let mime_type =
                                 MimeType::from(&mime_type.reply()?.name.to_string_lossy()).unwrap();
 
-                            let AddResponse::Success { id } = ringboard_sdk::add_unchecked(
+                            let AddResponse::Success { id } = AddRequest::response_add_unchecked(
                                 &server,
                                 &server_addr,
                                 RingKind::Main,
@@ -567,7 +570,7 @@ fn run() -> Result<(), CliError> {
                             {
                                 info!("Promoting duplicate large selection to front.");
                                 if let MoveToFrontResponse::Success { id } =
-                                    ringboard_sdk::move_to_front(
+                                    MoveToFrontRequest::response(
                                         &server,
                                         &server_addr,
                                         existing,
@@ -588,7 +591,7 @@ fn run() -> Result<(), CliError> {
                             )
                             .unwrap();
 
-                            let AddResponse::Success { id } = ringboard_sdk::add_unchecked(
+                            let AddResponse::Success { id } = AddRequest::response_add_unchecked(
                                 &server,
                                 &server_addr,
                                 RingKind::Main,
