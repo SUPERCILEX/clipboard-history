@@ -1337,7 +1337,7 @@ fn fuzz(
         }
     }
 
-    let distr = WeightedAliasIndex::new(vec![550u32, 450, 40000, 20000, 20000, 20000, 1]).unwrap();
+    let distr = WeightedAliasIndex::new(vec![550u32, 450, 40000, 20000, 20000, 30000, 10]).unwrap();
     let entry_size_distr =
         LogNormal::from_mean_cv(f64::from(mean_size), f64::from(cv_size)).unwrap();
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
