@@ -425,7 +425,7 @@ impl Entry {
                     return Ok(None);
                 };
                 let file = File::from(
-                    memfd_create("ringboard_bucket_reader", MemfdFlags::empty())
+                    memfd_create(c"ringboard_bucket_reader", MemfdFlags::empty())
                         .map_io_err(|| "Failed to create data entry file.")?,
                 );
 

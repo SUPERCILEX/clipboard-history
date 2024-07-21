@@ -1566,7 +1566,7 @@ fn generate_random_entry_file(
     len_distr: LogNormal<f64>,
 ) -> Result<(File, u64), CliError> {
     let mut file = File::from(
-        memfd_create("ringboard_gen", MemfdFlags::empty())
+        memfd_create(c"ringboard_gen", MemfdFlags::empty())
             .map_io_err(|| "Failed to create data entry file.")?,
     );
 

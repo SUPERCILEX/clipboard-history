@@ -512,7 +512,7 @@ fn run() -> Result<(), CliError> {
 
                             let mime_type = conn.get_atom_name(mime_atom)?;
                             let file = File::from(
-                                memfd_create("ringboard_x11_selection", MemfdFlags::empty())
+                                memfd_create(c"ringboard_x11_selection", MemfdFlags::empty())
                                     .map_io_err(|| {
                                         "Failed to create selection transfer temp file."
                                     })?,
