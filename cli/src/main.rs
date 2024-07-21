@@ -9,7 +9,7 @@ use std::{
     fs::File,
     hash::BuildHasherDefault,
     io,
-    io::{ErrorKind, Read, Seek, SeekFrom, Write},
+    io::{BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
     os::{
         fd::{AsFd, OwnedFd},
         unix::fs::FileExt,
@@ -1225,11 +1225,10 @@ fn migrate_from_ringboard_export(
     } else {
         let dump =
             File::open(&dump_file).map_io_err(|| format!("Failed to open file: {dump_file:?}"))?;
-        let dump =
-            Mmap::from(&dump).map_io_err(|| format!("Failed to mmap file: {dump_file:?}"))?;
         drop(dump_file);
 
-        let iter = serde_json::Deserializer::from_slice(&dump).into_iter::<ExportEntry>();
+        let iter =
+            serde_json::Deserializer::from_reader(BufReader::new(dump)).into_iter::<ExportEntry>();
         for result in iter {
             process(result?)?;
         }
