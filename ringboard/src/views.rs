@@ -1,4 +1,7 @@
-use std::intrinsics::transmute;
+use std::{
+    fmt::{Debug, Formatter},
+    intrinsics::transmute,
+};
 
 pub use path::PathView;
 pub use string::StringView;
@@ -39,6 +42,15 @@ impl RingAndIndex {
     }
 }
 
+impl Debug for RingAndIndex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RingAndIndex")
+            .field("ring", &self.ring())
+            .field("index", &self.index())
+            .finish()
+    }
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BucketAndIndex(u32);
 
@@ -57,6 +69,15 @@ impl BucketAndIndex {
     #[must_use]
     pub const fn index(&self) -> u32 {
         self.0 >> u8::BITS
+    }
+}
+
+impl Debug for BucketAndIndex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BucketAndIndex")
+            .field("bucket", &self.bucket())
+            .field("index", &self.index())
+            .finish()
     }
 }
 
