@@ -287,7 +287,10 @@ fn handle_command(
         Command::Search { mut query, regex } => {
             let query = if regex {
                 Query::Regex(Regex::new(&query)?)
-            } else if query.chars().all(char::is_lowercase) {
+            } else if query
+                .chars()
+                .all(|c| !char::is_alphabetic(c) || char::is_lowercase(c))
+            {
                 query.make_ascii_lowercase();
                 Query::PlainIgnoreCase(query.trim().as_bytes())
             } else {
