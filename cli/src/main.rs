@@ -757,11 +757,15 @@ fn migrate(
 ) -> Result<(), CliError> {
     match from {
         MigrateFromClipboard::GnomeClipboardHistory => migrate_from_gch(server, addr, database),
-        MigrateFromClipboard::ClipboardIndicator => todo!(),
+        MigrateFromClipboard::ClipboardIndicator => {
+            migrate_from_clipboard_indicator(server, addr, database)
+        }
         MigrateFromClipboard::Json => {
             migrate_from_ringboard_export(server, addr, database.unwrap())
         }
-    }
+    }?;
+    println!("Migration complete.");
+    Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
@@ -904,6 +908,113 @@ fn migrate_from_gch(
                 })?;
                 unreachable!();
             }
+        }
+    }
+
+    unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
+}
+
+fn migrate_from_clipboard_indicator(
+    server: OwnedFd,
+    addr: &SocketAddrUnix,
+    database: Option<PathBuf>,
+) -> Result<(), CliError> {
+    #[derive(Deserialize)]
+    struct Entry {
+        #[serde(default)]
+        favorite: bool,
+        #[serde(default)]
+        mimetype: MimeType,
+        #[serde(default)]
+        contents: String,
+    }
+
+    fn generate_entry_file(data: &str) -> Result<File, CliError> {
+        let file = File::from(
+            memfd_create(c"ringboard_clipboard_indicator", MemfdFlags::empty())
+                .map_io_err(|| "Failed to create data entry file.")?,
+        );
+
+        file.write_all_at(data.as_bytes(), 0)
+            .map_io_err(|| "Failed to copy data to entry file.")?;
+
+        Ok(file)
+    }
+
+    let database_file = {
+        let database = database
+            .or_else(|| {
+                dirs::cache_dir().map(|mut f| {
+                    f.push("clipboard-indicator@tudmotu.com");
+                    f
+                })
+            })
+            .ok_or_else(|| io::Error::from(ErrorKind::NotFound))
+            .map_io_err(|| "Failed to find Clipboard Indicator directory file.")?;
+        openat(
+            CWD,
+            &*database,
+            OFlags::DIRECTORY | OFlags::PATH,
+            Mode::empty(),
+        )
+        .map_io_err(|| format!("Failed to open directory: {database:?}"))?
+    };
+    let registry_file = File::from(
+        openat(
+            &database_file,
+            c"registry.txt",
+            OFlags::RDONLY,
+            Mode::empty(),
+        )
+        .map_io_err(|| "Failed to open registry file.")?,
+    );
+
+    let mut pending_adds = 0;
+    for Entry {
+        favorite,
+        mimetype,
+        ref contents,
+    } in serde_json::from_reader::<_, Vec<Entry>>(BufReader::new(registry_file))?
+    {
+        if contents.is_empty() {
+            continue;
+        }
+
+        // https://github.com/Tudmotu/gnome-shell-extension-clipboard-indicator/blob/46442690f0a6fd2a4caef1851582155af6fd5976/registry.js#L31-L38
+        let data = if mimetype.is_empty()
+            || mimetype.starts_with("text/")
+            || &mimetype == "STRING"
+            || &mimetype == "UTF8_STRING"
+        {
+            generate_entry_file(contents)?
+        } else if mimetype.starts_with("image/") {
+            File::from(
+                openat(
+                    &database_file,
+                    contents.rsplit('/').next().unwrap_or(contents),
+                    OFlags::RDONLY,
+                    Mode::empty(),
+                )
+                .map_io_err(|| format!("Failed to open data file: {contents:?}"))?,
+            )
+        } else {
+            continue;
+        };
+
+        unsafe {
+            pipeline_add_request(
+                &server,
+                addr,
+                data,
+                if favorite {
+                    RingKind::Favorites
+                } else {
+                    RingKind::Main
+                },
+                mimetype,
+                None,
+                &mut pending_adds,
+            )?;
         }
     }
 
