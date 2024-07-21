@@ -1337,7 +1337,8 @@ fn fuzz(
         }
     }
 
-    let distr = WeightedAliasIndex::new(vec![550u32, 450, 40000, 20000, 20000, 30000, 10]).unwrap();
+    let distr =
+        WeightedAliasIndex::new(vec![550u32, 450, 40000, 20000, 20000, 30000, 100, 10]).unwrap();
     let entry_size_distr =
         LogNormal::from_mean_cv(f64::from(mean_size), f64::from(cv_size)).unwrap();
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
@@ -1367,7 +1368,7 @@ fn fuzz(
                     clients.swap_remove(rng.gen_range(0..clients.len()));
                 }
             }
-            action @ 2..=5 => {
+            action @ 2..=6 => {
                 let server = if clients.is_empty() {
                     clients.push(connect_to_server(addr)?);
                     &clients[0]
@@ -1466,10 +1467,20 @@ fn fuzz(
                             }
                         }
                     }
+                    6 => {
+                        writeln!(out, "Collecting garbage.").unwrap();
+                        let max_wasted_bytes = match rng.gen_range(0..4) {
+                            0 => 0,
+                            _ => rng.gen_range(0..10_000) + 1,
+                        };
+                        let GarbageCollectResponse { bytes_freed } =
+                            GarbageCollectRequest::response(server, addr, max_wasted_bytes)?;
+                        writeln!(out, "Freed {bytes_freed} bytes.").unwrap();
+                    }
                     _ => unreachable!(),
                 }
             }
-            6 => {
+            7 => {
                 writeln!(
                     out,
                     "Validating database integrity on {} entries.",
