@@ -1,4 +1,7 @@
 use std::{
+    array,
+    cmp::{min, Reverse},
+    collections::BinaryHeap,
     fmt::Debug,
     fs,
     fs::File,
@@ -11,9 +14,10 @@ use std::{
     slice,
 };
 
+use arrayvec::ArrayVec;
 use bitcode::{Decode, Encode};
 use bitvec::{order::Lsb0, vec::BitVec};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use ringboard_core::{
     bucket_to_length, copy_file_range_all, direct_file_name, open_buckets,
     protocol::{
@@ -22,12 +26,12 @@ use ringboard_core::{
     },
     ring,
     ring::{entries_to_offset, BucketEntry, Entry, Header, RawEntry, Ring},
-    size_to_bucket, IoErr, PathView, NUM_BUCKETS, TEXT_MIMES,
+    size_to_bucket, IoErr, PathView, RingAndIndex, NUM_BUCKETS, TEXT_MIMES,
 };
 use rustix::{
     fs::{
-        fsetxattr, openat, renameat, renameat_with, unlinkat, AtFlags, Mode, OFlags, RenameFlags,
-        XattrFlags, CWD,
+        fsetxattr, ftruncate, openat, renameat, renameat_with, unlinkat, AtFlags, Mode, OFlags,
+        RenameFlags, XattrFlags, CWD,
     },
     path::Arg,
 };
@@ -286,7 +290,7 @@ impl Allocator {
                 openat(
                     CWD,
                     &*file,
-                    OFlags::WRONLY | OFlags::CREATE,
+                    OFlags::RDWR | OFlags::CREATE,
                     Mode::RUSR | Mode::WUSR,
                 )
                 .map_io_err(|| format!("Failed to create bucket: {file:?}"))
@@ -345,8 +349,15 @@ impl Allocator {
         if let Some(entry) = ring.get(head) {
             writer.write(Entry::Uninitialized, head)?;
             self.data.free(entry, to, head)?;
+
+            // Only GC on allocation instead of in AllocatorData::free to avoid spamming GCs
+            // when removing many entries. This is common in deduplication for example.
+            if let Entry::Bucketed(_) = entry {
+                self.gc_(u16::MAX.into())?;
+            }
         }
         let entry = alloc(head, &mut self.data)?;
+        let WritableRing { writer, ring } = &mut self.rings[to];
 
         writer
             .write(entry, head)
@@ -517,6 +528,13 @@ impl Allocator {
     }
 
     pub fn gc(&mut self, max_wasted_bytes: u64) -> Result<GarbageCollectResponse, CliError> {
+        self.gc_(max_wasted_bytes)
+            .map(|bytes_freed| GarbageCollectResponse { bytes_freed })
+    }
+
+    fn gc_(&mut self, max_wasted_bytes: u64) -> Result<u64, CliError> {
+        const MIN_BYTES_TO_FREE: u64 = 1 << 14;
+
         let wasted_bucket_bytes = self
             .data
             .buckets
@@ -527,21 +545,225 @@ impl Allocator {
             .enumerate()
             .map(|(i, v)| u64::try_from(v.len()).unwrap() * u64::from(bucket_to_length(i)))
             .sum::<u64>();
+        debug!(
+            "GC requested with {max_wasted_bytes} bytes of max wasted space; found \
+             {wasted_bucket_bytes} wasted bytes."
+        );
         if wasted_bucket_bytes <= max_wasted_bytes {
-            return Ok(GarbageCollectResponse { bytes_freed: 0 });
+            return Ok(0);
         }
+        info!("Running GC.");
 
-        // TODO eliminate duplicates while building reverse mapping of BucketAndIndex to
-        //  RingAndIndex
+        let max_wasted_bytes = if wasted_bucket_bytes - max_wasted_bytes < MIN_BYTES_TO_FREE {
+            wasted_bucket_bytes.saturating_sub(MIN_BYTES_TO_FREE)
+        } else {
+            max_wasted_bytes
+        };
+
+        let layers_to_remove = {
+            let free_slot_counts: [_; NUM_BUCKETS] = {
+                let mut a = array::from_fn(|bucket| {
+                    (
+                        u8::try_from(bucket).unwrap(),
+                        u32::try_from(self.data.buckets.free_lists.lists.0[bucket].len()).unwrap(),
+                    )
+                });
+                a.sort_unstable_by_key(|&(_, count)| count);
+                a
+            };
+            let bytes_in_remaining_layers: [_; NUM_BUCKETS] = {
+                let mut v = ArrayVec::new_const();
+
+                let mut accum = 0;
+                for &(bucket, _) in free_slot_counts.iter().rev() {
+                    accum += bucket_to_length(bucket.into());
+                    v.push(accum);
+                }
+
+                v.into_inner().unwrap()
+            };
+
+            let mut layers_to_remove = 0;
+            let mut remaining_wasted_bucket_bytes = wasted_bucket_bytes;
+
+            for (i, &(_, free_slots)) in free_slot_counts.iter().enumerate() {
+                let available_layers = u64::from(free_slots) - layers_to_remove;
+                if available_layers == 0 {
+                    continue;
+                }
+                let bytes_per_layer =
+                    u64::from(bytes_in_remaining_layers[free_slot_counts.len() - 1 - i]);
+
+                let layers_used = (remaining_wasted_bucket_bytes - max_wasted_bytes)
+                    .div_ceil(bytes_per_layer)
+                    .min(available_layers);
+                remaining_wasted_bucket_bytes =
+                    remaining_wasted_bucket_bytes.saturating_sub(layers_used * bytes_per_layer);
+                layers_to_remove += layers_used;
+
+                if remaining_wasted_bucket_bytes <= max_wasted_bytes {
+                    break;
+                }
+            }
+
+            u32::try_from(layers_to_remove).unwrap()
+        };
+        debug!(
+            "Removing {layers_to_remove} layers to achieve {max_wasted_bytes} max wasted bytes."
+        );
 
         let Buckets {
             files,
             slot_counts,
             free_lists,
         } = &mut self.data.buckets;
-        // TODO pop every free slot and fill it with the furthest allocated slot
 
-        todo!()
+        let mut swappable_allocations = [const { BinaryHeap::new() }; NUM_BUCKETS];
+        {
+            let max_swappable_allocations: [_; NUM_BUCKETS] = array::from_fn(|bucket| {
+                min(
+                    usize::try_from(layers_to_remove).unwrap(),
+                    free_lists.lists.0[bucket].len(),
+                )
+                    // Add one so we can find the truncate pivot point in the free list later
+                    + 1
+            });
+            for (bucket, h) in swappable_allocations.iter_mut().enumerate() {
+                h.reserve(max_swappable_allocations[bucket]);
+            }
+
+            for free_slots in &mut free_lists.lists.0 {
+                free_slots.sort_unstable_by_key(|&index| Reverse(index));
+            }
+
+            for kind in [RingKind::Favorites, RingKind::Main] {
+                let WritableRing { writer: _, ring } = &self.rings[kind];
+                for i in 0..ring.len() {
+                    match ring.get(i) {
+                        Some(Entry::Bucketed(entry)) => {
+                            let bucket = usize::from(size_to_bucket(entry.size()));
+                            if entry.index()
+                                <= free_lists.lists.0[bucket]
+                                    .last()
+                                    .copied()
+                                    .unwrap_or(u32::MAX)
+                            {
+                                continue;
+                            }
+
+                            let slots = &mut swappable_allocations[bucket];
+                            let item = Reverse((entry.index(), RingAndIndex::new(kind, i)));
+
+                            if slots.len() == max_swappable_allocations[bucket] {
+                                if item < *slots.peek().unwrap() {
+                                    slots.pop();
+                                    slots.push(item);
+                                }
+                            } else {
+                                slots.push(item);
+                            }
+                        }
+                        Some(Entry::Uninitialized | Entry::File) | None => continue,
+                    }
+                }
+            }
+        }
+        let swappable_allocations = swappable_allocations
+            .map(|heap| BinaryHeap::from_iter(heap.into_iter().map(|Reverse(item)| item)));
+
+        let mut pending_frees = Vec::with_capacity(usize::try_from(layers_to_remove).unwrap());
+        let mut bytes_freed = 0;
+        for ((((file, slot_count), free_slots), mut swappable_allocations), bucket_size) in files
+            .iter_mut()
+            .zip(slot_counts)
+            .zip(&mut free_lists.lists.0)
+            .zip(swappable_allocations)
+            .zip((0..NUM_BUCKETS).map(bucket_to_length))
+        {
+            let mut swap = || -> Result<_, CliError> {
+                for _ in 0..layers_to_remove {
+                    let Some(&free) = free_slots.last() else {
+                        break;
+                    };
+                    let Some(&(alloc, rai)) = swappable_allocations.peek() else {
+                        break;
+                    };
+                    if free >= alloc {
+                        break;
+                    }
+
+                    let WritableRing { writer, ring } = &mut self.rings[rai.ring()];
+                    let size = match ring.get(rai.index()) {
+                        Some(Entry::Bucketed(entry)) => entry.size(),
+                        _ => unreachable!(),
+                    };
+                    trace!(
+                        "Replacing free slot {free} with allocated slot {alloc} for bucket of \
+                         length {bucket_size}."
+                    );
+
+                    copy_file_range_all(
+                        &*file,
+                        Some(&mut (u64::from(alloc) * u64::from(bucket_size))),
+                        &*file,
+                        Some(&mut (u64::from(free) * u64::from(bucket_size))),
+                        // Copy the NUL byte too
+                        if size < bucket_size { size + 1 } else { size }.into(),
+                    )
+                    .map_io_err(|| {
+                        format!(
+                            "Failed to copy bucket slot {alloc} to {free} in bucket {}.",
+                            size_to_bucket(size)
+                        )
+                    })?;
+                    writer.write(
+                        Entry::Bucketed(BucketEntry::new(size, free).unwrap()),
+                        rai.index(),
+                    )?;
+
+                    free_slots.pop();
+                    swappable_allocations.pop();
+                    pending_frees.push(alloc);
+                }
+                Ok(())
+            };
+
+            {
+                let r = swap();
+                free_slots.append(&mut pending_frees);
+                r?
+            }
+
+            let drop_count =
+                if let Some(&(highest_allocated_bucket_index, _)) = swappable_allocations.peek() {
+                    free_slots.sort_unstable_by_key(|&index| Reverse(index));
+                    let (Ok(pivot) | Err(pivot)) = free_slots
+                        .binary_search_by_key(&Reverse(highest_allocated_bucket_index), |&index| {
+                            Reverse(index)
+                        });
+                    pivot
+                } else {
+                    free_slots.len()
+                };
+            if drop_count == 0 {
+                continue;
+            }
+            debug!("Dropping last {drop_count} slots for bucket of size {bucket_size}.");
+
+            ftruncate(
+                file,
+                (u64::from(*slot_count) - u64::try_from(drop_count).unwrap())
+                    * u64::from(bucket_size),
+            )
+            .map_io_err(|| {
+                format!("Failed to truncate bucket file with bucket size {bucket_size}.")
+            })?;
+            *slot_count -= u32::try_from(drop_count).unwrap();
+            free_slots.drain(..drop_count);
+            bytes_freed += u64::try_from(drop_count).unwrap() * u64::from(bucket_size);
+        }
+        info!("GC freed {bytes_freed} bytes.");
+        Ok(bytes_freed)
     }
 
     pub fn shutdown(mut self) -> Result<(), CliError> {
