@@ -281,8 +281,6 @@ enum MigrateFromClipboard {
     ClipboardIndicator,
 
     /// A sequence of JSON objects in the same format as the dump command.
-    ///
-    /// Note that the IDs are ignored and may be omitted.
     Json,
 }
 
