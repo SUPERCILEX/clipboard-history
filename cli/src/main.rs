@@ -742,6 +742,7 @@ fn garbage_collect(
     if max_wasted_bytes == 0 {
         let (database, mut reader) = open_db()?;
         let mut duplicates = DuplicateDetector::default();
+        let mut num_duplicates = 0;
 
         let recv = |flags| {
             unsafe { RemoveRequest::recv(&server, flags) }.and_then(|RemoveResponse { error }| {
@@ -755,6 +756,7 @@ fn garbage_collect(
         let mut pending_requests = 0;
         for entry in database.favorites().rev().chain(database.main().rev()) {
             if duplicates.add_entry(&entry, &database, &mut reader)? {
+                num_duplicates += 1;
                 pipeline_request(
                     |flags| RemoveRequest::send(&server, addr, entry.id(), flags),
                     recv,
@@ -764,6 +766,7 @@ fn garbage_collect(
         }
 
         drain_requests(recv, true, &mut pending_requests)?;
+        println!("Removed {num_duplicates} duplicate entries.");
     }
 
     let GarbageCollectResponse { bytes_freed } =
