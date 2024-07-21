@@ -138,9 +138,6 @@ enum Cmd {
     #[command(alias = "nuke")]
     Wipe,
 
-    /// Reload configuration files on the server.
-    ReloadSettings(ReloadSettings),
-
     /// Migrate from other clipboard managers to Ringboard.
     Migrate(Migrate),
 
@@ -171,7 +168,7 @@ enum Dev {
     ///   "data": (UTF-8 | base64) string{n}
     /// }{n}
     #[command(alias = "export")]
-    Dump(Dump),
+    Dump,
 
     /// Generate a pseudo-random database for testing and performance tuning
     /// purposes.
@@ -248,14 +245,6 @@ struct Swap {
     /// The second entry ID.
     #[arg(required = true)]
     id2: u64,
-}
-
-#[derive(Args, Debug)]
-struct ReloadSettings {
-    /// Use this configuration file instead of the default one.
-    #[arg(short, long)]
-    #[arg(value_hint = ValueHint::FilePath)]
-    config: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -339,14 +328,6 @@ struct Fuzz {
     #[clap(value_parser = si_number::< u32 >)]
     #[clap(default_value = "10")]
     cv_size: u32,
-}
-
-#[derive(Args, Debug)]
-struct Dump {
-    /// Instead of dumping the existing database contents, watch for new entries
-    /// as they come in.
-    #[arg(short, long)]
-    watch: bool,
 }
 
 #[derive(Error, Debug)]
@@ -454,16 +435,12 @@ fn run() -> Result<(), CliError> {
         Cmd::Swap(data) => swap(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Remove(data) => remove(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Wipe => wipe(),
-        Cmd::ReloadSettings(data) => {
-            reload_settings(connect_to_server(&server_addr)?, &server_addr, data)
-        }
         Cmd::GarbageCollect(data) => {
             garbage_collect(connect_to_server(&server_addr)?, &server_addr, data)
         }
         Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, &server_addr, data),
         Cmd::Debug(Dev::Stats) => stats(),
-        Cmd::Debug(Dev::Dump(Dump { watch: false })) => dump(),
-        Cmd::Debug(Dev::Dump(Dump { watch: true })) => watch(),
+        Cmd::Debug(Dev::Dump) => dump(),
         Cmd::Debug(Dev::Generate(data)) => {
             generate(connect_to_server(&server_addr)?, &server_addr, data)
         }
@@ -722,16 +699,6 @@ fn wipe() -> Result<(), CliError> {
     println!("Done.");
 
     Ok(())
-}
-
-fn reload_settings(
-    server: OwnedFd,
-    _addr: &SocketAddrUnix,
-    ReloadSettings { .. }: ReloadSettings,
-) -> Result<(), CliError> {
-    // TODO send config as ancillary data
-    drop(server);
-    todo!()
 }
 
 fn garbage_collect(
@@ -1269,10 +1236,6 @@ fn migrate_from_ringboard_export(
     };
 
     unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
-}
-
-fn watch() -> Result<(), CliError> {
-    todo!()
 }
 
 fn generate(

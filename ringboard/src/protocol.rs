@@ -42,7 +42,6 @@ pub enum Request {
     MoveToFront { id: u64, to: Option<RingKind> },
     Swap { id1: u64, id2: u64 },
     Remove { id: u64 },
-    ReloadSettings,
     GarbageCollect { max_wasted_bytes: u64 },
 }
 
@@ -90,13 +89,6 @@ pub struct RemoveResponse {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 #[must_use]
-pub struct ReloadSettingsResponse {
-    pub error: Option<()>,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-#[must_use]
 pub struct GarbageCollectResponse {
     pub bytes_freed: u64,
 }
@@ -121,5 +113,4 @@ impl AsBytes for AddResponse {}
 impl AsBytes for MoveToFrontResponse {}
 impl AsBytes for SwapResponse {}
 impl AsBytes for RemoveResponse {}
-impl AsBytes for ReloadSettingsResponse {}
 impl AsBytes for GarbageCollectResponse {}

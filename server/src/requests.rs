@@ -65,7 +65,6 @@ pub fn handle(
         }
         &Request::Swap { id1, id2 } => reply(send_bufs, [allocator.swap(id1, id2)?]).map(Some),
         &Request::Remove { id } => reply(send_bufs, [allocator.remove(id)?]).map(Some),
-        Request::ReloadSettings => reload_settings(control_data, send_bufs, allocator).map(Some),
         &Request::GarbageCollect { max_wasted_bytes } => {
             reply(send_bufs, [allocator.gc(max_wasted_bytes)?]).map(Some)
         }
@@ -109,12 +108,4 @@ fn add(
     }
 
     reply(send_bufs, responses)
-}
-
-fn reload_settings(
-    _control_data: &mut [u8],
-    _send_bufs: &mut SendMsgBufs,
-    _allocator: &mut Allocator,
-) -> Result<SendBufAllocation, CliError> {
-    todo!()
 }
