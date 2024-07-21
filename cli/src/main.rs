@@ -159,14 +159,22 @@ enum Dev {
     #[command(aliases = ["nerd", "kowalski-analysis"])]
     Stats,
 
-    /// Dump the contents of the database for analysis.
+    /// Dump the database contents for analysis.
     ///
-    /// The JSON format is as follows:{n}
-    /// {{n}
-    ///   "id": int64,{n}
-    ///   "kind": "Human" | "Bytes",{n}
-    ///   "data": (UTF-8 | base64) string{n}
-    /// }{n}
+    /// The JSON format is as follows:
+    ///{n}[
+    ///{n}  {
+    ///{n}    "id": int64,
+    ///{n}    "kind": "Human" | "Bytes",
+    ///{n}    "data": (UTF-8 | base64) string
+    ///{n}  },
+    ///{n}  ...
+    ///{n}]
+    ///
+    /// Note that `$ ringboard migrate json` expects a JSON stream (wherein each
+    /// object appears on its own line instead of being in a list). To import an
+    /// export, you can convert the JSON array to a stream with `$ ... | jq -c
+    /// .[]`.
     #[command(alias = "export")]
     Dump,
 
