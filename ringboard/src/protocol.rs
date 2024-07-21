@@ -91,7 +91,6 @@ pub struct RemoveResponse {
 #[derive(Copy, Clone, Debug)]
 #[must_use]
 pub struct ReloadSettingsResponse {
-    // TODO add invalid config errors
     pub error: Option<()>,
 }
 

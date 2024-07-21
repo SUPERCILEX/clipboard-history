@@ -186,10 +186,7 @@ impl<'a> RingReader<'a> {
         kind: RingKind,
     ) -> Result<Ring, ringboard_core::Error> {
         let ring = PathView::new(database_dir, kind.file_name());
-        Ring::open(
-            /* TODO read from config */ kind.default_max_entries(),
-            &*ring,
-        )
+        Ring::open(kind.default_max_entries(), &*ring)
     }
 
     #[must_use]

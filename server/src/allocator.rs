@@ -266,10 +266,7 @@ impl Allocator {
             let ring = PathView::new(&mut data_dir, kind.file_name());
             Ok(WritableRing {
                 writer: RingWriter::open(&*ring)?,
-                ring: Ring::open(
-                    /* TODO read from config */ kind.default_max_entries(),
-                    &*ring,
-                )?,
+                ring: Ring::open(kind.default_max_entries(), &*ring)?,
             })
         };
         let main_ring = open_ring(RingKind::Main)?;
