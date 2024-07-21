@@ -373,9 +373,13 @@ fn do_search(
         .map(SortedEntry)
         .map(Reverse)
     {
-        results.push(entry);
         if results.len() == MAX_SEARCH_ENTRIES {
-            results.pop();
+            if entry < *results.peek().unwrap() {
+                results.pop();
+                results.push(entry);
+            }
+        } else {
+            results.push(entry);
         }
     }
 
