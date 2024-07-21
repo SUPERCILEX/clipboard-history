@@ -31,10 +31,9 @@ use ringboard_sdk::{
         dirs::{data_dir, socket_file},
         protocol::{IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind},
         ring::{offset_to_entries, Ring},
-        size_to_bucket, Error as CoreError, IoErr, PathView,
+        size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, PathView, RingAndIndex,
     },
-    duplicate_detection::RingAndIndex,
-    search::{BucketAndIndex, EntryLocation, Query},
+    search::{EntryLocation, Query},
     ClientError, DatabaseReader, Entry, EntryReader, Kind,
 };
 use rustc_hash::FxHasher;

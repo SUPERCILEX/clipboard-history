@@ -8,7 +8,7 @@ pub use utils::{
     bucket_to_length, copy_file_range_all, direct_file_name, open_buckets, read_server_pid,
     size_to_bucket, AsBytes, DirectFileNameToken, NUM_BUCKETS, TEXT_MIMES,
 };
-pub use views::{PathView, StringView};
+pub use views::{BucketAndIndex, PathView, RingAndIndex, StringView};
 
 use crate::protocol::IdNotFoundError;
 

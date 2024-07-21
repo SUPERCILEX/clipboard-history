@@ -48,10 +48,10 @@ use ringboard_sdk::{
         },
         read_server_pid,
         ring::Mmap,
-        size_to_bucket, Error as CoreError, IoErr, NUM_BUCKETS,
+        size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS,
     },
     duplicate_detection::DuplicateDetector,
-    search::{BucketAndIndex, EntryLocation, Query, QueryResult},
+    search::{EntryLocation, Query, QueryResult},
     ClientError, DatabaseReader, EntryReader, Kind,
 };
 use rustc_hash::FxHasher;
