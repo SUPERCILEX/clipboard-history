@@ -1,9 +1,8 @@
 use std::{
-    borrow::Cow,
     fmt::{Debug, Formatter},
     fs::File,
     io,
-    io::{ErrorKind, Read},
+    io::ErrorKind,
     ops::{Deref, DerefMut},
     os::{
         fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
@@ -328,6 +327,34 @@ impl<T> DerefMut for LoadedEntry<T> {
     }
 }
 
+pub enum MmapOrSlice<'a> {
+    Slice(&'a [u8]),
+    Mmap(Mmap),
+}
+
+impl<'a> From<&'a [u8]> for MmapOrSlice<'a> {
+    fn from(value: &'a [u8]) -> Self {
+        Self::Slice(value)
+    }
+}
+
+impl From<Mmap> for MmapOrSlice<'_> {
+    fn from(value: Mmap) -> Self {
+        Self::Mmap(value)
+    }
+}
+
+impl<'a> Deref for MmapOrSlice<'a> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            MmapOrSlice::Slice(s) => s,
+            MmapOrSlice::Mmap(m) => m,
+        }
+    }
+}
+
 impl Entry {
     #[must_use]
     pub const fn kind(&self) -> Kind {
@@ -349,10 +376,17 @@ impl Entry {
         composite_id(self.ring, self.id)
     }
 
+    pub fn mime_type(&self, reader: &mut EntryReader) -> Result<MimeType, ringboard_core::Error> {
+        match self.kind() {
+            Kind::Bucket(_) => Ok(MimeType::new()),
+            Kind::File => self.to_file(reader)?.mime_type(),
+        }
+    }
+
     pub fn to_slice<'a>(
         &self,
         reader: &'a mut EntryReader,
-    ) -> Result<LoadedEntry<Cow<'a, [u8]>>, ringboard_core::Error> {
+    ) -> Result<LoadedEntry<MmapOrSlice<'a>>, ringboard_core::Error> {
         self.grow_bucket_if_needed(reader)?;
         Ok(self.to_slice_raw(reader)?.unwrap())
     }
@@ -385,7 +419,7 @@ impl Entry {
     pub fn to_slice_raw<'a>(
         &self,
         reader: &'a EntryReader,
-    ) -> Result<Option<LoadedEntry<Cow<'a, [u8]>>>, ringboard_core::Error> {
+    ) -> Result<Option<LoadedEntry<MmapOrSlice<'a>>>, ringboard_core::Error> {
         match self.kind {
             Kind::Bucket(entry) => {
                 let Ok(bytes) = bucket_entry_to_slice(reader, entry) else {
@@ -397,18 +431,13 @@ impl Entry {
                 }))
             }
             Kind::File => {
-                let mut v = Vec::new();
-                let Some(mut file) = self.to_file_raw(reader)? else {
+                let Some(file) = self.to_file_raw(reader)? else {
                     return Ok(None);
                 };
-                file.read_to_end(&mut v).map_io_err(|| {
-                    format!(
-                        "Failed to read direct entry {} in {:?} ring",
-                        self.id, self.ring
-                    )
-                })?;
                 Ok(Some(LoadedEntry {
-                    loaded: v.into(),
+                    loaded: Mmap::from(&*file)
+                        .map_io_err(|| format!("Failed to mmap data file: {file:?}"))?
+                        .into(),
                     fd: Some(LoadedEntryFd::Owned(file.loaded.into())),
                 }))
             }

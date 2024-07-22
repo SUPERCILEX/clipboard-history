@@ -1439,13 +1439,10 @@ fn dump() -> Result<(), CliError> {
         let mime_type = loaded.mime_type()?;
         seq.serialize_element(&ExportEntry {
             id: entry.id(),
-            // TODO https://github.com/rust-lang/rust-clippy/issues/12723
-            #[allow(clippy::option_if_let_else)]
-            data: if let Ok(data) = str::from_utf8(&loaded) {
-                ExportData::Human(data.into())
-            } else {
-                ExportData::Bytes(loaded.into_inner())
-            },
+            data: str::from_utf8(&loaded).map_or_else(
+                |_| ExportData::Bytes((&**loaded).into()),
+                |data| ExportData::Human(data.into()),
+            ),
             mime_type,
         })?;
     }
@@ -1724,14 +1721,7 @@ fn fuzz(
 
                 for (&id, a) in &data {
                     let entry = unsafe { database.get(id) }?;
-                    let b = match entry.kind() {
-                        Kind::Bucket(_) => &*entry.to_slice(&mut reader)?,
-                        Kind::File => {
-                            let db_file = entry.to_file(&mut reader)?;
-                            &*Mmap::from(&*db_file)
-                                .map_io_err(|| format!("Failed to mmap file: {db_file:?}"))?
-                        }
-                    };
+                    let b = &**entry.to_slice(&mut reader)?;
 
                     assert_eq!(**a, *b);
                 }

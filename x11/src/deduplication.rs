@@ -122,39 +122,31 @@ impl CopyDeduplication {
             }
             .and_then(|id| {
                 let id = composite_id(kind, id);
-                let entry = unsafe {
-                    self.database
-                        .get(id)
-                        .inspect_err(|e| error!("Failed to get entry for ID: {id:?}\nError: {e:?}"))
-                        .ok()?
-                };
+                let entry = unsafe { self.database.get(id) }
+                    .inspect_err(|e| error!("Failed to get entry for ID: {id:?}\nError: {e:?}"))
+                    .ok()?;
                 match data {
                     CopyData::Slice(data) => {
-                        *entry
+                        **entry
                             .to_slice(&mut self.reader)
                             .inspect_err(|e| {
                                 error!("Failed to load entry: {entry:?}\nError: {e:?}");
                             })
                             .ok()?
-                            == data
+                            == *data
                     }
                     CopyData::File(data) => {
-                        let entry_file = entry
-                            .to_file(&mut self.reader)
+                        let a = entry
+                            .to_slice(&mut self.reader)
                             .inspect_err(|e| {
                                 error!("Failed to load entry: {entry:?}\nError: {e:?}");
-                            })
-                            .ok()?;
-                        let a = Mmap::from(&*entry_file)
-                            .inspect_err(|e| {
-                                error!("Failed to mmap file: {entry_file:?}\nError: {e:?}");
                             })
                             .ok()?;
                         let b = Mmap::from(data)
                             .inspect_err(|e| error!("Failed to mmap file: {data:?}\nError: {e:?}"))
                             .ok()?;
 
-                        *a == *b
+                        **a == *b
                     }
                 }
                 .then_some(id)

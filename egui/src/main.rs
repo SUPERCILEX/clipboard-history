@@ -251,11 +251,11 @@ fn handle_command(
                     let loaded = entry.to_slice(reader)?;
                     Ok(DetailedEntry {
                         mime_type: (&*loaded.mime_type()?).into(),
-                        full_text: String::from_utf8(loaded.into_inner().into_owned()).ok(),
+                        full_text: str::from_utf8(&loaded).map(String::from).ok(),
                     })
                 } else {
                     Ok(DetailedEntry {
-                        mime_type: (&*entry.to_file(reader)?.mime_type()?).into(),
+                        mime_type: (&*entry.mime_type(reader)?).into(),
                         full_text: None,
                     })
                 }
