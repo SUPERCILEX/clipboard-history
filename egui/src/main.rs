@@ -18,9 +18,9 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        text::LayoutJob, Align, CentralPanel, Event, FontId, Image, InputState, Key, Label, Layout,
-        Modifiers, PopupCloseBehavior, Pos2, Response, ScrollArea, Sense, TextEdit, TextFormat,
-        TopBottomPanel, Ui, Vec2, ViewportBuilder, Widget,
+        text::LayoutJob, Align, CentralPanel, Event, FontId, FontSelection, Image, InputState, Key,
+        Label, Layout, Modifiers, PopupCloseBehavior, Pos2, Response, ScrollArea, Sense, TextEdit,
+        TextFormat, TextStyle, TopBottomPanel, Ui, Vec2, ViewportBuilder, Widget,
     },
     epaint::FontFamily,
 };
@@ -589,6 +589,11 @@ fn search_ui(
                 "Search with RegEx"
             } else {
                 "Search"
+            })
+            .font(if state.search_with_regex {
+                TextStyle::Monospace.into()
+            } else {
+                FontSelection::default()
             })
             .desired_width(f32::INFINITY)
             .cursor_at_end(true)
