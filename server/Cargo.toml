@@ -7,7 +7,7 @@ description = "The ringboard server."
 repository.workspace = true
 keywords = ["ringboard", "clipboard", "tools", "server"]
 categories = ["command-line-utilities", "development-tools", "filesystem"]
-license.workspace = true
+license = "AGPL-3.0-only"
 
 [dependencies]
 arrayvec = "0.7.4"
