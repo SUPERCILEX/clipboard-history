@@ -7,7 +7,7 @@ pub use path::PathView;
 pub use string::StringView;
 
 use crate::{
-    protocol::{composite_id, RingKind},
+    protocol::{composite_id, decompose_id, IdNotFoundError, RingKind},
     ring::MAX_ENTRIES,
 };
 
@@ -23,6 +23,10 @@ impl RingAndIndex {
         debug_assert!(index <= MAX_ENTRIES);
 
         Self((index << u8::BITS) | (ring as u32))
+    }
+
+    pub fn from_id(composite_id: u64) -> Result<Self, IdNotFoundError> {
+        decompose_id(composite_id).map(|(ring, id)| Self::new(ring, id))
     }
 
     #[must_use]

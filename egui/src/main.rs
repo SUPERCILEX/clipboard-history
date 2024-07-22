@@ -1,5 +1,6 @@
 use std::{
-    cmp::{min, Ordering, Reverse},
+    array,
+    cmp::min,
     collections::{BinaryHeap, HashMap},
     hash::BuildHasherDefault,
     iter::once,
@@ -29,8 +30,8 @@ use ringboard_sdk::{
     core::{
         direct_file_name,
         dirs::{data_dir, socket_file},
-        protocol::{IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind},
-        ring::{offset_to_entries, Ring},
+        protocol::{composite_id, IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind},
+        ring::{offset_to_entries, Ring, MAX_ENTRIES},
         size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, PathView, RingAndIndex,
     },
     search::{EntryLocation, Query},
@@ -314,28 +315,6 @@ fn do_search(
 ) -> Vec<UiEntry> {
     const MAX_SEARCH_ENTRIES: usize = 256;
 
-    struct SortedEntry(Entry);
-
-    // TODO fix this being broken when ring wraps around, need to take into account
-    //  the write_head
-    impl PartialOrd for SortedEntry {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-    impl Ord for SortedEntry {
-        fn cmp(&self, other: &Self) -> Ordering {
-            self.0.id().cmp(&other.0.id())
-        }
-    }
-
-    impl PartialEq<Self> for SortedEntry {
-        fn eq(&self, other: &Self) -> bool {
-            self.0.id() == other.0.id()
-        }
-    }
-    impl Eq for SortedEntry {}
-
     let reader = Arc::new(reader_.take().unwrap());
 
     let (result_stream, threads) = ringboard_sdk::search(query, reader.clone());
@@ -353,28 +332,38 @@ fn do_search(
     }
 
     let mut results = BinaryHeap::new();
+    let write_heads: [_; 2] = array::from_fn(|i| {
+        let ring = if i == RingKind::Main as usize {
+            database.main()
+        } else if i == RingKind::Favorites as usize {
+            database.favorites()
+        } else {
+            unreachable!()
+        };
+        let ring = ring.ring();
+        ring.prev_entry(ring.write_head())
+    });
     for entry in result_stream
-        .map(|r| {
-            r.and_then(|q| match q.location {
-                EntryLocation::Bucketed { bucket, index } => reverse_index_cache
-                    .get(&BucketAndIndex::new(bucket, index))
-                    .copied()
-                    .ok_or_else(|| {
-                        CoreError::IdNotFound(IdNotFoundError::Entry(
-                            index << u8::BITS | u32::from(bucket),
-                        ))
-                    })
-                    .and_then(|entry| {
-                        unsafe { database.get(entry.id()) }.map_err(CoreError::IdNotFound)
-                    }),
-                EntryLocation::File { entry_id } => {
-                    unsafe { database.get(entry_id) }.map_err(CoreError::IdNotFound)
-                }
-            })
+        .flatten()
+        .flat_map(|q| match q.location {
+            EntryLocation::Bucketed { bucket, index } => reverse_index_cache
+                .get(&BucketAndIndex::new(bucket, index))
+                .copied()
+                .ok_or_else(|| {
+                    CoreError::IdNotFound(IdNotFoundError::Entry(
+                        index << u8::BITS | u32::from(bucket),
+                    ))
+                }),
+            EntryLocation::File { entry_id } => {
+                RingAndIndex::from_id(entry_id).map_err(CoreError::IdNotFound)
+            }
         })
-        .filter_map(Result::ok)
-        .map(SortedEntry)
-        .map(Reverse)
+        .map(|entry| {
+            RingAndIndex::new(
+                entry.ring(),
+                write_heads[entry.ring() as usize].wrapping_sub(entry.index()) & MAX_ENTRIES,
+            )
+        })
     {
         if results.len() == MAX_SEARCH_ENTRIES {
             if entry < *results.peek().unwrap() {
@@ -395,7 +384,13 @@ fn do_search(
     results
         .into_sorted_vec()
         .into_iter()
-        .map(|entry| entry.0.0)
+        .flat_map(|entry| {
+            let ring = entry.ring();
+            let index = write_heads[ring as usize].wrapping_sub(entry.index()) & MAX_ENTRIES;
+
+            let id = composite_id(ring, index);
+            unsafe { database.get(id) }
+        })
         .map(|entry| {
             // TODO add support for bold highlighting the selection range
             ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {

@@ -94,8 +94,8 @@ pub struct GarbageCollectResponse {
 }
 
 #[must_use]
-pub fn composite_id(kind: RingKind, id: u32) -> u64 {
-    ((kind as u64) << 32) | u64::from(id)
+pub fn composite_id(kind: RingKind, index: u32) -> u64 {
+    ((kind as u64) << 32) | u64::from(index)
 }
 
 pub fn decompose_id(id: u64) -> Result<(RingKind, u32), IdNotFoundError> {
