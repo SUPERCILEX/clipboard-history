@@ -731,11 +731,7 @@ fn garbage_collect(
 
         let recv = |flags| {
             unsafe { RemoveRequest::recv(&server, flags) }.and_then(|RemoveResponse { error }| {
-                if let Some(e) = error {
-                    Err(e.into())
-                } else {
-                    Ok(())
-                }
+                error.map_or_else(|| Ok(()), |e| Err(e.into()))
             })
         };
         let mut pending_requests = 0;
@@ -1028,6 +1024,7 @@ fn migrate_from_clipboard_indicator(
     unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
 }
 
+#[allow(clippy::too_many_lines)]
 fn migrate_from_gpaste(
     server: OwnedFd,
     addr: &SocketAddrUnix,
@@ -1110,20 +1107,19 @@ fn migrate_from_gpaste(
                     return Err(io::Error::from(ErrorKind::UnexpectedEof))
                         .map_io_err(|| "GPaste history file appears to be corrupted.")?;
                 }
-                Event::Start(e) => match e.name().as_ref() {
-                    b"history" => {
-                        if let Some(s) = e.try_get_attribute("version")?
-                            && s.value.as_ref() == b"2.0"
-                        {
-                            break;
-                        } else {
-                            return unsupported?;
+                Event::Start(e) => {
+                    return match e.name().as_ref() {
+                        b"history" => {
+                            if let Some(s) = e.try_get_attribute("version")?
+                                && s.value.as_ref() == b"2.0"
+                            {
+                                break;
+                            }
+                            unsupported?
                         }
-                    }
-                    _ => {
-                        return unsupported?;
-                    }
-                },
+                        _ => unsupported?,
+                    };
+                }
                 _ => (),
             }
             buf.clear();

@@ -16,7 +16,7 @@ regex = "1.10.5"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
 rustc-hash = "2.0.0"
 rustix = { version = "0.38.34", features = ["process"] }
-thiserror = "1.0.62"
+thiserror = "1.0.63"
 
 [[bin]]
 name = "ringboard-egui"

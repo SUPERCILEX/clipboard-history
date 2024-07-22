@@ -585,7 +585,7 @@ fn search_ui(
 ) {
     if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::X)) {
         state.search_with_regex ^= true;
-        ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))))
+        ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))));
     }
 
     let response = ui.add(
@@ -798,7 +798,7 @@ fn entry_ui(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn row_ui(
     ui: &mut Ui,
     widget: impl Widget,

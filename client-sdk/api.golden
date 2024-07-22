@@ -1,5 +1,144 @@
 pub mod clipboard_history_client_sdk
 pub use clipboard_history_client_sdk::core
+pub mod clipboard_history_client_sdk::api
+pub struct clipboard_history_client_sdk::api::AddRequest
+impl clipboard_history_client_sdk::api::AddRequest
+pub unsafe fn clipboard_history_client_sdk::api::AddRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::AddResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::AddRequest::response<Server: std::os::fd::owned::AsFd, Data: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, to: clipboard_history_core::protocol::RingKind, mime_type: clipboard_history_core::protocol::MimeType, data: Data) -> core::result::Result<clipboard_history_core::protocol::AddResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::AddRequest::response_add_unchecked<Server: std::os::fd::owned::AsFd, Data: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, to: clipboard_history_core::protocol::RingKind, mime_type: clipboard_history_core::protocol::MimeType, data: Data) -> core::result::Result<clipboard_history_core::protocol::AddResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::AddRequest::send<Server: std::os::fd::owned::AsFd, Data: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, to: clipboard_history_core::protocol::RingKind, mime_type: clipboard_history_core::protocol::MimeType, data: Data, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
+impl core::marker::Freeze for clipboard_history_client_sdk::api::AddRequest
+impl core::marker::Send for clipboard_history_client_sdk::api::AddRequest
+impl core::marker::Sync for clipboard_history_client_sdk::api::AddRequest
+impl core::marker::Unpin for clipboard_history_client_sdk::api::AddRequest
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::api::AddRequest
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::api::AddRequest
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::api::AddRequest where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::api::AddRequest::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::api::AddRequest where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::api::AddRequest::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::api::AddRequest::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::api::AddRequest where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::api::AddRequest::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::api::AddRequest::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::api::AddRequest where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::api::AddRequest::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::api::AddRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::AddRequest::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::api::AddRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::AddRequest::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::api::AddRequest
+pub fn clipboard_history_client_sdk::api::AddRequest::from(t: T) -> T
+pub struct clipboard_history_client_sdk::api::GarbageCollectRequest
+impl clipboard_history_client_sdk::api::GarbageCollectRequest
+pub unsafe fn clipboard_history_client_sdk::api::GarbageCollectRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::GarbageCollectResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::response<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, max_wasted_bytes: u64) -> core::result::Result<clipboard_history_core::protocol::GarbageCollectResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::send<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, max_wasted_bytes: u64, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
+impl core::marker::Freeze for clipboard_history_client_sdk::api::GarbageCollectRequest
+impl core::marker::Send for clipboard_history_client_sdk::api::GarbageCollectRequest
+impl core::marker::Sync for clipboard_history_client_sdk::api::GarbageCollectRequest
+impl core::marker::Unpin for clipboard_history_client_sdk::api::GarbageCollectRequest
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::api::GarbageCollectRequest
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::api::GarbageCollectRequest
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::api::GarbageCollectRequest where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::api::GarbageCollectRequest where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::api::GarbageCollectRequest::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::api::GarbageCollectRequest where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::api::GarbageCollectRequest::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::api::GarbageCollectRequest where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::api::GarbageCollectRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::api::GarbageCollectRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::api::GarbageCollectRequest
+pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::from(t: T) -> T
+pub struct clipboard_history_client_sdk::api::MoveToFrontRequest
+impl clipboard_history_client_sdk::api::MoveToFrontRequest
+pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::MoveToFrontResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::response<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64, to: core::option::Option<clipboard_history_core::protocol::RingKind>) -> core::result::Result<clipboard_history_core::protocol::MoveToFrontResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::send<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64, to: core::option::Option<clipboard_history_core::protocol::RingKind>, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
+impl core::marker::Freeze for clipboard_history_client_sdk::api::MoveToFrontRequest
+impl core::marker::Send for clipboard_history_client_sdk::api::MoveToFrontRequest
+impl core::marker::Sync for clipboard_history_client_sdk::api::MoveToFrontRequest
+impl core::marker::Unpin for clipboard_history_client_sdk::api::MoveToFrontRequest
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::api::MoveToFrontRequest
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::api::MoveToFrontRequest
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::api::MoveToFrontRequest where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::api::MoveToFrontRequest where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::api::MoveToFrontRequest::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::api::MoveToFrontRequest where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::api::MoveToFrontRequest::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::api::MoveToFrontRequest where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::api::MoveToFrontRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::api::MoveToFrontRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::api::MoveToFrontRequest
+pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::from(t: T) -> T
+pub struct clipboard_history_client_sdk::api::RemoveRequest
+impl clipboard_history_client_sdk::api::RemoveRequest
+pub unsafe fn clipboard_history_client_sdk::api::RemoveRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::RemoveResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::RemoveRequest::response<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64) -> core::result::Result<clipboard_history_core::protocol::RemoveResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::RemoveRequest::send<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
+impl core::marker::Freeze for clipboard_history_client_sdk::api::RemoveRequest
+impl core::marker::Send for clipboard_history_client_sdk::api::RemoveRequest
+impl core::marker::Sync for clipboard_history_client_sdk::api::RemoveRequest
+impl core::marker::Unpin for clipboard_history_client_sdk::api::RemoveRequest
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::api::RemoveRequest
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::api::RemoveRequest
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::api::RemoveRequest where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::api::RemoveRequest::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::api::RemoveRequest where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::api::RemoveRequest::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::api::RemoveRequest::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::api::RemoveRequest where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::api::RemoveRequest::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::api::RemoveRequest::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::api::RemoveRequest where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::api::RemoveRequest::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::api::RemoveRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::RemoveRequest::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::api::RemoveRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::RemoveRequest::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::api::RemoveRequest
+pub fn clipboard_history_client_sdk::api::RemoveRequest::from(t: T) -> T
+pub struct clipboard_history_client_sdk::api::SwapRequest
+impl clipboard_history_client_sdk::api::SwapRequest
+pub unsafe fn clipboard_history_client_sdk::api::SwapRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::SwapResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::SwapRequest::response<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id1: u64, id2: u64) -> core::result::Result<clipboard_history_core::protocol::SwapResponse, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::SwapRequest::send<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id1: u64, id2: u64, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
+impl core::marker::Freeze for clipboard_history_client_sdk::api::SwapRequest
+impl core::marker::Send for clipboard_history_client_sdk::api::SwapRequest
+impl core::marker::Sync for clipboard_history_client_sdk::api::SwapRequest
+impl core::marker::Unpin for clipboard_history_client_sdk::api::SwapRequest
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::api::SwapRequest
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::api::SwapRequest
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::api::SwapRequest where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::api::SwapRequest::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::api::SwapRequest where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::api::SwapRequest::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::api::SwapRequest::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::api::SwapRequest where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::api::SwapRequest::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::api::SwapRequest::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::api::SwapRequest where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::api::SwapRequest::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::api::SwapRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::SwapRequest::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::api::SwapRequest where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::SwapRequest::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::api::SwapRequest
+pub fn clipboard_history_client_sdk::api::SwapRequest::from(t: T) -> T
+pub fn clipboard_history_client_sdk::api::connect_to_server(addr: &rustix::backend::net::addr::SocketAddrUnix) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::connect_to_server_with(addr: &rustix::backend::net::addr::SocketAddrUnix, flags: rustix::net::types::SocketFlags) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
 pub mod clipboard_history_client_sdk::duplicate_detection
 pub struct clipboard_history_client_sdk::duplicate_detection::DuplicateDetector
 impl clipboard_history_client_sdk::duplicate_detection::DuplicateDetector
@@ -28,55 +167,6 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::duplicate_d
 pub fn clipboard_history_client_sdk::duplicate_detection::DuplicateDetector::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::duplicate_detection::DuplicateDetector
 pub fn clipboard_history_client_sdk::duplicate_detection::DuplicateDetector::from(t: T) -> T
-pub struct clipboard_history_client_sdk::duplicate_detection::RingAndIndex(_)
-impl clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::id(self) -> u64
-pub const fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::index(self) -> u32
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::new(ring: clipboard_history_core::protocol::RingKind, index: u32) -> Self
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::ring(self) -> clipboard_history_core::protocol::RingKind
-impl core::clone::Clone for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::clone(&self) -> clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl core::cmp::Eq for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl core::cmp::Ord for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::cmp(&self, other: &clipboard_history_client_sdk::duplicate_detection::RingAndIndex) -> core::cmp::Ordering
-impl core::cmp::PartialEq for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::eq(&self, other: &clipboard_history_client_sdk::duplicate_detection::RingAndIndex) -> bool
-impl core::cmp::PartialOrd for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::partial_cmp(&self, other: &clipboard_history_client_sdk::duplicate_detection::RingAndIndex) -> core::option::Option<core::cmp::Ordering>
-impl core::hash::Hash for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
-impl core::marker::Copy for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl core::marker::StructuralPartialEq for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl core::marker::Freeze for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl core::marker::Send for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl core::marker::Sync for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl core::marker::Unpin for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where U: core::convert::From<T>
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::into(self) -> U
-impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where U: core::convert::Into<T>
-pub type clipboard_history_client_sdk::duplicate_detection::RingAndIndex::Error = core::convert::Infallible
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
-impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where U: core::convert::TryFrom<T>
-pub type clipboard_history_client_sdk::duplicate_detection::RingAndIndex::Error = <U as core::convert::TryFrom<T>>::Error
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
-impl<T> alloc::borrow::ToOwned for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where T: core::clone::Clone
-pub type clipboard_history_client_sdk::duplicate_detection::RingAndIndex::Owned = T
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::clone_into(&self, target: &mut T)
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::to_owned(&self) -> T
-impl<T> core::any::Any for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where T: 'static + core::marker::Sized
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where T: core::marker::Sized
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where T: core::marker::Sized
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::borrow_mut(&mut self) -> &mut T
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where T: core::clone::Clone
-pub unsafe fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::clone_to_uninit(&self, dst: *mut T)
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::duplicate_detection::RingAndIndex where T: core::marker::Copy
-pub unsafe fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::clone_to_uninit(&self, dst: *mut T)
-impl<T> core::convert::From<T> for clipboard_history_client_sdk::duplicate_detection::RingAndIndex
-pub fn clipboard_history_client_sdk::duplicate_detection::RingAndIndex::from(t: T) -> T
 pub mod clipboard_history_client_sdk::search
 pub enum clipboard_history_client_sdk::search::EntryLocation
 pub clipboard_history_client_sdk::search::EntryLocation::Bucketed
@@ -155,54 +245,6 @@ impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::Que
 pub unsafe fn clipboard_history_client_sdk::search::Query<'a>::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::Query<'a>
 pub fn clipboard_history_client_sdk::search::Query<'a>::from(t: T) -> T
-pub struct clipboard_history_client_sdk::search::BucketAndIndex(_)
-impl clipboard_history_client_sdk::search::BucketAndIndex
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::bucket(&self) -> u8
-pub const fn clipboard_history_client_sdk::search::BucketAndIndex::index(&self) -> u32
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::new(bucket: u8, index: u32) -> Self
-impl core::clone::Clone for clipboard_history_client_sdk::search::BucketAndIndex
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::clone(&self) -> clipboard_history_client_sdk::search::BucketAndIndex
-impl core::cmp::Eq for clipboard_history_client_sdk::search::BucketAndIndex
-impl core::cmp::Ord for clipboard_history_client_sdk::search::BucketAndIndex
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::cmp(&self, other: &clipboard_history_client_sdk::search::BucketAndIndex) -> core::cmp::Ordering
-impl core::cmp::PartialEq for clipboard_history_client_sdk::search::BucketAndIndex
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::eq(&self, other: &clipboard_history_client_sdk::search::BucketAndIndex) -> bool
-impl core::cmp::PartialOrd for clipboard_history_client_sdk::search::BucketAndIndex
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::partial_cmp(&self, other: &clipboard_history_client_sdk::search::BucketAndIndex) -> core::option::Option<core::cmp::Ordering>
-impl core::hash::Hash for clipboard_history_client_sdk::search::BucketAndIndex
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
-impl core::marker::Copy for clipboard_history_client_sdk::search::BucketAndIndex
-impl core::marker::StructuralPartialEq for clipboard_history_client_sdk::search::BucketAndIndex
-impl core::marker::Freeze for clipboard_history_client_sdk::search::BucketAndIndex
-impl core::marker::Send for clipboard_history_client_sdk::search::BucketAndIndex
-impl core::marker::Sync for clipboard_history_client_sdk::search::BucketAndIndex
-impl core::marker::Unpin for clipboard_history_client_sdk::search::BucketAndIndex
-impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::search::BucketAndIndex
-impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::search::BucketAndIndex
-impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::search::BucketAndIndex where U: core::convert::From<T>
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::into(self) -> U
-impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::search::BucketAndIndex where U: core::convert::Into<T>
-pub type clipboard_history_client_sdk::search::BucketAndIndex::Error = core::convert::Infallible
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
-impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::search::BucketAndIndex where U: core::convert::TryFrom<T>
-pub type clipboard_history_client_sdk::search::BucketAndIndex::Error = <U as core::convert::TryFrom<T>>::Error
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
-impl<T> alloc::borrow::ToOwned for clipboard_history_client_sdk::search::BucketAndIndex where T: core::clone::Clone
-pub type clipboard_history_client_sdk::search::BucketAndIndex::Owned = T
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::clone_into(&self, target: &mut T)
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::to_owned(&self) -> T
-impl<T> core::any::Any for clipboard_history_client_sdk::search::BucketAndIndex where T: 'static + core::marker::Sized
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::BucketAndIndex where T: core::marker::Sized
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::BucketAndIndex where T: core::marker::Sized
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::borrow_mut(&mut self) -> &mut T
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::BucketAndIndex where T: core::clone::Clone
-pub unsafe fn clipboard_history_client_sdk::search::BucketAndIndex::clone_to_uninit(&self, dst: *mut T)
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::BucketAndIndex where T: core::marker::Copy
-pub unsafe fn clipboard_history_client_sdk::search::BucketAndIndex::clone_to_uninit(&self, dst: *mut T)
-impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::BucketAndIndex
-pub fn clipboard_history_client_sdk::search::BucketAndIndex::from(t: T) -> T
 pub struct clipboard_history_client_sdk::search::QueryResult
 pub clipboard_history_client_sdk::search::QueryResult::end: usize
 pub clipboard_history_client_sdk::search::QueryResult::location: clipboard_history_client_sdk::search::EntryLocation
@@ -511,14 +553,4 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::RingReader<
 pub fn clipboard_history_client_sdk::RingReader<'a>::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::RingReader<'a>
 pub fn clipboard_history_client_sdk::RingReader<'a>::from(t: T) -> T
-pub fn clipboard_history_client_sdk::add<Server: std::os::fd::owned::AsFd, Data: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, to: clipboard_history_core::protocol::RingKind, mime_type: clipboard_history_core::protocol::MimeType, data: Data) -> core::result::Result<clipboard_history_core::protocol::AddResponse, clipboard_history_client_sdk::ClientError>
-pub fn clipboard_history_client_sdk::add_unchecked<Server: std::os::fd::owned::AsFd, Data: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, to: clipboard_history_core::protocol::RingKind, mime_type: clipboard_history_core::protocol::MimeType, data: Data) -> core::result::Result<clipboard_history_core::protocol::AddResponse, clipboard_history_client_sdk::ClientError>
-pub fn clipboard_history_client_sdk::connect_to_server(addr: &rustix::backend::net::addr::SocketAddrUnix) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
-pub fn clipboard_history_client_sdk::connect_to_server_with(addr: &rustix::backend::net::addr::SocketAddrUnix, flags: rustix::net::types::SocketFlags) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
-pub fn clipboard_history_client_sdk::garbage_collect<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, max_wasted_bytes: u64) -> core::result::Result<clipboard_history_core::protocol::GarbageCollectResponse, clipboard_history_client_sdk::ClientError>
-pub fn clipboard_history_client_sdk::move_to_front<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64, to: core::option::Option<clipboard_history_core::protocol::RingKind>) -> core::result::Result<clipboard_history_core::protocol::MoveToFrontResponse, clipboard_history_client_sdk::ClientError>
-pub unsafe fn clipboard_history_client_sdk::recv_add<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::AddResponse, clipboard_history_client_sdk::ClientError>
-pub fn clipboard_history_client_sdk::remove<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64) -> core::result::Result<clipboard_history_core::protocol::RemoveResponse, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (impl core::iter::traits::iterator::Iterator<Item = core::result::Result<clipboard_history_client_sdk::search::QueryResult, clipboard_history_core::Error>>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>>)
-pub fn clipboard_history_client_sdk::send_add<Server: std::os::fd::owned::AsFd, Data: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, to: clipboard_history_core::protocol::RingKind, mime_type: clipboard_history_core::protocol::MimeType, data: Data, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
-pub fn clipboard_history_client_sdk::swap<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id1: u64, id2: u64) -> core::result::Result<clipboard_history_core::protocol::SwapResponse, clipboard_history_client_sdk::ClientError>

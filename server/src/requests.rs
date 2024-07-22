@@ -56,16 +56,16 @@ pub fn handle(
     let request = unsafe { &request_data.as_ptr().cast::<Request>().read_unaligned() };
 
     info!("Processing request: {request:?}");
-    match request {
-        &Request::Add { to, ref mime_type } => {
+    match *request {
+        Request::Add { to, ref mime_type } => {
             add(control_data, send_bufs, allocator, to, mime_type).map(Some)
         }
-        &Request::MoveToFront { id, to } => {
+        Request::MoveToFront { id, to } => {
             reply(send_bufs, [allocator.move_to_front(id, to)?]).map(Some)
         }
-        &Request::Swap { id1, id2 } => reply(send_bufs, [allocator.swap(id1, id2)?]).map(Some),
-        &Request::Remove { id } => reply(send_bufs, [allocator.remove(id)?]).map(Some),
-        &Request::GarbageCollect { max_wasted_bytes } => {
+        Request::Swap { id1, id2 } => reply(send_bufs, [allocator.swap(id1, id2)?]).map(Some),
+        Request::Remove { id } => reply(send_bufs, [allocator.remove(id)?]).map(Some),
+        Request::GarbageCollect { max_wasted_bytes } => {
             reply(send_bufs, [allocator.gc(max_wasted_bytes)?]).map(Some)
         }
     }

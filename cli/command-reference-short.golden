@@ -12,7 +12,6 @@ Commands:
   swap             Swap the positions of two entries
   remove           Delete an entry from the database
   wipe             Wipe the entire database
-  reload-settings  Reload configuration files on the server
   migrate          Migrate from other clipboard managers to Ringboard
   garbage-collect  Run garbage collection on the database
   debug            Debugging tools for developers
@@ -133,23 +132,13 @@ Options:
 
 ---
 
-Reload configuration files on the server
-
-Usage: clipboard-history reload-settings [OPTIONS]
-
-Options:
-  -c, --config <CONFIG>  Use this configuration file instead of the default one
-  -h, --help             Print help (use `--help` for more detail)
-
----
-
 Migrate from other clipboard managers to Ringboard
 
 Usage: clipboard-history migrate <FROM> [DATABASE]
 
 Arguments:
   <FROM>      The existing clipboard to migrate from [possible values: gnome-clipboard-history,
-              clipboard-indicator, json]
+              clipboard-indicator, g-paste, json]
   [DATABASE]  The existing clipboard's database location
 
 Options:
@@ -175,7 +164,7 @@ Usage: clipboard-history debug <COMMAND>
 
 Commands:
   stats     Print statistics about the Ringboard database
-  dump      Dump the contents of the database for analysis
+  dump      Dump the database contents for analysis
   generate  Generate a pseudo-random database for testing and performance tuning purposes
   fuzz      Spam the server with random commands
   help      Print this message or the help of the given subcommand(s)
@@ -194,14 +183,12 @@ Options:
 
 ---
 
-Dump the contents of the database for analysis
+Dump the database contents for analysis
 
-Usage: clipboard-history debug dump [OPTIONS]
+Usage: clipboard-history debug dump
 
 Options:
-  -w, --watch  Instead of dumping the existing database contents, watch for new entries as they come
-               in
-  -h, --help   Print help (use `--help` for more detail)
+  -h, --help  Print help (use `--help` for more detail)
 
 ---
 
@@ -235,7 +222,7 @@ Usage: clipboard-history debug help [COMMAND]
 
 Commands:
   stats     Print statistics about the Ringboard database
-  dump      Dump the contents of the database for analysis
+  dump      Dump the database contents for analysis
   generate  Generate a pseudo-random database for testing and performance tuning purposes
   fuzz      Spam the server with random commands
   help      Print this message or the help of the given subcommand(s)
@@ -248,7 +235,7 @@ Usage: clipboard-history debug help stats
 
 ---
 
-Dump the contents of the database for analysis
+Dump the database contents for analysis
 
 Usage: clipboard-history debug help dump
 
@@ -286,7 +273,6 @@ Commands:
   swap             Swap the positions of two entries
   remove           Delete an entry from the database
   wipe             Wipe the entire database
-  reload-settings  Reload configuration files on the server
   migrate          Migrate from other clipboard managers to Ringboard
   garbage-collect  Run garbage collection on the database
   debug            Debugging tools for developers
@@ -348,12 +334,6 @@ Usage: clipboard-history help wipe
 
 ---
 
-Reload configuration files on the server
-
-Usage: clipboard-history help reload-settings
-
----
-
 Migrate from other clipboard managers to Ringboard
 
 Usage: clipboard-history help migrate
@@ -372,7 +352,7 @@ Usage: clipboard-history help debug [COMMAND]
 
 Commands:
   stats     Print statistics about the Ringboard database
-  dump      Dump the contents of the database for analysis
+  dump      Dump the database contents for analysis
   generate  Generate a pseudo-random database for testing and performance tuning purposes
   fuzz      Spam the server with random commands
 
@@ -384,7 +364,7 @@ Usage: clipboard-history help debug stats
 
 ---
 
-Dump the contents of the database for analysis
+Dump the database contents for analysis
 
 Usage: clipboard-history help debug dump
 

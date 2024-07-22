@@ -532,6 +532,7 @@ impl Allocator {
             .map(|bytes_freed| GarbageCollectResponse { bytes_freed })
     }
 
+    #[allow(clippy::too_many_lines)]
     fn gc_(&mut self, max_wasted_bytes: u64) -> Result<u64, CliError> {
         const MIN_BYTES_TO_FREE: u64 = 1 << 14;
 
@@ -668,8 +669,11 @@ impl Allocator {
                 }
             }
         }
-        let swappable_allocations = swappable_allocations
-            .map(|heap| BinaryHeap::from_iter(heap.into_iter().map(|Reverse(item)| item)));
+        let swappable_allocations = swappable_allocations.map(|heap| {
+            heap.into_iter()
+                .map(|Reverse(item)| item)
+                .collect::<BinaryHeap<_>>()
+        });
 
         let mut pending_frees = Vec::with_capacity(usize::try_from(layers_to_remove).unwrap());
         let mut bytes_freed = 0;
@@ -731,7 +735,7 @@ impl Allocator {
             {
                 let r = swap();
                 free_slots.append(&mut pending_frees);
-                r?
+                r?;
             }
 
             let drop_count =

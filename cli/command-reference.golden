@@ -16,7 +16,6 @@ Commands:
   swap             Swap the positions of two entries
   remove           Delete an entry from the database
   wipe             Wipe the entire database
-  reload-settings  Reload configuration files on the server
   migrate          Migrate from other clipboard managers to Ringboard
   garbage-collect  Run garbage collection on the database
   debug            Debugging tools for developers
@@ -184,19 +183,6 @@ Options:
 
 ---
 
-Reload configuration files on the server
-
-Usage: clipboard-history reload-settings [OPTIONS]
-
-Options:
-  -c, --config <CONFIG>
-          Use this configuration file instead of the default one
-
-  -h, --help
-          Print help (use `-h` for a summary)
-
----
-
 Migrate from other clipboard managers to Ringboard
 
 Usage: clipboard-history migrate <FROM> [DATABASE]
@@ -210,6 +196,7 @@ Arguments:
             History](https://extensions.gnome.org/extension/4839/clipboard-history/)
           - clipboard-indicator:     [Clipboard
             Indicator](https://extensions.gnome.org/extension/779/clipboard-indicator/)
+          - g-paste:                 [GPaste](https://github.com/Keruspe/GPaste)
           - json:                    A sequence of JSON objects in the same format as the dump
             command
 
@@ -249,7 +236,7 @@ Usage: clipboard-history debug <COMMAND>
 
 Commands:
   stats     Print statistics about the Ringboard database
-  dump      Dump the contents of the database for analysis
+  dump      Dump the database contents for analysis
   generate  Generate a pseudo-random database for testing and performance tuning purposes
   fuzz      Spam the server with random commands
   help      Print this message or the help of the given subcommand(s)
@@ -270,21 +257,25 @@ Options:
 
 ---
 
-Dump the contents of the database for analysis.
+Dump the database contents for analysis.
 
-The JSON format is as follows:
- {
- "id": int64,
- "kind": "Human" | "Bytes",
- "data": (UTF-8 | base64) string
- }
+The JSON format is as follows: 
+[ 
+  { 
+    "id": int64, 
+    "kind": "Human" | "Bytes", 
+    "data": (UTF-8 | base64) string 
+  }, 
+  ... 
+]
 
-Usage: clipboard-history debug dump [OPTIONS]
+Note that `$ ringboard migrate json` expects a JSON stream (wherein each object appears on its own
+line instead of being in a list). To import an export, you can convert the JSON array to a stream
+with `$ ... | jq -c .[]`.
+
+Usage: clipboard-history debug dump
 
 Options:
-  -w, --watch
-          Instead of dumping the existing database contents, watch for new entries as they come in
-
   -h, --help
           Print help (use `-h` for a summary)
 
@@ -346,7 +337,7 @@ Usage: clipboard-history debug help [COMMAND]
 
 Commands:
   stats     Print statistics about the Ringboard database
-  dump      Dump the contents of the database for analysis
+  dump      Dump the database contents for analysis
   generate  Generate a pseudo-random database for testing and performance tuning purposes
   fuzz      Spam the server with random commands
   help      Print this message or the help of the given subcommand(s)
@@ -359,7 +350,7 @@ Usage: clipboard-history debug help stats
 
 ---
 
-Dump the contents of the database for analysis
+Dump the database contents for analysis
 
 Usage: clipboard-history debug help dump
 
@@ -397,7 +388,6 @@ Commands:
   swap             Swap the positions of two entries
   remove           Delete an entry from the database
   wipe             Wipe the entire database
-  reload-settings  Reload configuration files on the server
   migrate          Migrate from other clipboard managers to Ringboard
   garbage-collect  Run garbage collection on the database
   debug            Debugging tools for developers
@@ -459,12 +449,6 @@ Usage: clipboard-history help wipe
 
 ---
 
-Reload configuration files on the server
-
-Usage: clipboard-history help reload-settings
-
----
-
 Migrate from other clipboard managers to Ringboard
 
 Usage: clipboard-history help migrate
@@ -483,7 +467,7 @@ Usage: clipboard-history help debug [COMMAND]
 
 Commands:
   stats     Print statistics about the Ringboard database
-  dump      Dump the contents of the database for analysis
+  dump      Dump the database contents for analysis
   generate  Generate a pseudo-random database for testing and performance tuning purposes
   fuzz      Spam the server with random commands
 
@@ -495,7 +479,7 @@ Usage: clipboard-history help debug stats
 
 ---
 
-Dump the contents of the database for analysis
+Dump the database contents for analysis
 
 Usage: clipboard-history help debug dump
 

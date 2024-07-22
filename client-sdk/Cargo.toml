@@ -17,7 +17,7 @@ ringboard-core = { package = "clipboard-history-core", version = "0", path = "..
 rustc-hash = "2.0.0"
 rustix = { version = "0.38.34", features = ["net", "fs", "thread"] }
 smallvec = "1.13.2"
-thiserror = "1.0.62"
+thiserror = "1.0.63"
 
 [dev-dependencies]
 supercilex-tests = { version = "0.4.6", default-features = false, features = ["api"] }

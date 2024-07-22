@@ -21,7 +21,7 @@ log = { version = "0.4.22", features = ["release_max_level_info"] }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../ringboard" }
 rustix = { version = "0.38.34", features = ["fs", "process", "net", "io_uring"] }
 sd-notify = { version = "0.4.2", optional = true }
-thiserror = "1.0.62"
+thiserror = "1.0.63"
 
 [features]
 default = ["human-logs"]
