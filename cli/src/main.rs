@@ -1,4 +1,5 @@
 #![feature(debug_closure_helpers)]
+#![feature(let_chains)]
 
 use std::{
     borrow::Cow,
@@ -280,7 +281,12 @@ enum MigrateFromClipboard {
     #[value(alias = "ci")]
     ClipboardIndicator,
 
+    /// [GPaste](https://github.com/Keruspe/GPaste)
+    #[value(aliases = ["gp", "gpaste"])]
+    GPaste,
+
     /// A sequence of JSON objects in the same format as the dump command.
+    #[value(aliases = ["rb", "ring", "ringboard"])]
     Json,
 }
 
@@ -350,6 +356,10 @@ enum CliError {
     DatabaseNotFound(PathBuf),
     #[error("JSON (de)serialization failed.")]
     SerdeJson(#[from] serde_json::Error),
+    #[error("Quick XML (de)serialization failed.")]
+    QuickXml(#[from] quick_xml::Error),
+    #[error("Serde XML (de)serialization failed.")]
+    QuickXmlDe(#[from] quick_xml::DeError),
     #[error("Regex instantiation failed.")]
     Regex(#[from] regex::Error),
     #[error("An internal error occurred in search.")]
@@ -397,6 +407,8 @@ fn main() -> error_stack::Result<(), Wrapper> {
             }
             CliError::Fuc(e) => Report::new(e).change_context(wrapper),
             CliError::SerdeJson(e) => Report::new(e).change_context(wrapper),
+            CliError::QuickXml(e) => Report::new(e).change_context(wrapper),
+            CliError::QuickXmlDe(e) => Report::new(e).change_context(wrapper),
             CliError::Regex(e) => Report::new(e).change_context(wrapper),
             CliError::InternalSearchError => Report::new(wrapper).attach_printable(
                 "Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new",
@@ -758,6 +770,7 @@ fn migrate(
         MigrateFromClipboard::ClipboardIndicator => {
             migrate_from_clipboard_indicator(server, addr, database)
         }
+        MigrateFromClipboard::GPaste => migrate_from_gpaste(server, addr, database),
         MigrateFromClipboard::Json => {
             migrate_from_ringboard_export(server, addr, database.unwrap())
         }
@@ -939,7 +952,7 @@ fn migrate_from_clipboard_indicator(
         Ok(file)
     }
 
-    let database_file = {
+    let database_dir = {
         let database = database
             .or_else(|| {
                 dirs::cache_dir().map(|mut f| {
@@ -948,7 +961,7 @@ fn migrate_from_clipboard_indicator(
                 })
             })
             .ok_or_else(|| io::Error::from(ErrorKind::NotFound))
-            .map_io_err(|| "Failed to find Clipboard Indicator directory file.")?;
+            .map_io_err(|| "Failed to find Clipboard Indicator directory path.")?;
         openat(
             CWD,
             &*database,
@@ -959,7 +972,7 @@ fn migrate_from_clipboard_indicator(
     };
     let registry_file = File::from(
         openat(
-            &database_file,
+            &database_dir,
             c"registry.txt",
             OFlags::RDONLY,
             Mode::empty(),
@@ -986,14 +999,10 @@ fn migrate_from_clipboard_indicator(
         {
             generate_entry_file(contents)?
         } else if mimetype.starts_with("image/") {
+            let contents = contents.rsplit('/').next().unwrap_or(contents);
             File::from(
-                openat(
-                    &database_file,
-                    contents.rsplit('/').next().unwrap_or(contents),
-                    OFlags::RDONLY,
-                    Mode::empty(),
-                )
-                .map_io_err(|| format!("Failed to open data file: {contents:?}"))?,
+                openat(&database_dir, contents, OFlags::RDONLY, Mode::empty())
+                    .map_io_err(|| format!("Failed to open data file: {contents:?}"))?,
             )
         } else {
             continue;
@@ -1010,6 +1019,156 @@ fn migrate_from_clipboard_indicator(
                     RingKind::Main
                 },
                 mimetype,
+                None,
+                &mut pending_adds,
+            )?;
+        }
+    }
+
+    unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
+}
+
+fn migrate_from_gpaste(
+    server: OwnedFd,
+    addr: &SocketAddrUnix,
+    database: Option<PathBuf>,
+) -> Result<(), CliError> {
+    #[derive(Deserialize, Debug)]
+    struct History {
+        #[serde(rename = "@version")]
+        _version: String,
+        #[serde(rename = "item")]
+        items: Vec<Item>,
+    }
+
+    #[derive(Deserialize, Debug)]
+    enum ItemKind {
+        Text,
+        Image,
+        Uris,
+    }
+
+    #[derive(Deserialize, Debug)]
+    struct Item {
+        #[serde(rename = "@kind")]
+        kind: ItemKind,
+        #[serde(rename = "value")]
+        values: Vec<String>,
+    }
+
+    fn generate_entry_file(data: &str) -> Result<File, CliError> {
+        let file = File::from(
+            memfd_create(c"ringboard_gpaste", MemfdFlags::empty())
+                .map_io_err(|| "Failed to create data entry file.")?,
+        );
+
+        file.write_all_at(data.as_bytes(), 0)
+            .map_io_err(|| "Failed to copy data to entry file.")?;
+
+        Ok(file)
+    }
+
+    let database_dir = {
+        let database = database
+            .or_else(|| {
+                dirs::data_local_dir().map(|mut f| {
+                    f.push("gpaste");
+                    f
+                })
+            })
+            .ok_or_else(|| io::Error::from(ErrorKind::NotFound))
+            .map_io_err(|| "Failed to find GPaste directory path.")?;
+        openat(
+            CWD,
+            &*database,
+            OFlags::DIRECTORY | OFlags::PATH,
+            Mode::empty(),
+        )
+        .map_io_err(|| format!("Failed to open directory: {database:?}"))?
+    };
+    let mut history_file = File::from(
+        openat(&database_dir, c"history.xml", OFlags::RDONLY, Mode::empty())
+            .map_io_err(|| "Failed to open history file.")?,
+    );
+    let images_dir = openat(
+        database_dir,
+        c"images",
+        OFlags::DIRECTORY | OFlags::PATH,
+        Mode::empty(),
+    )
+    .map_io_err(|| "Failed to open images dir")?;
+
+    {
+        let mut reader = quick_xml::Reader::from_reader(BufReader::new(&history_file));
+        let mut buf = Vec::new();
+        let unsupported = Err(io::Error::from(ErrorKind::Unsupported))
+            .map_io_err(|| "The GPaste v2.0 data format is the only one currently supported.");
+        loop {
+            use quick_xml::events::Event;
+            match reader.read_event_into(&mut buf)? {
+                Event::Eof => {
+                    return Err(io::Error::from(ErrorKind::UnexpectedEof))
+                        .map_io_err(|| "GPaste history file appears to be corrupted.")?;
+                }
+                Event::Start(e) => match e.name().as_ref() {
+                    b"history" => {
+                        if let Some(s) = e.try_get_attribute("version")?
+                            && s.value.as_ref() == b"2.0"
+                        {
+                            break;
+                        } else {
+                            return unsupported?;
+                        }
+                    }
+                    _ => {
+                        return unsupported?;
+                    }
+                },
+                _ => (),
+            }
+            buf.clear();
+        }
+    }
+
+    history_file
+        .seek(SeekFrom::Start(0))
+        .map_io_err(|| "Failed to reset history file offset.")?;
+    let mut pending_adds = 0;
+    for Item { kind, values } in
+        quick_xml::de::from_reader::<_, History>(BufReader::new(history_file))?
+            .items
+            .into_iter()
+            .rev()
+    {
+        let Some(value) = values.first() else {
+            continue;
+        };
+        if value.is_empty() {
+            continue;
+        }
+
+        let (data, mime) = match kind {
+            ItemKind::Text | ItemKind::Uris => (generate_entry_file(value)?, MimeType::new_const()),
+            ItemKind::Image => (
+                {
+                    let value = value.rsplit('/').next().unwrap_or(value);
+                    File::from(
+                        openat(&images_dir, value, OFlags::RDONLY, Mode::empty())
+                            .map_io_err(|| format!("Failed to open data file: {value:?}"))?,
+                    )
+                },
+                // https://github.com/Keruspe/GPaste/blob/3a88a878328dfddae712f8dfe2d351f08b356d50/src/daemon/tmp/gpaste-image-item.c#L278
+                MimeType::from("image/png").unwrap(),
+            ),
+        };
+
+        unsafe {
+            pipeline_add_request(
+                &server,
+                addr,
+                data,
+                RingKind::Main,
+                mime,
                 None,
                 &mut pending_adds,
             )?;
