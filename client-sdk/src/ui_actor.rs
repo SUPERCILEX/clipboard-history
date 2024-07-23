@@ -66,7 +66,7 @@ pub enum Message {
     Error(CommandError),
     LoadedFirstPage {
         entries: Box<[UiEntry]>,
-        first_non_favorite_id: Option<u64>,
+        default_focused_id: Option<u64>,
     },
     EntryDetails {
         id: u64,
@@ -226,7 +226,15 @@ fn handle_command<'a, Server: AsFd>(
             }
             Ok(Some(Message::LoadedFirstPage {
                 entries: entries.into(),
-                first_non_favorite_id: database.main().rev().nth(1).as_ref().map(Entry::id),
+                default_focused_id: {
+                    let mut main = database.main().rev();
+                    let first = main.next();
+                    main.next()
+                        .or(first)
+                        .or_else(|| database.favorites().next_back())
+                        .as_ref()
+                        .map(Entry::id)
+                },
             }))
         }
         Command::GetDetails { entry, with_text } => {

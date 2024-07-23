@@ -145,11 +145,11 @@ fn handle_message(
         Message::Error(e) => *last_error = Some(e),
         Message::LoadedFirstPage {
             entries,
-            first_non_favorite_id,
+            default_focused_id,
         } => {
             *loaded_entries = entries;
             if highlighted_id.is_none() {
-                *highlighted_id = first_non_favorite_id;
+                *highlighted_id = default_focused_id;
             }
         }
         Message::EntryDetails { id, result } => {
