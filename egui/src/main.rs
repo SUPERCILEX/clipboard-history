@@ -1,6 +1,5 @@
 use std::{
     error::Error,
-    mem,
     sync::{
         mpsc,
         mpsc::{Receiver, Sender},
@@ -296,8 +295,8 @@ fn main_ui(
         show_error(ui, e);
         return;
     };
-    if let Some(e) = mem::take(&mut state.last_error) {
-        show_error(ui, &e);
+    if let Some(e) = &state.last_error {
+        show_error(ui, e);
     }
 
     let mut try_scroll = false;

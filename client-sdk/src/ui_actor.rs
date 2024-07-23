@@ -4,7 +4,7 @@ use std::{
     collections::{BinaryHeap, HashMap},
     hash::BuildHasherDefault,
     iter::once,
-    os::fd::{AsFd, BorrowedFd},
+    os::fd::{AsFd, BorrowedFd, OwnedFd},
     str,
     sync::Arc,
 };
@@ -106,22 +106,32 @@ pub fn controller<T>(
     commands: impl IntoIterator<Item = Command>,
     mut send: impl FnMut(Message) -> Result<(), T>,
 ) {
-    let server = {
-        match {
-            let socket_file = socket_file();
-            SocketAddrUnix::new(&socket_file)
-                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))
-        }
-        .map_err(ClientError::from)
-        .and_then(|server_addr| Ok((connect_to_server(&server_addr)?, server_addr)))
-        {
-            Ok(server) => server,
-            Err(e) => {
-                let _ = send(Message::FatalServerConnect(e));
-                return;
+    fn maybe_init_server(
+        cache: &mut Option<(OwnedFd, SocketAddrUnix)>,
+    ) -> Result<(impl AsFd + '_, &SocketAddrUnix), ClientError> {
+        if cache.is_some() {
+            let (sock, addr) = cache.as_ref().unwrap();
+            Ok((sock, addr))
+        } else {
+            match {
+                let socket_file = socket_file();
+                SocketAddrUnix::new(&socket_file)
+                    .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))
+            }
+            .map_err(ClientError::from)
+            .and_then(|server_addr| Ok((connect_to_server(&server_addr)?, server_addr)))
+            {
+                Ok(s) => {
+                    *cache = Some(s);
+                    let (sock, addr) = cache.as_ref().unwrap();
+                    Ok((sock, addr))
+                }
+                Err(e) => Err(e),
             }
         }
-    };
+    }
+
+    let mut server = None;
     let ((mut database, reader), rings) = {
         let run = || {
             let mut dir = data_dir();
@@ -157,7 +167,7 @@ pub fn controller<T>(
     for command in once(Command::LoadFirstPage).chain(commands) {
         let result = handle_command(
             command,
-            (&server.0, &server.1),
+            || maybe_init_server(&mut server),
             &mut database,
             &mut reader,
             &(&rings.0, &rings.1),
@@ -175,9 +185,9 @@ pub fn controller<T>(
 }
 
 #[allow(clippy::too_many_lines)]
-fn handle_command(
+fn handle_command<'a, Server: AsFd>(
     command: Command,
-    server: (impl AsFd, &SocketAddrUnix),
+    server: impl FnOnce() -> Result<(Server, &'a SocketAddrUnix), ClientError>,
     database: &mut DatabaseReader,
     reader_: &mut Option<EntryReader>,
     rings: &(impl AsFd, impl AsFd),
@@ -240,9 +250,10 @@ fn handle_command(
             }))
         }
         ref c @ (Command::Favorite(id) | Command::Unfavorite(id)) => {
+            let (server, addr) = server()?;
             match MoveToFrontRequest::response(
-                server.0,
-                server.1,
+                server,
+                addr,
                 id,
                 Some(match c {
                     Command::Favorite(_) => RingKind::Favorites,
@@ -256,7 +267,8 @@ fn handle_command(
             Ok(None)
         }
         Command::Delete(id) => {
-            match RemoveRequest::response(server.0, server.1, id)? {
+            let (server, addr) = server()?;
+            match RemoveRequest::response(server, addr, id)? {
                 RemoveResponse { error: Some(e) } => return Err(e.into()),
                 RemoveResponse { error: None } => {}
             }
