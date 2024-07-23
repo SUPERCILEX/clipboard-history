@@ -285,12 +285,224 @@ pub unsafe fn clipboard_history_client_sdk::search::QueryResult::clone_to_uninit
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::QueryResult
 pub fn clipboard_history_client_sdk::search::QueryResult::from(t: T) -> T
 pub fn clipboard_history_client_sdk::search::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (impl core::iter::traits::iterator::Iterator<Item = core::result::Result<clipboard_history_client_sdk::search::QueryResult, clipboard_history_core::Error>>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>>)
+pub mod clipboard_history_client_sdk::ui_actor
+pub enum clipboard_history_client_sdk::ui_actor::Command
+pub clipboard_history_client_sdk::ui_actor::Command::Delete(u64)
+pub clipboard_history_client_sdk::ui_actor::Command::Favorite(u64)
+pub clipboard_history_client_sdk::ui_actor::Command::GetDetails
+pub clipboard_history_client_sdk::ui_actor::Command::GetDetails::entry: clipboard_history_client_sdk::Entry
+pub clipboard_history_client_sdk::ui_actor::Command::GetDetails::with_text: bool
+pub clipboard_history_client_sdk::ui_actor::Command::LoadFirstPage
+pub clipboard_history_client_sdk::ui_actor::Command::RefreshDb
+pub clipboard_history_client_sdk::ui_actor::Command::Search
+pub clipboard_history_client_sdk::ui_actor::Command::Search::query: alloc::string::String
+pub clipboard_history_client_sdk::ui_actor::Command::Search::regex: bool
+pub clipboard_history_client_sdk::ui_actor::Command::Unfavorite(u64)
+impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::Command
+pub fn clipboard_history_client_sdk::ui_actor::Command::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_client_sdk::ui_actor::Command
+impl core::marker::Send for clipboard_history_client_sdk::ui_actor::Command
+impl core::marker::Sync for clipboard_history_client_sdk::ui_actor::Command
+impl core::marker::Unpin for clipboard_history_client_sdk::ui_actor::Command
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ui_actor::Command
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ui_actor::Command
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::ui_actor::Command where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::ui_actor::Command::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::ui_actor::Command where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::ui_actor::Command::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::ui_actor::Command::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::ui_actor::Command where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::ui_actor::Command::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::ui_actor::Command::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::ui_actor::Command where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::Command::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::ui_actor::Command where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::Command::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::ui_actor::Command where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::Command::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::ui_actor::Command
+pub fn clipboard_history_client_sdk::ui_actor::Command::from(t: T) -> T
+pub enum clipboard_history_client_sdk::ui_actor::CommandError
+pub clipboard_history_client_sdk::ui_actor::CommandError::Core(clipboard_history_core::Error)
+pub clipboard_history_client_sdk::ui_actor::CommandError::Regex(regex::error::Error)
+pub clipboard_history_client_sdk::ui_actor::CommandError::Sdk(clipboard_history_client_sdk::ClientError)
+impl core::convert::From<clipboard_history_client_sdk::ClientError> for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(source: clipboard_history_client_sdk::ClientError) -> Self
+impl core::convert::From<clipboard_history_core::Error> for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(source: clipboard_history_core::Error) -> Self
+impl core::convert::From<clipboard_history_core::protocol::IdNotFoundError> for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(value: clipboard_history_core::protocol::IdNotFoundError) -> Self
+impl core::convert::From<regex::error::Error> for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(source: regex::error::Error) -> Self
+impl core::error::Error for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::fmt(&self, __formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_client_sdk::ui_actor::CommandError
+impl core::marker::Send for clipboard_history_client_sdk::ui_actor::CommandError
+impl core::marker::Sync for clipboard_history_client_sdk::ui_actor::CommandError
+impl core::marker::Unpin for clipboard_history_client_sdk::ui_actor::CommandError
+impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ui_actor::CommandError
+impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ui_actor::CommandError
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::ui_actor::CommandError where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::ui_actor::CommandError where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::ui_actor::CommandError::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::ui_actor::CommandError where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::ui_actor::CommandError::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::string::ToString for clipboard_history_client_sdk::ui_actor::CommandError where T: core::fmt::Display + core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::to_string(&self) -> alloc::string::String
+impl<T> core::any::Any for clipboard_history_client_sdk::ui_actor::CommandError where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::ui_actor::CommandError where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::ui_actor::CommandError where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(t: T) -> T
+pub enum clipboard_history_client_sdk::ui_actor::Message
+pub clipboard_history_client_sdk::ui_actor::Message::EntryDetails
+pub clipboard_history_client_sdk::ui_actor::Message::EntryDetails::id: u64
+pub clipboard_history_client_sdk::ui_actor::Message::EntryDetails::result: core::result::Result<clipboard_history_client_sdk::ui_actor::DetailedEntry, clipboard_history_core::Error>
+pub clipboard_history_client_sdk::ui_actor::Message::Error(clipboard_history_client_sdk::ui_actor::CommandError)
+pub clipboard_history_client_sdk::ui_actor::Message::FatalDbOpen(clipboard_history_core::Error)
+pub clipboard_history_client_sdk::ui_actor::Message::FatalServerConnect(clipboard_history_client_sdk::ClientError)
+pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage
+pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage::entries: alloc::vec::Vec<clipboard_history_client_sdk::ui_actor::UiEntry>
+pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage::first_non_favorite_id: core::option::Option<u64>
+pub clipboard_history_client_sdk::ui_actor::Message::SearchResults(alloc::vec::Vec<clipboard_history_client_sdk::ui_actor::UiEntry>)
+impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::Message
+pub fn clipboard_history_client_sdk::ui_actor::Message::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_client_sdk::ui_actor::Message
+impl core::marker::Send for clipboard_history_client_sdk::ui_actor::Message
+impl core::marker::Sync for clipboard_history_client_sdk::ui_actor::Message
+impl core::marker::Unpin for clipboard_history_client_sdk::ui_actor::Message
+impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ui_actor::Message
+impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ui_actor::Message
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::ui_actor::Message where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::ui_actor::Message::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::ui_actor::Message where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::ui_actor::Message::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::ui_actor::Message::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::ui_actor::Message where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::ui_actor::Message::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::ui_actor::Message::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::ui_actor::Message where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::Message::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::ui_actor::Message where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::Message::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::ui_actor::Message where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::Message::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::ui_actor::Message
+pub fn clipboard_history_client_sdk::ui_actor::Message::from(t: T) -> T
+pub enum clipboard_history_client_sdk::ui_actor::UiEntryCache
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary::context: alloc::string::String
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary::mime_type: alloc::string::String
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Error(alloc::string::String)
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Image
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Image::uri: alloc::string::String
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Text
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Text::one_liner: alloc::string::String
+impl core::clone::Clone for clipboard_history_client_sdk::ui_actor::UiEntryCache
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::clone(&self) -> clipboard_history_client_sdk::ui_actor::UiEntryCache
+impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::UiEntryCache
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_client_sdk::ui_actor::UiEntryCache
+impl core::marker::Send for clipboard_history_client_sdk::ui_actor::UiEntryCache
+impl core::marker::Sync for clipboard_history_client_sdk::ui_actor::UiEntryCache
+impl core::marker::Unpin for clipboard_history_client_sdk::ui_actor::UiEntryCache
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ui_actor::UiEntryCache
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ui_actor::UiEntryCache
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::ui_actor::UiEntryCache where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::ui_actor::UiEntryCache where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::ui_actor::UiEntryCache::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::ui_actor::UiEntryCache where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::ui_actor::UiEntryCache::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_client_sdk::ui_actor::UiEntryCache where T: core::clone::Clone
+pub type clipboard_history_client_sdk::ui_actor::UiEntryCache::Owned = T
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::clone_into(&self, target: &mut T)
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_client_sdk::ui_actor::UiEntryCache where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::ui_actor::UiEntryCache where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::ui_actor::UiEntryCache where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::ui_actor::UiEntryCache where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::ui_actor::UiEntryCache::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::ui_actor::UiEntryCache
+pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::from(t: T) -> T
+pub struct clipboard_history_client_sdk::ui_actor::DetailedEntry
+pub clipboard_history_client_sdk::ui_actor::DetailedEntry::full_text: core::option::Option<alloc::string::String>
+pub clipboard_history_client_sdk::ui_actor::DetailedEntry::mime_type: alloc::string::String
+impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::DetailedEntry
+pub fn clipboard_history_client_sdk::ui_actor::DetailedEntry::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_client_sdk::ui_actor::DetailedEntry
+impl core::marker::Send for clipboard_history_client_sdk::ui_actor::DetailedEntry
+impl core::marker::Sync for clipboard_history_client_sdk::ui_actor::DetailedEntry
+impl core::marker::Unpin for clipboard_history_client_sdk::ui_actor::DetailedEntry
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ui_actor::DetailedEntry
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ui_actor::DetailedEntry
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::ui_actor::DetailedEntry where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::ui_actor::DetailedEntry::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::ui_actor::DetailedEntry where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::ui_actor::DetailedEntry::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::ui_actor::DetailedEntry::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::ui_actor::DetailedEntry where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::ui_actor::DetailedEntry::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::ui_actor::DetailedEntry::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::ui_actor::DetailedEntry where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::DetailedEntry::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::ui_actor::DetailedEntry where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::DetailedEntry::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::ui_actor::DetailedEntry where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::DetailedEntry::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::ui_actor::DetailedEntry
+pub fn clipboard_history_client_sdk::ui_actor::DetailedEntry::from(t: T) -> T
+pub struct clipboard_history_client_sdk::ui_actor::UiEntry
+pub clipboard_history_client_sdk::ui_actor::UiEntry::cache: clipboard_history_client_sdk::ui_actor::UiEntryCache
+pub clipboard_history_client_sdk::ui_actor::UiEntry::entry: clipboard_history_client_sdk::Entry
+impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::UiEntry
+pub fn clipboard_history_client_sdk::ui_actor::UiEntry::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_client_sdk::ui_actor::UiEntry
+impl core::marker::Send for clipboard_history_client_sdk::ui_actor::UiEntry
+impl core::marker::Sync for clipboard_history_client_sdk::ui_actor::UiEntry
+impl core::marker::Unpin for clipboard_history_client_sdk::ui_actor::UiEntry
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ui_actor::UiEntry
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ui_actor::UiEntry
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::ui_actor::UiEntry where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::ui_actor::UiEntry::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::ui_actor::UiEntry where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::ui_actor::UiEntry::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::ui_actor::UiEntry::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::ui_actor::UiEntry where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::ui_actor::UiEntry::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::ui_actor::UiEntry::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::ui_actor::UiEntry where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::UiEntry::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::ui_actor::UiEntry where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::UiEntry::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::ui_actor::UiEntry where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::ui_actor::UiEntry::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::ui_actor::UiEntry
+pub fn clipboard_history_client_sdk::ui_actor::UiEntry::from(t: T) -> T
+pub fn clipboard_history_client_sdk::ui_actor::controller<T>(commands: impl core::iter::traits::collect::IntoIterator<Item = clipboard_history_client_sdk::ui_actor::Command>, send: impl core::ops::function::FnMut(clipboard_history_client_sdk::ui_actor::Message) -> core::result::Result<(), T>)
 pub enum clipboard_history_client_sdk::ClientError
 pub clipboard_history_client_sdk::ClientError::Core(clipboard_history_core::Error)
 pub clipboard_history_client_sdk::ClientError::InvalidResponse
 pub clipboard_history_client_sdk::ClientError::InvalidResponse::context: alloc::borrow::Cow<'static, str>
 pub clipboard_history_client_sdk::ClientError::VersionMismatch
 pub clipboard_history_client_sdk::ClientError::VersionMismatch::actual: u8
+impl core::convert::From<clipboard_history_client_sdk::ClientError> for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(source: clipboard_history_client_sdk::ClientError) -> Self
 impl core::convert::From<clipboard_history_core::Error> for clipboard_history_client_sdk::ClientError
 pub fn clipboard_history_client_sdk::ClientError::from(source: clipboard_history_core::Error) -> Self
 impl core::convert::From<clipboard_history_core::protocol::IdNotFoundError> for clipboard_history_client_sdk::ClientError

@@ -1,16 +1,8 @@
 use std::{
-    array,
-    cmp::min,
-    collections::{BinaryHeap, HashMap},
-    hash::BuildHasherDefault,
-    iter::once,
     mem,
-    os::fd::{AsFd, BorrowedFd},
-    str,
     sync::{
         mpsc,
-        mpsc::{Receiver, Sender, SyncSender},
-        Arc,
+        mpsc::{Receiver, Sender},
     },
     thread,
 };
@@ -24,42 +16,11 @@ use eframe::{
     },
     epaint::FontFamily,
 };
-use regex::bytes::Regex;
 use ringboard_sdk::{
-    api::{connect_to_server, MoveToFrontRequest, RemoveRequest},
-    core::{
-        direct_file_name,
-        dirs::{data_dir, socket_file},
-        protocol::{composite_id, IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind},
-        ring::{offset_to_entries, Ring, MAX_ENTRIES},
-        size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, PathView, RingAndIndex,
-    },
-    search::{EntryLocation, Query},
-    ClientError, DatabaseReader, Entry, EntryReader, Kind,
+    core::{protocol::RingKind, Error as CoreError},
+    ui_actor::{controller, Command, CommandError, DetailedEntry, Message, UiEntry, UiEntryCache},
+    ClientError,
 };
-use rustc_hash::FxHasher;
-use rustix::{
-    fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
-    net::SocketAddrUnix,
-    process::fchdir,
-};
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-enum CommandError {
-    #[error("{0}")]
-    Core(#[from] CoreError),
-    #[error("{0}")]
-    Sdk(#[from] ClientError),
-    #[error("Regex instantiation failed.")]
-    Regex(#[from] regex::Error),
-}
-
-impl From<IdNotFoundError> for CommandError {
-    fn from(value: IdNotFoundError) -> Self {
-        Self::Core(CoreError::IdNotFound(value))
-    }
-}
 
 fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
@@ -91,7 +52,15 @@ fn main() -> Result<(), eframe::Error> {
             let (response_sender, response_receiver) = mpsc::sync_channel(8);
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
-                move || controller(&ctx, &command_receiver, &response_sender)
+                move || {
+                    controller(&command_receiver, |m| {
+                        let r = response_sender.send(m);
+                        if r.is_ok() {
+                            ctx.request_repaint();
+                        }
+                        r
+                    });
+                }
             });
             Ok(Box::new(App::start(
                 cascadia,
@@ -100,319 +69,6 @@ fn main() -> Result<(), eframe::Error> {
             )))
         }),
     )
-}
-
-#[derive(Debug)]
-enum Command {
-    RefreshDb,
-    LoadFirstPage,
-    GetDetails { entry: Entry, with_text: bool },
-    Favorite(u64),
-    Unfavorite(u64),
-    Delete(u64),
-    Search { query: String, regex: bool },
-}
-
-#[derive(Debug)]
-enum Message {
-    FatalDbOpen(CoreError),
-    FatalServerConnect(ClientError),
-    Error(CommandError),
-    LoadedFirstPage {
-        entries: Vec<UiEntry>,
-        first_non_favorite_id: Option<u64>,
-    },
-    EntryDetails(Result<DetailedEntry, CoreError>),
-    SearchResults(Vec<UiEntry>),
-}
-
-fn controller(ctx: &egui::Context, commands: &Receiver<Command>, responses: &SyncSender<Message>) {
-    let server = {
-        match {
-            let socket_file = socket_file();
-            SocketAddrUnix::new(&socket_file)
-                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))
-        }
-        .map_err(ClientError::from)
-        .and_then(|server_addr| Ok((connect_to_server(&server_addr)?, server_addr)))
-        {
-            Ok(server) => server,
-            Err(e) => {
-                let _ = responses.send(Message::FatalServerConnect(e));
-                ctx.request_repaint();
-                return;
-            }
-        }
-    };
-    let ((mut database, reader), rings) = {
-        let run = || {
-            let mut dir = data_dir();
-
-            let database = DatabaseReader::open(&mut dir)?;
-            let reader = EntryReader::open(&mut dir)?;
-
-            let mut open_ring = |kind: RingKind| {
-                let path = PathView::new(&mut dir, kind.file_name());
-                openat(CWD, &*path, OFlags::PATH, Mode::empty()).map_io_err(|| {
-                    format!("Failed to open Ringboard database for reading: {path:?}")
-                })
-            };
-            let rings = (open_ring(RingKind::Main)?, open_ring(RingKind::Favorites)?);
-
-            fchdir(reader.direct())
-                .map_io_err(|| "Failed to change working directory to direct allocations.")?;
-
-            Ok(((database, reader), rings))
-        };
-
-        match run() {
-            Ok(db) => db,
-            Err(e) => {
-                let _ = responses.send(Message::FatalDbOpen(e));
-                ctx.request_repaint();
-                return;
-            }
-        }
-    };
-    let mut reader = Some(reader);
-    let mut reverse_index_cache = HashMap::default();
-
-    for command in once(Command::LoadFirstPage).chain(commands) {
-        let result = handle_command(
-            command,
-            (&server.0, &server.1),
-            &mut database,
-            &mut reader,
-            &(&rings.0, &rings.1),
-            &mut reverse_index_cache,
-        )
-        .unwrap_or_else(|e| Some(Message::Error(e)));
-
-        let Some(response) = result else {
-            continue;
-        };
-        if responses.send(response).is_err() {
-            break;
-        }
-        ctx.request_repaint();
-    }
-}
-
-#[allow(clippy::too_many_lines)]
-fn handle_command(
-    command: Command,
-    server: (impl AsFd, &SocketAddrUnix),
-    database: &mut DatabaseReader,
-    reader_: &mut Option<EntryReader>,
-    rings: &(impl AsFd, impl AsFd),
-    reverse_index_cache: &mut HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
-) -> Result<Option<Message>, CommandError> {
-    let reader = reader_.as_mut().unwrap();
-    match command {
-        Command::RefreshDb => {
-            reverse_index_cache.clear();
-            let run = |ring: &mut Ring, fd: BorrowedFd| {
-                let len = statx(fd, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
-                    .map_io_err(|| "Failed to statx Ringboard database file.")?
-                    .stx_size;
-                let len = offset_to_entries(usize::try_from(len).unwrap());
-                unsafe {
-                    ring.set_len(len);
-                }
-                Ok::<_, CoreError>(())
-            };
-            run(database.main_ring_mut(), rings.0.as_fd())?;
-            run(database.favorites_ring_mut(), rings.1.as_fd())?;
-
-            Ok(None)
-        }
-        Command::LoadFirstPage => {
-            let mut entries = Vec::with_capacity(100);
-            for entry in database
-                .favorites()
-                .rev()
-                .chain(database.main().rev().take(100))
-            {
-                entries.push(ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
-                    cache: UiEntryCache::Error(format!(
-                        "Error: failed to load entry {entry:?}\n{e:?}"
-                    )),
-                    entry,
-                }));
-            }
-            Ok(Some(Message::LoadedFirstPage {
-                entries,
-                first_non_favorite_id: database.main().rev().nth(1).as_ref().map(Entry::id),
-            }))
-        }
-        Command::GetDetails { entry, with_text } => {
-            let mut run = || {
-                if with_text {
-                    let loaded = entry.to_slice(reader)?;
-                    Ok(DetailedEntry {
-                        mime_type: (&*loaded.mime_type()?).into(),
-                        full_text: str::from_utf8(&loaded).map(String::from).ok(),
-                    })
-                } else {
-                    Ok(DetailedEntry {
-                        mime_type: (&*entry.mime_type(reader)?).into(),
-                        full_text: None,
-                    })
-                }
-            };
-            Ok(Some(Message::EntryDetails(run())))
-        }
-        ref c @ (Command::Favorite(id) | Command::Unfavorite(id)) => {
-            match MoveToFrontRequest::response(
-                server.0,
-                server.1,
-                id,
-                Some(match c {
-                    Command::Favorite(_) => RingKind::Favorites,
-                    Command::Unfavorite(_) => RingKind::Main,
-                    _ => unreachable!(),
-                }),
-            )? {
-                MoveToFrontResponse::Success { .. } => {}
-                MoveToFrontResponse::Error(e) => return Err(e.into()),
-            }
-            Ok(None)
-        }
-        Command::Delete(id) => {
-            match RemoveRequest::response(server.0, server.1, id)? {
-                RemoveResponse { error: Some(e) } => return Err(e.into()),
-                RemoveResponse { error: None } => {}
-            }
-            Ok(None)
-        }
-        Command::Search { mut query, regex } => {
-            let query = if regex {
-                Query::Regex(Regex::new(&query)?)
-            } else if query
-                .chars()
-                .all(|c| !char::is_alphabetic(c) || char::is_lowercase(c))
-            {
-                query.make_ascii_lowercase();
-                Query::PlainIgnoreCase(query.trim().as_bytes())
-            } else {
-                Query::Plain(query.trim().as_bytes())
-            };
-            Ok(Some(Message::SearchResults(do_search(
-                query,
-                reader_,
-                database,
-                reverse_index_cache,
-            ))))
-        }
-    }
-}
-
-fn do_search(
-    query: Query,
-    reader_: &mut Option<EntryReader>,
-    database: &mut DatabaseReader,
-    reverse_index_cache: &mut HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
-) -> Vec<UiEntry> {
-    const MAX_SEARCH_ENTRIES: usize = 256;
-
-    let reader = Arc::new(reader_.take().unwrap());
-
-    let (result_stream, threads) = ringboard_sdk::search(query, reader.clone());
-
-    if reverse_index_cache.is_empty() {
-        for entry in database.favorites().chain(database.main()) {
-            let Kind::Bucket(bucket) = entry.kind() else {
-                continue;
-            };
-            reverse_index_cache.insert(
-                BucketAndIndex::new(size_to_bucket(bucket.size()), bucket.index()),
-                RingAndIndex::new(entry.ring(), entry.index()),
-            );
-        }
-    }
-
-    let mut results = BinaryHeap::new();
-    let write_heads: [_; 2] = array::from_fn(|i| {
-        let ring = if i == RingKind::Main as usize {
-            database.main()
-        } else if i == RingKind::Favorites as usize {
-            database.favorites()
-        } else {
-            unreachable!()
-        };
-        let ring = ring.ring();
-        ring.prev_entry(ring.write_head())
-    });
-    for entry in result_stream
-        .flatten()
-        .flat_map(|q| match q.location {
-            EntryLocation::Bucketed { bucket, index } => reverse_index_cache
-                .get(&BucketAndIndex::new(bucket, index))
-                .copied()
-                .ok_or_else(|| {
-                    CoreError::IdNotFound(IdNotFoundError::Entry(
-                        index << u8::BITS | u32::from(bucket),
-                    ))
-                }),
-            EntryLocation::File { entry_id } => {
-                RingAndIndex::from_id(entry_id).map_err(CoreError::IdNotFound)
-            }
-        })
-        .map(|entry| {
-            RingAndIndex::new(
-                entry.ring(),
-                write_heads[entry.ring() as usize].wrapping_sub(entry.index()) & MAX_ENTRIES,
-            )
-        })
-    {
-        if results.len() == MAX_SEARCH_ENTRIES {
-            if entry < *results.peek().unwrap() {
-                results.pop();
-                results.push(entry);
-            }
-        } else {
-            results.push(entry);
-        }
-    }
-
-    for thread in threads {
-        let _ = thread.join();
-    }
-    *reader_ = Some(Arc::into_inner(reader).unwrap());
-    let reader = reader_.as_mut().unwrap();
-
-    results
-        .into_sorted_vec()
-        .into_iter()
-        .flat_map(|entry| {
-            let ring = entry.ring();
-            let index = write_heads[ring as usize].wrapping_sub(entry.index()) & MAX_ENTRIES;
-
-            let id = composite_id(ring, index);
-            unsafe { database.get(id) }
-        })
-        .map(|entry| {
-            // TODO add support for bold highlighting the selection range
-            ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
-                cache: UiEntryCache::Error(format!("Error: failed to load entry {entry:?}\n{e:?}")),
-                entry,
-            })
-        })
-        .collect()
-}
-
-#[derive(Debug)]
-struct UiEntry {
-    entry: Entry,
-    cache: UiEntryCache,
-}
-
-#[derive(Clone, Debug)]
-enum UiEntryCache {
-    Text { one_liner: String },
-    Image { uri: String },
-    Binary { mime_type: String, context: String },
-    Error(String),
 }
 
 struct App {
@@ -447,12 +103,6 @@ struct UiState {
     skipped_first_focus: bool,
 }
 
-#[derive(Debug)]
-struct DetailedEntry {
-    mime_type: String,
-    full_text: Option<String>,
-}
-
 impl App {
     fn start(
         row_font: FontFamily,
@@ -470,83 +120,46 @@ impl App {
     }
 }
 
-fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError> {
-    let loaded = entry.to_slice(reader)?;
-    let mime_type = &*loaded.mime_type()?;
-    let entry = if mime_type.starts_with("image/") {
-        let mut buf = Default::default();
-        let buf = direct_file_name(&mut buf, entry.ring(), entry.index());
-        UiEntry {
-            entry,
-            cache: UiEntryCache::Image {
-                uri: format!("file://{}", buf.to_str().unwrap()),
-            },
-        }
-    } else if let Ok(s) = {
-        let mut shrunk = &loaded[..min(loaded.len(), 250)];
-        loop {
-            let Some(&b) = shrunk.last() else {
-                break;
-            };
-            // https://github.com/rust-lang/rust/blob/33422e72c8a66bdb5ee21246a948a1a02ca91674/library/core/src/num/mod.rs#L1090
-            #[allow(clippy::cast_possible_wrap)]
-            let is_utf8_char_boundary = (b as i8) >= -0x40;
-            if is_utf8_char_boundary || loaded.len() == shrunk.len() {
-                break;
-            }
-
-            shrunk = &loaded[..=shrunk.len()];
-        }
-        str::from_utf8(shrunk)
-    } {
-        let mut one_liner = String::new();
-        let mut prev_char_is_whitespace = false;
-        for c in s.chars() {
-            if (prev_char_is_whitespace || one_liner.is_empty()) && c.is_whitespace() {
-                continue;
-            }
-
-            one_liner.push(if c.is_whitespace() { ' ' } else { c });
-            prev_char_is_whitespace = c.is_whitespace();
-        }
-        if s.len() != loaded.len() {
-            one_liner.push('…');
-        }
-
-        UiEntry {
-            entry,
-            cache: UiEntryCache::Text { one_liner },
-        }
-    } else {
-        UiEntry {
-            entry,
-            cache: UiEntryCache::Binary {
-                mime_type: mime_type.into(),
-                context: String::new(),
-            },
-        }
-    };
-    Ok(entry)
-}
-
-fn handle_message(message: Message, ui_entries: &mut UiEntries, state: &mut UiState) {
+fn handle_message(
+    message: Message,
+    UiEntries {
+        loaded_entries,
+        search_results,
+    }: &mut UiEntries,
+    UiState {
+        fatal_error,
+        last_error,
+        highlighted_id,
+        details_requested,
+        detailed_entry,
+        query: _,
+        search_highlighted_id,
+        search_with_regex: _,
+        was_focused: _,
+        skipped_first_focus: _,
+    }: &mut UiState,
+) {
     match message {
-        Message::FatalDbOpen(e) => state.fatal_error = Some(e.into()),
-        Message::FatalServerConnect(e) => state.fatal_error = Some(e),
-        Message::Error(e) => state.last_error = Some(e),
+        Message::FatalDbOpen(e) => *fatal_error = Some(e.into()),
+        Message::FatalServerConnect(e) => *fatal_error = Some(e),
+        Message::Error(e) => *last_error = Some(e),
         Message::LoadedFirstPage {
             entries,
             first_non_favorite_id,
         } => {
-            ui_entries.loaded_entries = entries;
-            if state.highlighted_id.is_none() {
-                state.highlighted_id = first_non_favorite_id;
+            *loaded_entries = entries;
+            if highlighted_id.is_none() {
+                *highlighted_id = first_non_favorite_id;
             }
         }
-        Message::EntryDetails(r) => state.detailed_entry = Some(r),
+        Message::EntryDetails { id, result } => {
+            if *details_requested == Some(id) {
+                *detailed_entry = Some(result);
+            }
+        }
         Message::SearchResults(entries) => {
-            state.search_highlighted_id = entries.first().map(|e| e.entry.id());
-            ui_entries.search_results = entries;
+            *search_highlighted_id = entries.first().map(|e| e.entry.id());
+            *search_results = entries;
         }
     }
 }
@@ -574,23 +187,31 @@ impl eframe::App for App {
 
 fn search_ui(
     ui: &mut Ui,
-    entries: &mut UiEntries,
-    state: &mut UiState,
+    UiEntries {
+        loaded_entries: _,
+        search_results,
+    }: &mut UiEntries,
+    UiState {
+        query,
+        search_with_regex,
+        search_highlighted_id,
+        ..
+    }: &mut UiState,
     requests: &Sender<Command>,
 ) {
     if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::X)) {
-        state.search_with_regex ^= true;
+        *search_with_regex ^= true;
         ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))));
     }
 
     let response = ui.add(
-        TextEdit::singleline(&mut state.query)
-            .hint_text(if state.search_with_regex {
+        TextEdit::singleline(query)
+            .hint_text(if *search_with_regex {
                 "Search with RegEx"
             } else {
                 "Search"
             })
-            .font(if state.search_with_regex {
+            .font(if *search_with_regex {
                 TextStyle::Monospace.into()
             } else {
                 FontSelection::default()
@@ -600,14 +221,14 @@ fn search_ui(
             .frame(false)
             .margin(5.),
     );
-    let mut reset = |state: &mut UiState| {
-        state.query = String::new();
-        entries.search_results = Vec::new();
-        state.search_highlighted_id = None;
+    let mut reset = |query: &mut String| {
+        *query = String::new();
+        *search_results = Vec::new();
+        *search_highlighted_id = None;
     };
 
     if ui.input(|input| input.key_pressed(Key::Escape)) && ui.memory(|mem| !mem.any_popup_open()) {
-        reset(state);
+        reset(query);
     }
     if ui.input(|i| i.key_pressed(Key::ArrowUp) || i.key_pressed(Key::ArrowDown)) {
         response.surrender_focus();
@@ -620,14 +241,14 @@ fn search_ui(
     if !response.changed() {
         return;
     }
-    if state.query.is_empty() {
-        reset(state);
+    if query.is_empty() {
+        reset(query);
         return;
     }
 
     let _ = requests.send(Command::Search {
-        query: state.query.clone(),
-        regex: state.search_with_regex,
+        query: query.clone(),
+        regex: *search_with_regex,
     });
 }
 
@@ -805,11 +426,11 @@ fn row_ui(
     state: &mut UiState,
     requests: &Sender<Command>,
     mut refresh: impl FnMut(),
-    entry: &UiEntry,
+    &UiEntry { entry, ref cache }: &UiEntry,
     try_scroll: bool,
     try_popup: bool,
 ) -> Response {
-    let entry_id = entry.entry.id();
+    let entry_id = entry.id();
 
     let frame_data = egui::Frame::default().inner_margin(5.);
     let mut frame = frame_data.begin(ui);
@@ -855,8 +476,8 @@ fn row_ui(
                 state.details_requested = Some(entry_id);
                 state.detailed_entry = None;
                 let _ = requests.send(Command::GetDetails {
-                    entry: entry.entry,
-                    with_text: matches!(entry.cache, UiEntryCache::Text { .. }),
+                    entry,
+                    with_text: matches!(cache, UiEntryCache::Text { .. }),
                 });
             }
 
@@ -864,7 +485,7 @@ fn row_ui(
 
             ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
                 ui.horizontal(|ui| {
-                    match entry.entry.ring() {
+                    match entry.ring() {
                         RingKind::Favorites => {
                             if ui.button("Unfavorite").clicked() {
                                 let _ = requests.send(Command::Unfavorite(entry_id));
@@ -905,7 +526,7 @@ fn row_ui(
                                 .show(ui, |ui| {
                                     ui.label(full);
                                 });
-                        } else if let UiEntryCache::Image { uri } = &entry.cache {
+                        } else if let UiEntryCache::Image { uri } = cache {
                             ScrollArea::vertical()
                                 .auto_shrink([false, true])
                                 .show(ui, |ui| {

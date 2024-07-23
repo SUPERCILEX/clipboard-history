@@ -13,6 +13,7 @@ pub mod api;
 pub mod duplicate_detection;
 mod ring_reader;
 pub mod search;
+pub mod ui_actor;
 
 #[derive(Error, Debug)]
 pub enum ClientError {
