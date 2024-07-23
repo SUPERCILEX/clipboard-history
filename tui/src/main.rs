@@ -81,6 +81,7 @@ struct UiEntries {
 struct UiState {
     details_requested: Option<u64>,
     detailed_entry: Option<Result<DetailedEntry, CoreError>>,
+    detail_scroll: u16,
 
     query: String,
 
@@ -255,6 +256,7 @@ fn handle_message(
     let UiState {
         details_requested,
         detailed_entry,
+        detail_scroll: _,
         query: _,
         show_help: _,
     } = ui;
@@ -316,6 +318,7 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
             if let Some(&UiEntry { entry, ref cache }) = selected_entry!(entries, ui) {
                 ui.details_requested = Some(entry.id());
                 ui.detailed_entry = None;
+                ui.detail_scroll = 0;
                 let _ = requests.send(Command::GetDetails {
                     entry,
                     with_text: matches!(cache, UiEntryCache::Text { .. }),
@@ -355,6 +358,9 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
                         });
                         state.select(Some(next));
                     }
+                    Char('J') => {
+                        ui.detail_scroll = ui.detail_scroll.saturating_add(1);
+                    }
                     Char('k') | Up => {
                         let state = active_list_state!(entries, ui);
                         let previous = state.selected().map_or(usize::MAX, |i| {
@@ -365,6 +371,9 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
                             }
                         });
                         state.select(Some(previous));
+                    }
+                    Char('K') => {
+                        ui.detail_scroll = ui.detail_scroll.saturating_sub(1);
                     }
                     Char('l') | Right => select!(),
                     Char(' ') => {
@@ -406,6 +415,8 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
                         refresh();
                         if modifiers == KeyModifiers::CONTROL {
                             *state = State::default();
+                        } else {
+                            ui.detail_scroll = 0;
                         }
                         return false;
                     }
@@ -565,6 +576,7 @@ impl State {
         }))
         .block(inner_block)
         .wrap(Wrap { trim: false })
+        .scroll((ui.detail_scroll, 0))
         .render(inner_area, buf);
     }
 
