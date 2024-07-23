@@ -56,7 +56,7 @@ pub enum Command {
     Favorite(u64),
     Unfavorite(u64),
     Delete(u64),
-    Search { query: String, regex: bool },
+    Search { query: Box<str>, regex: bool },
 }
 
 #[derive(Debug)]
@@ -65,14 +65,14 @@ pub enum Message {
     FatalServerConnect(ClientError),
     Error(CommandError),
     LoadedFirstPage {
-        entries: Vec<UiEntry>,
+        entries: Box<[UiEntry]>,
         first_non_favorite_id: Option<u64>,
     },
     EntryDetails {
         id: u64,
         result: Result<DetailedEntry, CoreError>,
     },
-    SearchResults(Vec<UiEntry>),
+    SearchResults(Box<[UiEntry]>),
 }
 
 #[derive(Debug)]
@@ -83,16 +83,23 @@ pub struct UiEntry {
 
 #[derive(Clone, Debug)]
 pub enum UiEntryCache {
-    Text { one_liner: String },
-    Image { uri: String },
-    Binary { mime_type: String, context: String },
-    Error(String),
+    Text {
+        one_liner: Box<str>,
+    },
+    Image {
+        uri: Box<str>,
+    },
+    Binary {
+        mime_type: Box<str>,
+        context: Box<str>,
+    },
+    Error(Box<str>),
 }
 
 #[derive(Debug)]
 pub struct DetailedEntry {
-    pub mime_type: String,
-    pub full_text: Option<String>,
+    pub mime_type: Box<str>,
+    pub full_text: Option<Box<str>>,
 }
 
 pub fn controller<T>(
@@ -203,14 +210,14 @@ fn handle_command(
                 .chain(database.main().rev().take(100))
             {
                 entries.push(ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
-                    cache: UiEntryCache::Error(format!(
-                        "Error: failed to load entry {entry:?}\n{e:?}"
-                    )),
+                    cache: UiEntryCache::Error(
+                        format!("Error: failed to load entry {entry:?}\n{e:?}").into(),
+                    ),
                     entry,
                 }));
             }
             Ok(Some(Message::LoadedFirstPage {
-                entries,
+                entries: entries.into(),
                 first_non_favorite_id: database.main().rev().nth(1).as_ref().map(Entry::id),
             }))
         }
@@ -220,7 +227,7 @@ fn handle_command(
                     let loaded = entry.to_slice(reader)?;
                     Ok(DetailedEntry {
                         mime_type: (&*loaded.mime_type()?).into(),
-                        full_text: str::from_utf8(&loaded).map(String::from).ok(),
+                        full_text: str::from_utf8(&loaded).map(Box::from).ok(),
                     })
                 } else {
                     Ok(DetailedEntry {
@@ -269,12 +276,9 @@ fn handle_command(
             } else {
                 Query::Plain(query.trim().as_bytes())
             };
-            Ok(Some(Message::SearchResults(do_search(
-                query,
-                reader_,
-                database,
-                reverse_index_cache,
-            ))))
+            Ok(Some(Message::SearchResults(
+                do_search(query, reader_, database, reverse_index_cache).into(),
+            )))
         }
     }
 }
@@ -288,7 +292,7 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
         UiEntry {
             entry,
             cache: UiEntryCache::Image {
-                uri: format!("file://{}", buf.to_str().unwrap()),
+                uri: format!("file://{}", buf.to_str().unwrap()).into(),
             },
         }
     } else if let Ok(s) = {
@@ -324,14 +328,16 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
 
         UiEntry {
             entry,
-            cache: UiEntryCache::Text { one_liner },
+            cache: UiEntryCache::Text {
+                one_liner: one_liner.into(),
+            },
         }
     } else {
         UiEntry {
             entry,
             cache: UiEntryCache::Binary {
                 mime_type: mime_type.into(),
-                context: String::new(),
+                context: Box::default(),
             },
         }
     };
@@ -425,7 +431,9 @@ fn do_search(
         .map(|entry| {
             // TODO add support for bold highlighting the selection range
             ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
-                cache: UiEntryCache::Error(format!("Error: failed to load entry {entry:?}\n{e:?}")),
+                cache: UiEntryCache::Error(
+                    format!("Error: failed to load entry {entry:?}\n{e:?}").into(),
+                ),
                 entry,
             })
         })

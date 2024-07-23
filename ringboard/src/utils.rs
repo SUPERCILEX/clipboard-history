@@ -168,8 +168,8 @@ impl<T> Debug for DirectFileNameToken<'_, T> {
 pub fn direct_file_name(
     buf: &mut [u8; "1099511627776".len() + 1],
     to: RingKind,
-    id: u32,
+    index: u32,
 ) -> DirectFileNameToken<()> {
-    write!(buf.as_mut_slice(), "{:0>13}\0", composite_id(to, id)).unwrap();
+    write!(buf.as_mut_slice(), "{:0>13}\0", composite_id(to, index)).unwrap();
     DirectFileNameToken(buf.as_mut_slice(), PhantomData)
 }

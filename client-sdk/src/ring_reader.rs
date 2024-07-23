@@ -16,8 +16,8 @@ use arrayvec::ArrayVec;
 use ringboard_core::{
     bucket_to_length, direct_file_name, open_buckets,
     protocol::{composite_id, decompose_id, IdNotFoundError, MimeType, RingKind},
-    ring::{BucketEntry, Mmap, Ring},
-    size_to_bucket, IoErr, PathView, NUM_BUCKETS,
+    ring::{InitializedEntry, Mmap, Ring},
+    size_to_bucket, IoErr, PathView, RingAndIndex, NUM_BUCKETS,
 };
 use rustix::{
     fs::{fgetxattr, memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
@@ -234,21 +234,19 @@ impl DoubleEndedIterator for RingReader<'_> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Entry {
-    id: u32,
-    ring: RingKind,
-    kind: Kind,
+    rai: RingAndIndex,
+    metadata: InitializedEntry,
 }
 
 impl Entry {
     fn from(ring: &Ring, kind: RingKind, id: u32) -> Option<Self> {
         use ringboard_core::ring::Entry::{Bucketed, File, Uninitialized};
         Some(Self {
-            id,
-            ring: kind,
-            kind: match ring.get(id)? {
+            rai: RingAndIndex::new(kind, id),
+            metadata: match ring.get(id)? {
                 Uninitialized => return None,
-                Bucketed(e) => Kind::Bucket(e),
-                File => Kind::File,
+                Bucketed(e) => e,
+                File => InitializedEntry::file(),
             },
         })
     }
@@ -256,7 +254,7 @@ impl Entry {
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Kind {
-    Bucket(BucketEntry),
+    Bucket(InitializedEntry),
     File,
 }
 
@@ -357,23 +355,27 @@ impl<'a> Deref for MmapOrSlice<'a> {
 
 impl Entry {
     #[must_use]
-    pub const fn kind(&self) -> Kind {
-        self.kind
+    pub fn kind(&self) -> Kind {
+        if self.metadata.is_file() {
+            Kind::File
+        } else {
+            Kind::Bucket(self.metadata)
+        }
     }
 
     #[must_use]
-    pub const fn ring(&self) -> RingKind {
-        self.ring
+    pub fn ring(&self) -> RingKind {
+        self.rai.ring()
     }
 
     #[must_use]
     pub const fn index(&self) -> u32 {
-        self.id
+        self.rai.index()
     }
 
     #[must_use]
     pub fn id(&self) -> u64 {
-        composite_id(self.ring, self.id)
+        composite_id(self.ring(), self.index())
     }
 
     pub fn mime_type(&self, reader: &mut EntryReader) -> Result<MimeType, ringboard_core::Error> {
@@ -399,8 +401,8 @@ impl Entry {
         Ok(self.to_file_raw(reader)?.unwrap())
     }
 
-    fn grow_bucket_if_needed(&self, reader: &mut EntryReader) -> Result<(), ringboard_core::Error> {
-        match self.kind {
+    fn grow_bucket_if_needed(self, reader: &mut EntryReader) -> Result<(), ringboard_core::Error> {
+        match self.kind() {
             Kind::Bucket(entry) => {
                 if let Err(BucketTooShort { bucket, needed_len }) =
                     bucket_entry_to_slice(reader, entry)
@@ -420,7 +422,7 @@ impl Entry {
         &self,
         reader: &'a EntryReader,
     ) -> Result<Option<LoadedEntry<MmapOrSlice<'a>>>, ringboard_core::Error> {
-        match self.kind {
+        match self.kind() {
             Kind::Bucket(entry) => {
                 let Ok(bytes) = bucket_entry_to_slice(reader, entry) else {
                     return Ok(None);
@@ -448,7 +450,7 @@ impl Entry {
         &self,
         reader: &EntryReader,
     ) -> Result<Option<LoadedEntry<File>>, ringboard_core::Error> {
-        match self.kind {
+        match self.kind() {
             Kind::Bucket(entry) => {
                 let Ok(bytes) = bucket_entry_to_slice(reader, entry) else {
                     return Ok(None);
@@ -468,7 +470,7 @@ impl Entry {
             }
             Kind::File => {
                 let mut buf = Default::default();
-                let buf = direct_file_name(&mut buf, self.ring, self.id);
+                let buf = direct_file_name(&mut buf, self.ring(), self.index());
 
                 let file = openat(&reader.direct, &*buf, OFlags::RDONLY, Mode::empty())
                     .map_io_err(|| format!("Failed to open direct file: {buf:?}"))
@@ -544,7 +546,7 @@ struct BucketTooShort {
 
 fn bucket_entry_to_slice(
     reader: &EntryReader,
-    entry: BucketEntry,
+    entry: InitializedEntry,
 ) -> Result<&[u8], BucketTooShort> {
     let index = usize::try_from(entry.index()).unwrap();
     let size = usize::from(entry.size());

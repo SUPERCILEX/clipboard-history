@@ -1,4 +1,13 @@
-use std::{fmt::Debug, io, io::ErrorKind, ops::Deref, os::fd::AsFd, ptr, ptr::NonNull, slice};
+use std::{
+    fmt::{Debug, Formatter},
+    io,
+    io::ErrorKind,
+    ops::Deref,
+    os::fd::AsFd,
+    ptr,
+    ptr::NonNull,
+    slice,
+};
 
 use rustix::{
     fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
@@ -54,8 +63,8 @@ impl From<Entry> for RawEntry {
     fn from(value: Entry) -> Self {
         match value {
             Entry::Uninitialized => Self(0),
-            Entry::Bucketed(BucketEntry { size, index }) => Self((index << 12) | u32::from(size)),
-            Entry::File => Self(1 << (u32::BITS - 1)),
+            Entry::Bucketed(InitializedEntry(data)) => Self(data),
+            Entry::File => Self(InitializedEntry::file().0),
         }
     }
 }
@@ -67,13 +76,11 @@ impl From<RawEntry> for Entry {
             return Self::Uninitialized;
         }
 
-        let size = u16::try_from(value & ((1 << 12) - 1)).unwrap();
-        let index = value >> 12;
-
-        if size == 0 {
+        let entry = InitializedEntry(value);
+        if entry.is_file() {
             Self::File
         } else {
-            Self::Bucketed(BucketEntry { size, index })
+            Self::Bucketed(entry)
         }
     }
 }
@@ -81,34 +88,53 @@ impl From<RawEntry> for Entry {
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Entry {
     Uninitialized,
-    Bucketed(BucketEntry),
+    Bucketed(InitializedEntry),
     File,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct BucketEntry {
-    size: u16,
-    index: u32,
-}
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+pub struct InitializedEntry(u32);
 
-impl BucketEntry {
+impl InitializedEntry {
     #[must_use]
-    pub const fn new(size: u16, index: u32) -> Option<Self> {
-        if size > 0 && size < (1 << 12) && index < (1 << 20) {
-            Some(Self { size, index })
-        } else {
-            None
-        }
+    pub fn bucket(size: u16, index: u32) -> Self {
+        debug_assert!(size > 0);
+        debug_assert!(size < (1 << 12));
+        debug_assert!(index < MAX_ENTRIES);
+        Self((index << 12) | u32::from(size))
     }
 
     #[must_use]
-    pub const fn size(&self) -> u16 {
-        self.size
+    pub const fn file() -> Self {
+        Self(1 << (u32::BITS - 1))
+    }
+
+    #[must_use]
+    pub fn size(&self) -> u16 {
+        u16::try_from(self.0 & ((1 << 12) - 1)).unwrap()
     }
 
     #[must_use]
     pub const fn index(&self) -> u32 {
-        self.index
+        self.0 >> 12
+    }
+
+    #[must_use]
+    pub fn is_file(&self) -> bool {
+        self.size() == 0
+    }
+}
+
+impl Debug for InitializedEntry {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.is_file() {
+            f.write_str("File")
+        } else {
+            f.debug_struct("Bucketed")
+                .field("size", &self.size())
+                .field("index", &self.index())
+                .finish()
+        }
     }
 }
 

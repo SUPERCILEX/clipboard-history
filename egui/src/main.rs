@@ -82,8 +82,8 @@ struct App {
 
 #[derive(Default)]
 struct UiEntries {
-    loaded_entries: Vec<UiEntry>,
-    search_results: Vec<UiEntry>,
+    loaded_entries: Box<[UiEntry]>,
+    search_results: Box<[UiEntry]>,
 }
 
 #[derive(Default)]
@@ -223,7 +223,7 @@ fn search_ui(
     );
     let mut reset = |query: &mut String| {
         *query = String::new();
-        *search_results = Vec::new();
+        *search_results = Box::default();
         *search_highlighted_id = None;
     };
 
@@ -247,7 +247,7 @@ fn search_ui(
     }
 
     let _ = requests.send(Command::Search {
-        query: query.clone(),
+        query: query.clone().into(),
         regex: *search_with_regex,
     });
 }
@@ -361,7 +361,7 @@ fn entry_ui(
     let response = match entry.cache.clone() {
         UiEntryCache::Text { one_liner } => {
             let mut job = LayoutJob::single_section(
-                one_liner,
+                one_liner.to_string(),
                 TextFormat {
                     font_id: FontId::new(16., entry_text_font.clone()),
                     ..Default::default()
@@ -385,7 +385,7 @@ fn entry_ui(
         }
         UiEntryCache::Image { uri } => row_ui(
             ui,
-            Image::new(uri)
+            Image::new(&*uri)
                 .max_height(250.)
                 .max_width(ui.available_width())
                 .fit_to_original_size(1.),
@@ -410,7 +410,7 @@ fn entry_ui(
             try_popup,
         ),
         UiEntryCache::Error(e) => {
-            ui.label(e);
+            ui.label(&*e);
             return;
         }
     };
@@ -524,14 +524,14 @@ fn row_ui(
                             ScrollArea::both()
                                 .auto_shrink([false, true])
                                 .show(ui, |ui| {
-                                    ui.label(full);
+                                    ui.label(&**full);
                                 });
                         } else if let UiEntryCache::Image { uri } = cache {
                             ScrollArea::vertical()
                                 .auto_shrink([false, true])
                                 .show(ui, |ui| {
                                     ui.add(
-                                        Image::new(uri)
+                                        Image::new(&**uri)
                                             .max_width(ui.available_width())
                                             .fit_to_original_size(1.),
                                     );

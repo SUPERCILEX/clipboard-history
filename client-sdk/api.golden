@@ -295,7 +295,7 @@ pub clipboard_history_client_sdk::ui_actor::Command::GetDetails::with_text: bool
 pub clipboard_history_client_sdk::ui_actor::Command::LoadFirstPage
 pub clipboard_history_client_sdk::ui_actor::Command::RefreshDb
 pub clipboard_history_client_sdk::ui_actor::Command::Search
-pub clipboard_history_client_sdk::ui_actor::Command::Search::query: alloc::string::String
+pub clipboard_history_client_sdk::ui_actor::Command::Search::query: alloc::boxed::Box<str>
 pub clipboard_history_client_sdk::ui_actor::Command::Search::regex: bool
 pub clipboard_history_client_sdk::ui_actor::Command::Unfavorite(u64)
 impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::Command
@@ -372,9 +372,9 @@ pub clipboard_history_client_sdk::ui_actor::Message::Error(clipboard_history_cli
 pub clipboard_history_client_sdk::ui_actor::Message::FatalDbOpen(clipboard_history_core::Error)
 pub clipboard_history_client_sdk::ui_actor::Message::FatalServerConnect(clipboard_history_client_sdk::ClientError)
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage
-pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage::entries: alloc::vec::Vec<clipboard_history_client_sdk::ui_actor::UiEntry>
+pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage::entries: alloc::boxed::Box<[clipboard_history_client_sdk::ui_actor::UiEntry]>
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage::first_non_favorite_id: core::option::Option<u64>
-pub clipboard_history_client_sdk::ui_actor::Message::SearchResults(alloc::vec::Vec<clipboard_history_client_sdk::ui_actor::UiEntry>)
+pub clipboard_history_client_sdk::ui_actor::Message::SearchResults(alloc::boxed::Box<[clipboard_history_client_sdk::ui_actor::UiEntry]>)
 impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::Message
 pub fn clipboard_history_client_sdk::ui_actor::Message::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Freeze for clipboard_history_client_sdk::ui_actor::Message
@@ -401,13 +401,13 @@ impl<T> core::convert::From<T> for clipboard_history_client_sdk::ui_actor::Messa
 pub fn clipboard_history_client_sdk::ui_actor::Message::from(t: T) -> T
 pub enum clipboard_history_client_sdk::ui_actor::UiEntryCache
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary
-pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary::context: alloc::string::String
-pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary::mime_type: alloc::string::String
-pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Error(alloc::string::String)
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary::context: alloc::boxed::Box<str>
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary::mime_type: alloc::boxed::Box<str>
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Error(alloc::boxed::Box<str>)
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Image
-pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Image::uri: alloc::string::String
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Image::uri: alloc::boxed::Box<str>
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Text
-pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Text::one_liner: alloc::string::String
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Text::one_liner: alloc::boxed::Box<str>
 impl core::clone::Clone for clipboard_history_client_sdk::ui_actor::UiEntryCache
 pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::clone(&self) -> clipboard_history_client_sdk::ui_actor::UiEntryCache
 impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::UiEntryCache
@@ -441,8 +441,8 @@ pub unsafe fn clipboard_history_client_sdk::ui_actor::UiEntryCache::clone_to_uni
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::ui_actor::UiEntryCache
 pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::from(t: T) -> T
 pub struct clipboard_history_client_sdk::ui_actor::DetailedEntry
-pub clipboard_history_client_sdk::ui_actor::DetailedEntry::full_text: core::option::Option<alloc::string::String>
-pub clipboard_history_client_sdk::ui_actor::DetailedEntry::mime_type: alloc::string::String
+pub clipboard_history_client_sdk::ui_actor::DetailedEntry::full_text: core::option::Option<alloc::boxed::Box<str>>
+pub clipboard_history_client_sdk::ui_actor::DetailedEntry::mime_type: alloc::boxed::Box<str>
 impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::DetailedEntry
 pub fn clipboard_history_client_sdk::ui_actor::DetailedEntry::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Freeze for clipboard_history_client_sdk::ui_actor::DetailedEntry
@@ -538,7 +538,7 @@ pub fn clipboard_history_client_sdk::ClientError::borrow_mut(&mut self) -> &mut 
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::ClientError
 pub fn clipboard_history_client_sdk::ClientError::from(t: T) -> T
 pub enum clipboard_history_client_sdk::Kind
-pub clipboard_history_client_sdk::Kind::Bucket(clipboard_history_core::ring::BucketEntry)
+pub clipboard_history_client_sdk::Kind::Bucket(clipboard_history_core::ring::InitializedEntry)
 pub clipboard_history_client_sdk::Kind::File
 impl core::clone::Clone for clipboard_history_client_sdk::Kind
 pub fn clipboard_history_client_sdk::Kind::clone(&self) -> clipboard_history_client_sdk::Kind
@@ -618,9 +618,9 @@ pub struct clipboard_history_client_sdk::Entry
 impl clipboard_history_client_sdk::Entry
 pub fn clipboard_history_client_sdk::Entry::id(&self) -> u64
 pub const fn clipboard_history_client_sdk::Entry::index(&self) -> u32
-pub const fn clipboard_history_client_sdk::Entry::kind(&self) -> clipboard_history_client_sdk::Kind
+pub fn clipboard_history_client_sdk::Entry::kind(&self) -> clipboard_history_client_sdk::Kind
 pub fn clipboard_history_client_sdk::Entry::mime_type(&self, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_core::protocol::MimeType, clipboard_history_core::Error>
-pub const fn clipboard_history_client_sdk::Entry::ring(&self) -> clipboard_history_core::protocol::RingKind
+pub fn clipboard_history_client_sdk::Entry::ring(&self) -> clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_client_sdk::Entry::to_file(&self, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<std::fs::File>, clipboard_history_core::Error>
 pub fn clipboard_history_client_sdk::Entry::to_file_raw(&self, reader: &clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<std::fs::File>>, clipboard_history_core::Error>
 pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<MmapOrSlice<'a>>, clipboard_history_core::Error>

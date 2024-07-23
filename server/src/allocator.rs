@@ -25,7 +25,7 @@ use ringboard_core::{
         MoveToFrontResponse, RemoveResponse, RingKind, SwapResponse,
     },
     ring,
-    ring::{entries_to_offset, BucketEntry, Entry, Header, RawEntry, Ring},
+    ring::{entries_to_offset, Entry, Header, InitializedEntry, RawEntry, Ring},
     size_to_bucket, IoErr, PathView, RingAndIndex, NUM_BUCKETS, TEXT_MIMES,
 };
 use rustix::{
@@ -721,7 +721,7 @@ impl Allocator {
                         )
                     })?;
                     writer.write(
-                        Entry::Bucketed(BucketEntry::new(size, free).unwrap()),
+                        Entry::Bucketed(InitializedEntry::bucket(size, free)),
                         rai.index(),
                     )?;
 
@@ -854,7 +854,7 @@ impl AllocatorData {
             }
         }
 
-        let entry = BucketEntry::new(size, bucket_index).unwrap();
+        let entry = InitializedEntry::bucket(size, bucket_index);
         free_bucket.map(BucketSlotGuard::into_inner);
         Ok(Entry::Bucketed(entry))
     }
