@@ -371,6 +371,7 @@ pub clipboard_history_client_sdk::ui_actor::Message::EntryDetails::result: core:
 pub clipboard_history_client_sdk::ui_actor::Message::Error(clipboard_history_client_sdk::ui_actor::CommandError)
 pub clipboard_history_client_sdk::ui_actor::Message::FatalDbOpen(clipboard_history_core::Error)
 pub clipboard_history_client_sdk::ui_actor::Message::FatalServerConnect(clipboard_history_client_sdk::ClientError)
+pub clipboard_history_client_sdk::ui_actor::Message::FavoriteChange(u64)
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage::default_focused_id: core::option::Option<u64>
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage::entries: alloc::boxed::Box<[clipboard_history_client_sdk::ui_actor::UiEntry]>

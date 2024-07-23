@@ -168,6 +168,7 @@ fn handle_message(
             *search_highlighted_id = entries.first().map(|e| e.entry.id());
             *search_results = entries;
         }
+        Message::FavoriteChange(_) => {}
     }
 }
 

@@ -73,6 +73,7 @@ pub enum Message {
         result: Result<DetailedEntry, CoreError>,
     },
     SearchResults(Box<[UiEntry]>),
+    FavoriteChange(u64),
 }
 
 #[derive(Debug)]
@@ -269,10 +270,9 @@ fn handle_command<'a, Server: AsFd>(
                     _ => unreachable!(),
                 }),
             )? {
-                MoveToFrontResponse::Success { .. } => {}
-                MoveToFrontResponse::Error(e) => return Err(e.into()),
+                MoveToFrontResponse::Success { id } => Ok(Some(Message::FavoriteChange(id))),
+                MoveToFrontResponse::Error(e) => Err(e.into()),
             }
-            Ok(None)
         }
         Command::Delete(id) => {
             let (server, addr) = server()?;
