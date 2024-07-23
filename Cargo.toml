@@ -5,6 +5,7 @@ members = [
     "egui",
     "ringboard",
     "server",
+    "tui",
     "x11",
 ]
 
