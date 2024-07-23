@@ -349,8 +349,8 @@ impl<'a> Deref for MmapOrSlice<'a> {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            MmapOrSlice::Slice(s) => s,
-            MmapOrSlice::Mmap(m) => m,
+            Self::Slice(s) => s,
+            Self::Mmap(m) => m,
         }
     }
 }
