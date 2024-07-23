@@ -76,8 +76,13 @@ struct App {
     responses: Receiver<Message>,
     row_font: FontFamily,
 
-    state: UiState,
+    state: State,
+}
+
+#[derive(Default)]
+struct State {
     entries: UiEntries,
+    ui: UiState,
 }
 
 #[derive(Default)]
@@ -114,30 +119,32 @@ impl App {
             responses,
             row_font,
 
-            entries: UiEntries::default(),
-            state: UiState::default(),
+            state: State::default(),
         }
     }
 }
 
 fn handle_message(
     message: Message,
-    UiEntries {
-        loaded_entries,
-        search_results,
-    }: &mut UiEntries,
-    UiState {
-        fatal_error,
-        last_error,
-        highlighted_id,
-        details_requested,
-        detailed_entry,
-        query: _,
-        search_highlighted_id,
-        search_with_regex: _,
-        was_focused: _,
-        skipped_first_focus: _,
-    }: &mut UiState,
+    State {
+        entries: UiEntries {
+            loaded_entries,
+            search_results,
+        },
+        ui:
+            UiState {
+                fatal_error,
+                last_error,
+                highlighted_id,
+                details_requested,
+                detailed_entry,
+                query: _,
+                search_highlighted_id,
+                search_with_regex: _,
+                was_focused: _,
+                skipped_first_focus: _,
+            },
+    }: &mut State,
 ) {
     match message {
         Message::FatalDbOpen(e) => *fatal_error = Some(e.into()),
@@ -167,36 +174,33 @@ fn handle_message(
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         for message in self.responses.try_iter() {
-            handle_message(message, &mut self.entries, &mut self.state);
+            handle_message(message, &mut self.state);
         }
 
         TopBottomPanel::top("search_bar").show(ctx, |ui| {
-            search_ui(ui, &mut self.entries, &mut self.state, &self.requests);
+            search_ui(ui, &mut self.state, &self.requests);
         });
         CentralPanel::default().show(ctx, |ui| {
-            main_ui(
-                ui,
-                &self.row_font,
-                &self.entries,
-                &mut self.state,
-                &self.requests,
-            );
+            main_ui(ui, &self.row_font, &mut self.state, &self.requests);
         });
     }
 }
 
 fn search_ui(
     ui: &mut Ui,
-    UiEntries {
-        loaded_entries: _,
-        search_results,
-    }: &mut UiEntries,
-    UiState {
-        query,
-        search_with_regex,
-        search_highlighted_id,
-        ..
-    }: &mut UiState,
+    State {
+        entries: UiEntries {
+            loaded_entries: _,
+            search_results,
+        },
+        ui:
+            UiState {
+                query,
+                search_with_regex,
+                search_highlighted_id,
+                ..
+            },
+    }: &mut State,
     requests: &Sender<Command>,
 ) {
     if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::X)) {
@@ -271,10 +275,10 @@ fn show_error(ui: &mut Ui, e: &dyn Error) {
 fn main_ui(
     ui: &mut Ui,
     entry_text_font: &FontFamily,
-    entries: &UiEntries,
-    state: &mut UiState,
+    state_: &mut State,
     requests: &Sender<Command>,
 ) {
+    let State { entries, ui: state } = state_;
     let refresh = || {
         let _ = requests
             .send(Command::RefreshDb)
@@ -302,9 +306,10 @@ fn main_ui(
     let mut try_scroll = false;
 
     if ui.input_mut(|input| input.consume_key(Modifiers::CTRL, Key::R)) {
-        *state = UiState::default();
+        *state_ = State::default();
         ui.memory_mut(egui::Memory::close_popup);
         refresh();
+        return;
     }
     if !active_entries(entries, state).is_empty() && ui.memory(|mem| !mem.any_popup_open()) {
         ui.input(|input| {
