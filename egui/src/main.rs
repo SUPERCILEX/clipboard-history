@@ -12,8 +12,8 @@ use eframe::{
     egui,
     egui::{
         text::LayoutJob, Align, CentralPanel, Event, FontId, FontSelection, Image, InputState, Key,
-        Label, Layout, Modifiers, PopupCloseBehavior, Pos2, Response, ScrollArea, Sense, TextEdit,
-        TextFormat, TextStyle, TopBottomPanel, Ui, Vec2, ViewportBuilder, Widget,
+        Label, Layout, Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense,
+        TextEdit, TextFormat, TextStyle, TopBottomPanel, Ui, Vec2, ViewportBuilder, Widget,
     },
     epaint::FontFamily,
 };
@@ -315,6 +315,11 @@ fn main_ui(
                 &mut try_scroll,
                 input,
             );
+        });
+    }
+    if active_entries(entries, state).is_empty() {
+        ui.centered_and_justified(|ui| {
+            ui.label(RichText::new("Nothing to see here…").heading());
         });
     }
 
