@@ -81,7 +81,7 @@ pub struct UiEntry {
     pub cache: UiEntryCache,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum UiEntryCache {
     Text {
         one_liner: Box<str>,
@@ -93,7 +93,7 @@ pub enum UiEntryCache {
         mime_type: Box<str>,
         context: Box<str>,
     },
-    Error(Box<str>),
+    Error(CoreError),
 }
 
 #[derive(Debug)]
@@ -210,9 +210,7 @@ fn handle_command(
                 .chain(database.main().rev().take(100))
             {
                 entries.push(ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
-                    cache: UiEntryCache::Error(
-                        format!("Error: failed to load entry {entry:?}\n{e:?}").into(),
-                    ),
+                    cache: UiEntryCache::Error(e),
                     entry,
                 }));
             }
@@ -431,9 +429,7 @@ fn do_search(
         .map(|entry| {
             // TODO add support for bold highlighting the selection range
             ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
-                cache: UiEntryCache::Error(
-                    format!("Error: failed to load entry {entry:?}\n{e:?}").into(),
-                ),
+                cache: UiEntryCache::Error(e),
                 entry,
             })
         })

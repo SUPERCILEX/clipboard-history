@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     mem,
     sync::{
         mpsc,
@@ -262,6 +263,11 @@ macro_rules! active_highlighted_id {
     }};
 }
 
+fn show_error(ui: &mut Ui, e: &dyn Error) {
+    ui.label(format!("Error: {e}"));
+    ui.label(format!("Details: {e:#?}"));
+}
+
 #[allow(clippy::too_many_lines)]
 fn main_ui(
     ui: &mut Ui,
@@ -287,11 +293,11 @@ fn main_ui(
     });
 
     if let Some(ref e) = state.fatal_error {
-        ui.label(format!("Fatal error: {e:?}"));
+        show_error(ui, e);
         return;
     };
     if let Some(e) = mem::take(&mut state.last_error) {
-        ui.label(format!("Error: {e:?}"));
+        show_error(ui, &e);
     }
 
     let mut try_scroll = false;
@@ -358,7 +364,7 @@ fn entry_ui(
     try_scroll: bool,
     try_popup: bool,
 ) {
-    let response = match entry.cache.clone() {
+    let response = match &entry.cache {
         UiEntryCache::Text { one_liner } => {
             let mut job = LayoutJob::single_section(
                 one_liner.to_string(),
@@ -385,7 +391,7 @@ fn entry_ui(
         }
         UiEntryCache::Image { uri } => row_ui(
             ui,
-            Image::new(&*uri)
+            Image::new(&**uri)
                 .max_height(250.)
                 .max_width(ui.available_width())
                 .fit_to_original_size(1.),
@@ -410,7 +416,7 @@ fn entry_ui(
             try_popup,
         ),
         UiEntryCache::Error(e) => {
-            ui.label(&*e);
+            show_error(ui, e);
             return;
         }
     };
