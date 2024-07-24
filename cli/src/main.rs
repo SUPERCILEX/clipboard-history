@@ -489,6 +489,7 @@ fn get(EntryAction { id }: EntryAction) -> Result<(), CliError> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn search(Search { regex, query }: Search) -> Result<(), CliError> {
     const PREFIX_CONTEXT: usize = 40;
     const CONTEXT_WINDOW: usize = 100;
@@ -550,15 +551,28 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
                 let file = entry.to_file_raw(&reader)?.unwrap();
 
                 let mut buf = [0; CONTEXT_WINDOW];
-                match file.read_exact_at(
-                    &mut buf,
-                    u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap(),
-                ) {
-                    Err(e) if e.kind() == ErrorKind::UnexpectedEof => Ok(()),
-                    r => r,
+                let remaining = {
+                    let mut buf = buf.as_mut_slice();
+                    let mut offset = u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap();
+                    loop {
+                        if buf.is_empty() {
+                            break Ok(buf.len());
+                        }
+                        match file.read_at(buf, offset) {
+                            Ok(0) => break Ok(buf.len()),
+                            Ok(n) => {
+                                let tmp = buf;
+                                buf = &mut tmp[n..];
+                                offset += n as u64;
+                            }
+                            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                            Err(e) => break Err(e),
+                        }
+                    }
                 }
                 .map_io_err(|| format!("failed to read from direct entry {entry_id}."))?;
-                print_entry(entry_id, &buf, start, end)?;
+
+                print_entry(entry_id, &buf[..buf.len() - remaining], start, end)?;
             }
         }
     }
