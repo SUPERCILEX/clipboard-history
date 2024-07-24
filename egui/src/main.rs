@@ -15,7 +15,8 @@ use eframe::{
     egui::{
         text::LayoutJob, Align, CentralPanel, Event, FontId, FontSelection, Image, InputState, Key,
         Label, Layout, Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense,
-        TextEdit, TextFormat, TextStyle, TopBottomPanel, Ui, Vec2, ViewportBuilder, Widget,
+        TextEdit, TextFormat, TextStyle, TopBottomPanel, Ui, Vec2, ViewportBuilder,
+        ViewportCommand, Widget,
     },
     epaint::FontFamily,
 };
@@ -32,34 +33,42 @@ fn main() -> Result<(), eframe::Error> {
         "Ringboard",
         eframe::NativeOptions {
             viewport: ViewportBuilder::default()
+                .with_app_id("ringboard-egui")
                 .with_min_inner_size(Vec2::splat(100.))
                 .with_inner_size(Vec2::new(666., 777.))
                 .with_position(Pos2::ZERO),
             ..Default::default()
         },
         Box::new(|cc| {
-            let mut fonts = egui::FontDefinitions::default();
-            fonts.font_data.insert(
-                "cascadia".to_owned(),
-                egui::FontData::from_static(include_bytes!("../CascadiaCode-Light.ttf")),
-            );
             let cascadia = FontFamily::Name("cascadia".into());
-            fonts
-                .families
-                .entry(cascadia.clone())
-                .or_default()
-                .push("cascadia".to_string());
-            cc.egui_ctx.set_fonts(fonts);
 
             let (command_sender, command_receiver) = mpsc::channel();
             let (response_sender, response_receiver) = mpsc::sync_channel(8);
 
-            let ringboard_loader = Arc::new(RingboardLoader::new(command_sender.clone()));
-            cc.egui_ctx.add_image_loader(ringboard_loader.clone());
-
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
+                let cascadia = cascadia.clone();
+                let command_sender = command_sender.clone();
                 move || {
+                    {
+                        let mut fonts = egui::FontDefinitions::default();
+                        fonts.font_data.insert(
+                            "cascadia".to_owned(),
+                            egui::FontData::from_static(include_bytes!(
+                                "../CascadiaCode-Light.ttf"
+                            )),
+                        );
+                        fonts
+                            .families
+                            .entry(cascadia)
+                            .or_default()
+                            .push("cascadia".to_string());
+                        ctx.set_fonts(fonts);
+                    }
+
+                    let ringboard_loader = Arc::new(RingboardLoader::new(command_sender));
+                    ctx.add_image_loader(ringboard_loader.clone());
+
                     controller(&command_receiver, |m| {
                         let r = if let Message::LoadedImage { id, image } = m {
                             ringboard_loader.add(id, image);
@@ -72,6 +81,18 @@ fn main() -> Result<(), eframe::Error> {
                         }
                         r
                     });
+                }
+            });
+            thread::spawn({
+                let ctx = cc.egui_ctx.clone();
+                move || {
+                    ctx.send_viewport_cmd(ViewportCommand::Icon(Some(
+                        eframe::icon_data::from_png_bytes(include_bytes!(
+                            "../excited-clipboard.jpeg"
+                        ))
+                        .unwrap()
+                        .into(),
+                    )));
                 }
             });
             Ok(Box::new(App::start(
