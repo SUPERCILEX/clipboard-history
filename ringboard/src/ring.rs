@@ -3,7 +3,7 @@ use std::{
     io,
     io::ErrorKind,
     ops::Deref,
-    os::fd::AsFd,
+    os::fd::{AsFd, OwnedFd},
     ptr,
     ptr::NonNull,
     slice,
@@ -24,6 +24,8 @@ pub struct Ring {
     mem: Mmap,
     len: u32,
     capacity: u32,
+    #[cfg(debug_assertions)]
+    fd: OwnedFd,
 }
 
 pub const MAGIC: [u8; 3] = [0x4D, 0x18, 0x32];
@@ -259,8 +261,11 @@ impl Ring {
             .stx_size;
         let len = usize::try_from(len).unwrap();
         let max_entries = max_entries.clamp(offset_to_entries(len), MAX_ENTRIES);
-        let mem = Mmap::new(fd, usize::try_from(entries_to_offset(max_entries)).unwrap())
-            .map_io_err(|| "Failed to map memory.")?;
+        let mem = Mmap::new(
+            &fd,
+            usize::try_from(entries_to_offset(max_entries)).unwrap(),
+        )
+        .map_io_err(|| "Failed to map memory.")?;
 
         if len < MAGIC.len()
             || unsafe { slice::from_raw_parts(mem.ptr().as_ptr(), MAGIC.len()) } != MAGIC
@@ -275,6 +280,8 @@ impl Ring {
             mem,
             len: offset_to_entries(len),
             capacity: max_entries,
+            #[cfg(debug_assertions)]
+            fd,
         })
     }
 
@@ -293,6 +300,19 @@ impl Ring {
     /// The ring file must have at least len entries and cannot exceed capacity.
     pub unsafe fn set_len(&mut self, len: u32) {
         debug_assert!(len <= self.capacity());
+        #[cfg(debug_assertions)]
+        {
+            let bytes = statx(&self.fd, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
+                .map_io_err(|| "Failed to statx Ringboard database file.")
+                .unwrap()
+                .stx_size;
+            let actual_len = offset_to_entries(usize::try_from(bytes).unwrap());
+            debug_assert!(
+                len <= actual_len,
+                "Trying to resize ring of length {actual_len} to {len}."
+            );
+        }
+
         self.len = len;
     }
 
