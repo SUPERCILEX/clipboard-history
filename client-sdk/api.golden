@@ -406,6 +406,7 @@ pub unsafe fn clipboard_history_client_sdk::ui_actor::Command::init(init: <T as 
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::ui_actor::Command
 pub enum clipboard_history_client_sdk::ui_actor::CommandError
 pub clipboard_history_client_sdk::ui_actor::CommandError::Core(clipboard_history_core::Error)
+pub clipboard_history_client_sdk::ui_actor::CommandError::Image(image::error::ImageError)
 pub clipboard_history_client_sdk::ui_actor::CommandError::Regex(regex::error::Error)
 pub clipboard_history_client_sdk::ui_actor::CommandError::Sdk(clipboard_history_client_sdk::ClientError)
 impl core::convert::From<clipboard_history_client_sdk::ClientError> for clipboard_history_client_sdk::ui_actor::CommandError
@@ -414,6 +415,8 @@ impl core::convert::From<clipboard_history_core::Error> for clipboard_history_cl
 pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(source: clipboard_history_core::Error) -> Self
 impl core::convert::From<clipboard_history_core::protocol::IdNotFoundError> for clipboard_history_client_sdk::ui_actor::CommandError
 pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(value: clipboard_history_core::protocol::IdNotFoundError) -> Self
+impl core::convert::From<image::error::ImageError> for clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(source: image::error::ImageError) -> Self
 impl core::convert::From<regex::error::Error> for clipboard_history_client_sdk::ui_actor::CommandError
 pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(source: regex::error::Error) -> Self
 impl core::error::Error for clipboard_history_client_sdk::ui_actor::CommandError
@@ -467,7 +470,7 @@ pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage::default_fo
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedFirstPage::entries: alloc::boxed::Box<[clipboard_history_client_sdk::ui_actor::UiEntry]>
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedImage
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedImage::id: u64
-pub clipboard_history_client_sdk::ui_actor::Message::LoadedImage::result: image::error::ImageResult<image::dynimage::DynamicImage>
+pub clipboard_history_client_sdk::ui_actor::Message::LoadedImage::image: image::dynimage::DynamicImage
 pub clipboard_history_client_sdk::ui_actor::Message::SearchResults(alloc::boxed::Box<[clipboard_history_client_sdk::ui_actor::UiEntry]>)
 impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::Message
 pub fn clipboard_history_client_sdk::ui_actor::Message::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result

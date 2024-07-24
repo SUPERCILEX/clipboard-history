@@ -29,6 +29,7 @@ use ratatui::{
     },
     Terminal,
 };
+use ratatui_image::{picker::Picker, protocol::StatefulProtocol, StatefulImage};
 use ringboard_sdk::{
     core::{
         protocol::{IdNotFoundError, RingKind},
@@ -83,6 +84,7 @@ struct UiState {
     details_requested: Option<u64>,
     detailed_entry: Option<Result<DetailedEntry, CoreError>>,
     detail_scroll: u16,
+    detail_image_state: Option<ImageState>,
 
     query: TextArea<'static>,
     search_state: Option<SearchState>,
@@ -93,6 +95,11 @@ struct UiState {
 struct SearchState {
     focused: bool,
     regex: bool,
+}
+
+enum ImageState {
+    Requested(u64),
+    Loaded(Box<dyn StatefulProtocol>),
 }
 
 macro_rules! active_entries {
@@ -159,6 +166,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
             }
             CommandError::Sdk(ClientError::VersionMismatch { actual: _ }) => Report::new(wrapper),
             CommandError::Regex(e) => Report::new(e).change_context(wrapper),
+            CommandError::Image(e) => Report::new(e).change_context(wrapper),
         }
     })
 }
@@ -221,13 +229,22 @@ impl App {
             responses,
             ref mut state,
         } = self;
-        state
-            .draw(&mut terminal)
-            .map_io_err(|| "Failed to write to terminal.")?;
+        let mut picker = Picker::from_termios().unwrap_or_else(|_| Picker::new((2, 4)));
+        picker.guess_protocol();
+
+        AppWrapper {
+            state,
+            requests: &requests,
+        }
+        .draw(&mut terminal)
+        .map_io_err(|| "Failed to write to terminal.")?;
+
         let mut local_state = Option::default();
         for action in responses {
             match action {
-                Action::Controller(message) => handle_message(message, state, &mut local_state)?,
+                Action::Controller(message) => {
+                    handle_message(message, state, &mut local_state, &mut picker)?;
+                }
                 Action::User(event) => {
                     if handle_event(
                         event.map_io_err(|| "Failed to read terminal.")?,
@@ -238,17 +255,14 @@ impl App {
                     }
                 }
             }
-            state
-                .draw(&mut terminal)
-                .map_io_err(|| "Failed to write to terminal.")?;
-        }
-        Ok(())
-    }
-}
 
-impl State {
-    fn draw(&mut self, terminal: &mut Terminal<impl Backend>) -> io::Result<()> {
-        terminal.draw(|f| f.render_widget(self, f.size()))?;
+            AppWrapper {
+                state,
+                requests: &requests,
+            }
+            .draw(&mut terminal)
+            .map_io_err(|| "Failed to write to terminal.")?;
+        }
         Ok(())
     }
 }
@@ -257,6 +271,7 @@ fn handle_message(
     message: Message,
     State { entries, ui }: &mut State,
     pending_favorite_change: &mut Option<u64>,
+    picker: &mut Picker,
 ) -> Result<(), CommandError> {
     let UiEntries {
         loaded_entries,
@@ -306,6 +321,13 @@ fn handle_message(
             }
         }
         Message::FavoriteChange(id) => *pending_favorite_change = Some(id),
+        Message::LoadedImage { id, image } => {
+            if let Some(ImageState::Requested(requested_id)) = ui.detail_image_state
+                && requested_id == id
+            {
+                ui.detail_image_state = Some(ImageState::Loaded(picker.new_resize_protocol(image)));
+            }
+        }
     }
     Ok(())
 }
@@ -323,6 +345,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
             ui.details_requested = Some(entry.id());
             ui.detailed_entry = None;
             ui.detail_scroll = 0;
+            ui.detail_image_state = None;
             let _ = requests.send(Command::GetDetails {
                 entry,
                 with_text: matches!(cache, UiEntryCache::Text { .. }),
@@ -496,17 +519,29 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
     false
 }
 
-impl Widget for &mut State {
+struct AppWrapper<'a> {
+    requests: &'a Sender<Command>,
+    state: &'a mut State,
+}
+
+impl AppWrapper<'_> {
+    fn draw(&mut self, terminal: &mut Terminal<impl Backend>) -> io::Result<()> {
+        terminal.draw(|f| f.render_widget(self, f.size()))?;
+        Ok(())
+    }
+}
+
+impl Widget for &mut AppWrapper<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let [header_area, main_area, footer_area] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Min(0),
-            Constraint::Length(if self.ui.show_help { 3 } else { 0 }),
+            Constraint::Length(if self.state.ui.show_help { 3 } else { 0 }),
         ])
         .areas(area);
 
         let [entry_list_area, _padding, selected_entry_area] =
-            if self.ui.details_requested.is_none() {
+            if self.state.ui.details_requested.is_none() {
                 Layout::vertical([
                     Constraint::Min(0),
                     Constraint::Length(0),
@@ -527,7 +562,7 @@ impl Widget for &mut State {
             }
             .areas(main_area);
 
-        State::render_title(header_area, buf);
+        AppWrapper::render_title(header_area, buf);
         self.render_entries(entry_list_area, buf);
         self.render_selected_entry(selected_entry_area, buf);
         self.render_footer(footer_area, buf);
@@ -537,17 +572,21 @@ impl Widget for &mut State {
 fn ui_entry_line(UiEntry { entry: _, cache }: &UiEntry) -> Line {
     match cache {
         UiEntryCache::Text { one_liner } => Line::raw(&**one_liner),
-        UiEntryCache::Image { .. } => Line::raw("Image: not yet supported"), // TODO
+        UiEntryCache::Image => Line::raw("Image: open details to view.").italic(),
         UiEntryCache::Binary { mime_type, context } => Line::raw(format!(
             "Unable to display format of type {mime_type:?} from {context:?}."
-        )),
-        UiEntryCache::Error(e) => Line::raw(format!("Error: {e}\nDetails: {e:#?}")),
+        ))
+        .italic(),
+        UiEntryCache::Error(e) => Line::raw(format!("Error: {e}\nDetails: {e:#?}")).italic(),
     }
 }
 
-impl State {
+impl AppWrapper<'_> {
     fn render_entries(&mut self, area: Rect, buf: &mut Buffer) {
-        let Self { entries, ui } = self;
+        let Self {
+            state: State { entries, ui },
+            requests: _,
+        } = self;
 
         let [search_area, entries_area] = Layout::vertical([
             Constraint::Length(if ui.search_state.is_some() { 3 } else { 0 }),
@@ -594,11 +633,11 @@ impl State {
     }
 
     fn render_selected_entry(&mut self, area: Rect, buf: &mut Buffer) {
-        let Self { entries, ui } = self;
-        let Some(UiEntry { entry, cache: _ }) = active_list_state!(entries, ui)
-            .selected()
-            .map(|i| &active_entries!(entries, ui)[i])
-        else {
+        let Self {
+            state: State { entries, ui },
+            requests,
+        } = self;
+        let Some(UiEntry { entry, cache }) = selected_entry!(entries, ui) else {
             return;
         };
 
@@ -638,17 +677,32 @@ impl State {
             .as_ref()
             .and_then(|r| r.as_ref().err())
             .map_or(String::new(), |e| format!("Error: {e}\nDetails: {e:#?}"));
-        Paragraph::new(ui.detailed_entry.as_ref().map_or("Loading…", |r| match r {
-            Ok(DetailedEntry {
-                mime_type: _,
-                full_text,
-            }) => full_text.as_deref().unwrap_or("Binary data."),
-            Err(_) => &error,
-        }))
-        .block(inner_block)
-        .wrap(Wrap { trim: false })
-        .scroll((ui.detail_scroll, 0))
-        .render(inner_area, buf);
+
+        if matches!(cache, UiEntryCache::Image) {
+            if let Some(ImageState::Loaded(image_state)) = &mut ui.detail_image_state {
+                StatefulImage::new(None).render(inner_area, buf, image_state);
+            } else {
+                Paragraph::new("Loading…")
+                    .block(inner_block)
+                    .render(inner_area, buf);
+            }
+            if ui.detail_image_state.is_none() {
+                ui.detail_image_state = Some(ImageState::Requested(entry.id()));
+                let _ = requests.send(Command::LoadImage(entry.id()));
+            }
+        } else {
+            Paragraph::new(ui.detailed_entry.as_ref().map_or("Loading…", |r| match r {
+                Ok(DetailedEntry {
+                    mime_type: _,
+                    full_text,
+                }) => full_text.as_deref().unwrap_or("Binary data."),
+                Err(_) => &error,
+            }))
+            .block(inner_block)
+            .wrap(Wrap { trim: false })
+            .scroll((ui.detail_scroll, 0))
+            .render(inner_area, buf);
+        }
     }
 
     fn render_title(area: Rect, buf: &mut Buffer) {
@@ -659,7 +713,7 @@ impl State {
     }
 
     fn render_footer(&self, area: Rect, buf: &mut Buffer) {
-        if !self.ui.show_help {
+        if !self.state.ui.show_help {
             return;
         }
 

@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
 };
 
-use image::{DynamicImage, ImageReader, ImageResult};
+use image::{DynamicImage, ImageError, ImageReader};
 use regex::bytes::Regex;
 use rustc_hash::FxHasher;
 use rustix::{
@@ -40,6 +40,8 @@ pub enum CommandError {
     Sdk(#[from] ClientError),
     #[error("Regex instantiation failed.")]
     Regex(#[from] regex::Error),
+    #[error("Image loading error.")]
+    Image(#[from] ImageError),
 }
 
 impl From<IdNotFoundError> for CommandError {
@@ -77,7 +79,7 @@ pub enum Message {
     FavoriteChange(u64),
     LoadedImage {
         id: u64,
-        result: ImageResult<DynamicImage>,
+        image: DynamicImage,
     },
 }
 
@@ -301,10 +303,10 @@ fn handle_command<'a, Server: AsFd>(
             let entry = unsafe { database.get(id)? };
             Ok(Some(Message::LoadedImage {
                 id,
-                result: ImageReader::new(BufReader::new(&*entry.to_file(reader)?))
+                image: ImageReader::new(BufReader::new(&*entry.to_file(reader)?))
                     .with_guessed_format()
                     .map_io_err(|| "Failed to guess image format for entry {id}.")?
-                    .decode(),
+                    .decode()?,
             }))
         }
     }

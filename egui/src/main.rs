@@ -19,7 +19,6 @@ use eframe::{
     },
     epaint::FontFamily,
 };
-use image::ImageError;
 use ringboard_sdk::{
     core::{protocol::RingKind, Error as CoreError},
     ui_actor::{controller, Command, CommandError, DetailedEntry, Message, UiEntry, UiEntryCache},
@@ -62,13 +61,8 @@ fn main() -> Result<(), eframe::Error> {
                 let ctx = cc.egui_ctx.clone();
                 move || {
                     controller(&command_receiver, |m| {
-                        let r = if let Message::LoadedImage { id: _, ref result } = m
-                            && result.is_ok()
-                        {
-                            let Message::LoadedImage { id, result } = m else {
-                                unreachable!()
-                            };
-                            ringboard_loader.add(id, result.unwrap());
+                        let r = if let Message::LoadedImage { id, image } = m {
+                            ringboard_loader.add(id, image);
                             Ok(())
                         } else {
                             response_sender.send(m)
@@ -113,7 +107,6 @@ struct UiEntries {
 struct UiState {
     fatal_error: Option<ClientError>,
     last_error: Option<CommandError>,
-    image_error: Option<ImageError>,
     highlighted_id: Option<u64>,
 
     details_requested: Option<u64>,
@@ -154,7 +147,6 @@ fn handle_message(
             UiState {
                 fatal_error,
                 last_error,
-                image_error,
                 highlighted_id,
                 details_requested,
                 detailed_entry,
@@ -189,10 +181,7 @@ fn handle_message(
             *search_results = entries;
         }
         Message::FavoriteChange(_) => {}
-        Message::LoadedImage { id: _, result } => match result {
-            Ok(_) => unreachable!(),
-            Err(e) => *image_error = Some(e),
-        },
+        Message::LoadedImage { .. } => unreachable!(),
     }
 }
 
@@ -340,9 +329,6 @@ fn main_ui(
         return;
     };
     if let Some(e) = &state.last_error {
-        show_error(ui, e);
-    }
-    if let Some(e) = &state.image_error {
         show_error(ui, e);
     }
 
