@@ -495,25 +495,32 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
 
     let (mut database, reader) = open_db()?;
     let mut output = io::stdout().lock();
-    let mut print_entry = |entry_id, buf: &[u8], start: usize, end: usize| {
-        writeln!(output, "\n--- ENTRY {entry_id} ---").unwrap();
+    let mut print_entry =
+        |entry_id, buf: &[u8], start: usize, end: usize| -> Result<(), CoreError> {
+            writeln!(output, "\n--- ENTRY {entry_id} ---")
+                .map_io_err(|| "Failed to write to stdout.")?;
 
-        let bold_start = start.min(PREFIX_CONTEXT);
-        let (prefix, suffix) = buf.split_at(bold_start);
-        let (middle, suffix) = suffix.split_at((end - start).min(suffix.len()));
-        let mut no_empty_write = |buf: &[u8]| {
-            if !buf.is_empty() {
-                output.write_all(buf).unwrap();
-            }
+            let bold_start = start.min(PREFIX_CONTEXT);
+            let (prefix, suffix) = buf.split_at(bold_start);
+            let (middle, suffix) = suffix.split_at((end - start).min(suffix.len()));
+            let mut no_empty_write = |buf: &[u8]| -> Result<(), CoreError> {
+                if !buf.is_empty() {
+                    output
+                        .write_all(buf)
+                        .map_io_err(|| "Failed to write to stdout.")?;
+                }
+                Ok(())
+            };
+
+            no_empty_write(prefix)?;
+            no_empty_write(b"\x1b[1m")?;
+            no_empty_write(middle)?;
+            no_empty_write(b"\x1b[0m")?;
+            no_empty_write(suffix)?;
+            no_empty_write(b"\n")?;
+
+            Ok(())
         };
-
-        no_empty_write(prefix);
-        no_empty_write(b"\x1b[1m");
-        no_empty_write(middle);
-        no_empty_write(b"\x1b[0m");
-        no_empty_write(suffix);
-        no_empty_write(b"\n");
-    };
 
     let reader = Arc::new(reader);
     let (result_stream, threads) = ringboard_sdk::search(
@@ -551,7 +558,7 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
                     r => r,
                 }
                 .map_io_err(|| format!("failed to read from direct entry {entry_id}."))?;
-                print_entry(entry_id, &buf, start, end);
+                print_entry(entry_id, &buf, start, end)?;
             }
         }
     }
@@ -579,7 +586,7 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
             &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
             start,
             end,
-        );
+        )?;
     }
 
     Ok(())
@@ -1584,7 +1591,7 @@ fn fuzz(
     loop {
         match distr.sample(&mut rng) {
             0 => {
-                writeln!(out, "Connecting.").unwrap();
+                writeln!(out, "Connecting.").map_io_err(|| "Failed to write to stdout.")?;
                 if let Ok(client) = if clients.len() == 32 {
                     connect_to_server_with(addr, SocketFlags::NONBLOCK)
                 } else {
@@ -1594,7 +1601,7 @@ fn fuzz(
                 }
             }
             1 => {
-                writeln!(out, "Closing.").unwrap();
+                writeln!(out, "Closing.").map_io_err(|| "Failed to write to stdout.")?;
                 if !clients.is_empty() {
                     clients.swap_remove(rng.gen_range(0..clients.len()));
                 }
@@ -1609,7 +1616,7 @@ fn fuzz(
 
                 match action {
                     2 => {
-                        writeln!(out, "Adding.").unwrap();
+                        writeln!(out, "Adding.").map_io_err(|| "Failed to write to stdout.")?;
                         let mime_type = if rng.gen_range(0..50) == 0 {
                             let len = rng.gen_range(1..=MimeType::new_const().capacity());
                             Alphanumeric.append_string(&mut rng, &mut buf, len);
@@ -1638,7 +1645,7 @@ fn fuzz(
                         max_id_seen = max_id_seen.max(id);
                     }
                     3 => {
-                        writeln!(out, "Moving.").unwrap();
+                        writeln!(out, "Moving.").map_io_err(|| "Failed to write to stdout.")?;
                         let move_id = rng.gen_range(0..=max_id_seen);
                         match MoveToFrontRequest::response(
                             server,
@@ -1657,7 +1664,7 @@ fn fuzz(
                         }
                     }
                     4 => {
-                        writeln!(out, "Swapping.").unwrap();
+                        writeln!(out, "Swapping.").map_io_err(|| "Failed to write to stdout.")?;
                         let idx1 = rng.gen_range(0..=max_id_seen);
                         let idx2 = rng.gen_range(0..=max_id_seen);
                         match SwapRequest::response(server, addr, idx1, idx2)? {
@@ -1687,7 +1694,7 @@ fn fuzz(
                         }
                     }
                     5 => {
-                        writeln!(out, "Removing.").unwrap();
+                        writeln!(out, "Removing.").map_io_err(|| "Failed to write to stdout.")?;
                         let index = rng.gen_range(0..=max_id_seen);
                         match RemoveRequest::response(server, addr, index)? {
                             RemoveResponse { error: None } => {
@@ -1699,14 +1706,16 @@ fn fuzz(
                         }
                     }
                     6 => {
-                        writeln!(out, "Collecting garbage.").unwrap();
+                        writeln!(out, "Collecting garbage.")
+                            .map_io_err(|| "Failed to write to stdout.")?;
                         let max_wasted_bytes = match rng.gen_range(0..4) {
                             0 => 0,
                             _ => rng.gen_range(0..10_000) + 1,
                         };
                         let GarbageCollectResponse { bytes_freed } =
                             GarbageCollectRequest::response(server, addr, max_wasted_bytes)?;
-                        writeln!(out, "Freed {bytes_freed} bytes.").unwrap();
+                        writeln!(out, "Freed {bytes_freed} bytes.")
+                            .map_io_err(|| "Failed to write to stdout.")?;
                     }
                     _ => unreachable!(),
                 }
@@ -1717,7 +1726,7 @@ fn fuzz(
                     "Validating database integrity on {} entries.",
                     data.len()
                 )
-                .unwrap();
+                .map_io_err(|| "Failed to write to stdout.")?;
 
                 for (&id, a) in &data {
                     let entry = unsafe { database.get(id) }?;
