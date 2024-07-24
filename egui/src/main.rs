@@ -181,7 +181,6 @@ fn handle_message(
 ) {
     match message {
         Message::FatalDbOpen(e) => *fatal_error = Some(e.into()),
-        Message::FatalServerConnect(e) => *fatal_error = Some(e),
         Message::Error(e) => *last_error = Some(e),
         Message::LoadedFirstPage {
             entries,

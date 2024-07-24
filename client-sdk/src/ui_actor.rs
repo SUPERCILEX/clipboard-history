@@ -65,7 +65,6 @@ pub enum Command {
 #[derive(Debug)]
 pub enum Message {
     FatalDbOpen(CoreError),
-    FatalServerConnect(ClientError),
     Error(CommandError),
     LoadedFirstPage {
         entries: Box<[UiEntry]>,

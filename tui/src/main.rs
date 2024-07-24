@@ -287,7 +287,6 @@ fn handle_message(
     } = ui;
     match message {
         Message::FatalDbOpen(e) => return Err(e)?,
-        Message::FatalServerConnect(e) => return Err(e)?,
         Message::Error(e) => return Err(e),
         Message::LoadedFirstPage {
             entries: new_entries,
