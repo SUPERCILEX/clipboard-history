@@ -11,9 +11,9 @@ license.workspace = true
 
 [dependencies]
 eframe = { version = "0.28.1" }
-egui_extras = { version = "0.28.1", features = ["file", "image", "svg"] }
 image = "0.25.2"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
+rustc-hash = "2.0.0"
 
 [[bin]]
 name = "ringboard-egui"

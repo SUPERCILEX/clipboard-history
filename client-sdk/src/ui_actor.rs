@@ -3,25 +3,25 @@ use std::{
     cmp::min,
     collections::{BinaryHeap, HashMap},
     hash::BuildHasherDefault,
+    io::BufReader,
     iter::once,
     os::fd::{AsFd, BorrowedFd, OwnedFd},
     str,
     sync::Arc,
 };
 
+use image::{DynamicImage, ImageReader, ImageResult};
 use regex::bytes::Regex;
 use rustc_hash::FxHasher;
 use rustix::{
     fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
     net::SocketAddrUnix,
-    process::fchdir,
 };
 use thiserror::Error;
 
 use crate::{
     api::{connect_to_server, MoveToFrontRequest, RemoveRequest},
     core::{
-        direct_file_name,
         dirs::{data_dir, socket_file},
         protocol::{composite_id, IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind},
         ring::{offset_to_entries, Ring, MAX_ENTRIES},
@@ -57,6 +57,7 @@ pub enum Command {
     Unfavorite(u64),
     Delete(u64),
     Search { query: Box<str>, regex: bool },
+    LoadImage(u64),
 }
 
 #[derive(Debug)]
@@ -74,6 +75,10 @@ pub enum Message {
     },
     SearchResults(Box<[UiEntry]>),
     FavoriteChange(u64),
+    LoadedImage {
+        id: u64,
+        result: ImageResult<DynamicImage>,
+    },
 }
 
 #[derive(Debug)]
@@ -87,9 +92,7 @@ pub enum UiEntryCache {
     Text {
         one_liner: Box<str>,
     },
-    Image {
-        uri: Box<str>,
-    },
+    Image,
     Binary {
         mime_type: Box<str>,
         context: Box<str>,
@@ -146,9 +149,6 @@ pub fn controller<T>(
                 })
             };
             let rings = (open_ring(RingKind::Main)?, open_ring(RingKind::Favorites)?);
-
-            fchdir(reader.direct())
-                .map_io_err(|| "Failed to change working directory to direct allocations.")?;
 
             Ok(((database, reader), rings))
         };
@@ -297,6 +297,16 @@ fn handle_command<'a, Server: AsFd>(
                 do_search(query, reader_, database, reverse_index_cache).into(),
             )))
         }
+        Command::LoadImage(id) => {
+            let entry = unsafe { database.get(id)? };
+            Ok(Some(Message::LoadedImage {
+                id,
+                result: ImageReader::new(BufReader::new(&*entry.to_file(reader)?))
+                    .with_guessed_format()
+                    .map_io_err(|| "Failed to guess image format for entry {id}.")?
+                    .decode(),
+            }))
+        }
     }
 }
 
@@ -304,13 +314,9 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
     let loaded = entry.to_slice(reader)?;
     let mime_type = &*loaded.mime_type()?;
     let entry = if mime_type.starts_with("image/") {
-        let mut buf = Default::default();
-        let buf = direct_file_name(&mut buf, entry.ring(), entry.index());
         UiEntry {
             entry,
-            cache: UiEntryCache::Image {
-                uri: format!("file://{}", buf.to_str().unwrap()).into(),
-            },
+            cache: UiEntryCache::Image,
         }
     } else if let Ok(s) = {
         let mut shrunk = &loaded[..min(loaded.len(), 250)];

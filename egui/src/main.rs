@@ -5,6 +5,7 @@ use std::{
     sync::{
         mpsc,
         mpsc::{Receiver, Sender},
+        Arc,
     },
     thread,
 };
@@ -18,11 +19,14 @@ use eframe::{
     },
     epaint::FontFamily,
 };
+use image::ImageError;
 use ringboard_sdk::{
     core::{protocol::RingKind, Error as CoreError},
     ui_actor::{controller, Command, CommandError, DetailedEntry, Message, UiEntry, UiEntryCache},
     ClientError,
 };
+
+use crate::loader::RingboardLoader;
 
 fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
@@ -35,8 +39,6 @@ fn main() -> Result<(), eframe::Error> {
             ..Default::default()
         },
         Box::new(|cc| {
-            egui_extras::install_image_loaders(&cc.egui_ctx);
-
             let mut fonts = egui::FontDefinitions::default();
             fonts.font_data.insert(
                 "cascadia".to_owned(),
@@ -52,11 +54,25 @@ fn main() -> Result<(), eframe::Error> {
 
             let (command_sender, command_receiver) = mpsc::channel();
             let (response_sender, response_receiver) = mpsc::sync_channel(8);
+
+            let ringboard_loader = Arc::new(RingboardLoader::new(command_sender.clone()));
+            cc.egui_ctx.add_image_loader(ringboard_loader.clone());
+
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
                 move || {
                     controller(&command_receiver, |m| {
-                        let r = response_sender.send(m);
+                        let r = if let Message::LoadedImage { id: _, ref result } = m
+                            && result.is_ok()
+                        {
+                            let Message::LoadedImage { id, result } = m else {
+                                unreachable!()
+                            };
+                            ringboard_loader.add(id, result.unwrap());
+                            Ok(())
+                        } else {
+                            response_sender.send(m)
+                        };
                         if r.is_ok() {
                             ctx.request_repaint();
                         }
@@ -97,6 +113,7 @@ struct UiEntries {
 struct UiState {
     fatal_error: Option<ClientError>,
     last_error: Option<CommandError>,
+    image_error: Option<ImageError>,
     highlighted_id: Option<u64>,
 
     details_requested: Option<u64>,
@@ -137,6 +154,7 @@ fn handle_message(
             UiState {
                 fatal_error,
                 last_error,
+                image_error,
                 highlighted_id,
                 details_requested,
                 detailed_entry,
@@ -171,6 +189,10 @@ fn handle_message(
             *search_results = entries;
         }
         Message::FavoriteChange(_) => {}
+        Message::LoadedImage { id: _, result } => match result {
+            Ok(_) => unreachable!(),
+            Err(e) => *image_error = Some(e),
+        },
     }
 }
 
@@ -320,6 +342,9 @@ fn main_ui(
     if let Some(e) = &state.last_error {
         show_error(ui, e);
     }
+    if let Some(e) = &state.image_error {
+        show_error(ui, e);
+    }
 
     let mut try_scroll = false;
 
@@ -416,9 +441,9 @@ fn entry_ui(
                 try_popup,
             )
         }
-        UiEntryCache::Image { uri } => row_ui(
+        UiEntryCache::Image => row_ui(
             ui,
-            Image::new(&**uri)
+            Image::new(format!("ringboard://{}", entry.entry.id()))
                 .max_height(250.)
                 .max_width(ui.available_width())
                 .fit_to_original_size(1.),
@@ -559,12 +584,12 @@ fn row_ui(
                                 .show(ui, |ui| {
                                     ui.label(&**full);
                                 });
-                        } else if let UiEntryCache::Image { uri } = cache {
+                        } else if matches!(cache, UiEntryCache::Image) {
                             ScrollArea::vertical()
                                 .auto_shrink([false, true])
                                 .show(ui, |ui| {
                                     ui.add(
-                                        Image::new(&**uri)
+                                        Image::new(format!("ringboard://{}", entry.id()))
                                             .max_width(ui.available_width())
                                             .fit_to_original_size(1.),
                                     );
@@ -617,6 +642,130 @@ fn handle_arrow_keys(
             }
         } else {
             entries.first().map(|e| e.entry.id())
+        }
+    }
+}
+
+mod loader {
+    use std::{
+        collections::{hash_map::Entry, HashMap},
+        hash::BuildHasherDefault,
+        str::FromStr,
+        sync::{mpsc::Sender, Arc, Mutex},
+    };
+
+    use eframe::{
+        egui,
+        egui::{
+            load::{ImageLoadResult, ImageLoader, ImagePoll, LoadError},
+            ColorImage, SizeHint,
+        },
+    };
+    use image::DynamicImage;
+    use ringboard_sdk::{core::RingAndIndex, ui_actor::Command};
+    use rustc_hash::FxHasher;
+
+    enum CachedImage {
+        Queued,
+        Computed(Arc<ColorImage>),
+    }
+
+    pub struct RingboardLoader {
+        requests: Sender<Command>,
+        cache: Mutex<HashMap<RingAndIndex, CachedImage, BuildHasherDefault<FxHasher>>>,
+    }
+
+    impl RingboardLoader {
+        pub const ID: &'static str = egui::generate_loader_id!(RingboardLoader);
+
+        pub fn new(requests: Sender<Command>) -> Self {
+            Self {
+                requests,
+                cache: Mutex::default(),
+            }
+        }
+
+        pub fn add(&self, id: u64, image: DynamicImage) {
+            let size = [image.width() as _, image.height() as _];
+            let image_buffer = image.into_rgba8();
+            let pixels = image_buffer.into_flat_samples();
+            let Ok(mut cache) = self.cache.lock() else {
+                return;
+            };
+            cache.insert(
+                RingAndIndex::from_id(id).unwrap(),
+                CachedImage::Computed(
+                    ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()).into(),
+                ),
+            );
+        }
+    }
+
+    fn uri_to_id(uri: &str) -> Option<RingAndIndex> {
+        uri.strip_prefix("ringboard://")
+            .and_then(|id| u64::from_str(id).ok())
+            .and_then(|id| RingAndIndex::from_id(id).ok())
+    }
+
+    impl ImageLoader for RingboardLoader {
+        fn id(&self) -> &str {
+            Self::ID
+        }
+
+        fn load(&self, _: &egui::Context, uri: &str, _: SizeHint) -> ImageLoadResult {
+            let Some(id) = uri_to_id(uri) else {
+                return Err(LoadError::NotSupported);
+            };
+
+            let Ok(mut cache) = self.cache.lock() else {
+                return Err(LoadError::Loading(
+                    "Ringboard loader lock poisoned.".to_string(),
+                ));
+            };
+            match cache.entry(id) {
+                Entry::Occupied(e) => match e.get() {
+                    CachedImage::Queued => Ok(ImagePoll::Pending { size: None }),
+                    CachedImage::Computed(image) => Ok(ImagePoll::Ready {
+                        image: image.clone(),
+                    }),
+                },
+                Entry::Vacant(v) => {
+                    let _ = self.requests.send(Command::LoadImage(id.id()));
+                    v.insert(CachedImage::Queued);
+                    Ok(ImagePoll::Pending { size: None })
+                }
+            }
+        }
+
+        fn forget(&self, uri: &str) {
+            if let Some(id) = uri_to_id(uri)
+                && let Ok(mut cache) = self.cache.lock()
+            {
+                cache.remove(&id);
+            }
+        }
+
+        fn forget_all(&self) {
+            if let Ok(mut cache) = self.cache.lock() {
+                *cache = HashMap::default();
+            }
+        }
+
+        fn byte_size(&self) -> usize {
+            let Ok(cache) = self.cache.lock() else {
+                return 0;
+            };
+
+            cache.capacity() * size_of::<CachedImage>()
+                + cache
+                    .values()
+                    .map(|e| match e {
+                        CachedImage::Queued => 0,
+                        CachedImage::Computed(image) => {
+                            image.pixels.capacity() * size_of::<egui::Color32>()
+                        }
+                    })
+                    .sum::<usize>()
         }
     }
 }
