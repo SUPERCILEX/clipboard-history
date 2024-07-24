@@ -123,8 +123,7 @@ pub fn controller<T>(
             .and_then(|server_addr| Ok((connect_to_server(&server_addr)?, server_addr)))
             {
                 Ok(s) => {
-                    *cache = Some(s);
-                    let (sock, addr) = cache.as_ref().unwrap();
+                    let (sock, addr) = cache.get_or_insert(s);
                     Ok((sock, addr))
                 }
                 Err(e) => Err(e),
@@ -433,8 +432,7 @@ fn do_search(
     for thread in threads {
         let _ = thread.join();
     }
-    *reader_ = Some(Arc::into_inner(reader).unwrap());
-    let reader = reader_.as_mut().unwrap();
+    let reader = reader_.insert(Arc::into_inner(reader).unwrap());
 
     results
         .into_sorted_vec()
