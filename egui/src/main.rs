@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 use std::{
     error::Error,
     sync::{
@@ -280,15 +282,30 @@ fn main_ui(
     requests: &Sender<Command>,
 ) {
     let State { entries, ui: state } = state_;
-    let refresh = || {
-        let _ = requests
-            .send(Command::RefreshDb)
-            .and_then(|()| requests.send(Command::LoadFirstPage));
+    let refresh = |entries: &UiEntries, state: &UiState| {
+        let _ = requests.send(Command::RefreshDb);
+        if let Some(id) = state.details_requested
+            && let Some(&UiEntry { entry, ref cache }) = active_entries(entries, state)
+                .iter()
+                .find(|e| e.entry.id() == id)
+        {
+            let _ = requests.send(Command::GetDetails {
+                entry,
+                with_text: matches!(cache, UiEntryCache::Text { .. }),
+            });
+        }
+        if !state.query.is_empty() {
+            let _ = requests.send(Command::Search {
+                query: state.query.clone().into(),
+                regex: state.search_with_regex,
+            });
+        }
+        let _ = requests.send(Command::LoadFirstPage);
     };
 
     ui.input(|i| {
         if !state.was_focused && i.focused && state.skipped_first_focus {
-            refresh();
+            refresh(entries, state);
         }
         if i.focused {
             state.skipped_first_focus = true;
@@ -309,7 +326,7 @@ fn main_ui(
     if ui.input_mut(|input| input.consume_key(Modifiers::CTRL, Key::R)) {
         *state_ = State::default();
         ui.memory_mut(egui::Memory::close_popup);
-        refresh();
+        refresh(&state_.entries, &state_.ui);
         return;
     }
     if !active_entries(entries, state).is_empty() && ui.memory(|mem| !mem.any_popup_open()) {
@@ -347,7 +364,7 @@ fn main_ui(
                 entry,
                 state,
                 requests,
-                refresh,
+                |state| refresh(entries, state),
                 try_scroll,
                 try_popup,
             );
@@ -370,7 +387,7 @@ fn entry_ui(
     entry: &UiEntry,
     state: &mut UiState,
     requests: &Sender<Command>,
-    refresh: impl FnMut(),
+    refresh: impl FnMut(&UiState),
     try_scroll: bool,
     try_popup: bool,
 ) {
@@ -441,7 +458,7 @@ fn row_ui(
     widget: impl Widget,
     state: &mut UiState,
     requests: &Sender<Command>,
-    mut refresh: impl FnMut(),
+    mut refresh: impl FnMut(&UiState),
     &UiEntry { entry, ref cache }: &UiEntry,
     try_scroll: bool,
     try_popup: bool,
@@ -505,19 +522,19 @@ fn row_ui(
                         RingKind::Favorites => {
                             if ui.button("Unfavorite").clicked() {
                                 let _ = requests.send(Command::Unfavorite(entry_id));
-                                refresh();
+                                refresh(state);
                             }
                         }
                         RingKind::Main => {
                             if ui.button("Favorite").clicked() {
                                 let _ = requests.send(Command::Favorite(entry_id));
-                                refresh();
+                                refresh(state);
                             }
                         }
                     }
                     if ui.button("Delete").clicked() {
                         let _ = requests.send(Command::Delete(entry_id));
-                        refresh();
+                        refresh(state);
                     }
                 });
                 ui.separator();
