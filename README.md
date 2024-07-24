@@ -29,7 +29,7 @@ A detailed technical breakdown of the project is available at https://alexsaveau
 
 ## Demo
 
-TODO screenshots
+![A screenshot demo-ing the various clients.](demo.png)
 
 ## Installation instructions
 
