@@ -496,32 +496,44 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
 
     let (mut database, reader) = open_db()?;
     let mut output = io::stdout().lock();
-    let mut print_entry =
-        |entry_id, buf: &[u8], start: usize, end: usize| -> Result<(), CoreError> {
-            writeln!(output, "\n--- ENTRY {entry_id} ---")
-                .map_io_err(|| "Failed to write to stdout.")?;
+    let mut print_entry = |entry_id,
+                           buf: &[u8],
+                           mime_type: &str,
+                           start: usize,
+                           end: usize|
+     -> Result<(), CoreError> {
+        writeln!(
+            output,
+            "--- ENTRY {entry_id}{} ---",
+            if mime_type.is_empty() {
+                String::new()
+            } else {
+                format!("; {mime_type}")
+            }
+        )
+        .map_io_err(|| "Failed to write to stdout.")?;
 
-            let bold_start = start.min(PREFIX_CONTEXT);
-            let (prefix, suffix) = buf.split_at(bold_start);
-            let (middle, suffix) = suffix.split_at((end - start).min(suffix.len()));
-            let mut no_empty_write = |buf: &[u8]| -> Result<(), CoreError> {
-                if !buf.is_empty() {
-                    output
-                        .write_all(buf)
-                        .map_io_err(|| "Failed to write to stdout.")?;
-                }
-                Ok(())
-            };
-
-            no_empty_write(prefix)?;
-            no_empty_write(b"\x1b[1m")?;
-            no_empty_write(middle)?;
-            no_empty_write(b"\x1b[0m")?;
-            no_empty_write(suffix)?;
-            no_empty_write(b"\n")?;
-
+        let bold_start = start.min(PREFIX_CONTEXT);
+        let (prefix, suffix) = buf.split_at(bold_start);
+        let (middle, suffix) = suffix.split_at((end - start).min(suffix.len()));
+        let mut no_empty_write = |buf: &[u8]| -> Result<(), CoreError> {
+            if !buf.is_empty() {
+                output
+                    .write_all(buf)
+                    .map_io_err(|| "Failed to write to stdout.")?;
+            }
             Ok(())
         };
+
+        no_empty_write(prefix)?;
+        no_empty_write(b"\x1b[1m")?;
+        no_empty_write(middle)?;
+        no_empty_write(b"\x1b[0m")?;
+        no_empty_write(suffix)?;
+        no_empty_write(b"\n\n")?;
+
+        Ok(())
+    };
 
     let reader = Arc::new(reader);
     let (result_stream, threads) = ringboard_sdk::search(
@@ -572,7 +584,13 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
                 }
                 .map_io_err(|| format!("failed to read from direct entry {entry_id}."))?;
 
-                print_entry(entry_id, &buf[..buf.len() - remaining], start, end)?;
+                print_entry(
+                    entry_id,
+                    &buf[..buf.len() - remaining],
+                    &file.mime_type()?,
+                    start,
+                    end,
+                )?;
             }
         }
     }
@@ -598,6 +616,7 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
         print_entry(
             entry.id(),
             &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
+            &bytes.mime_type()?,
             start,
             end,
         )?;
