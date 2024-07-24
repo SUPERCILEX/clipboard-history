@@ -38,6 +38,7 @@ use ringboard_sdk::{
     ClientError,
 };
 use thiserror::Error;
+use tui_textarea::TextArea;
 
 enum Action {
     Controller(Message),
@@ -83,9 +84,15 @@ struct UiState {
     detailed_entry: Option<Result<DetailedEntry, CoreError>>,
     detail_scroll: u16,
 
-    query: String,
+    query: TextArea<'static>,
+    search_state: Option<SearchState>,
 
     show_help: bool,
+}
+
+struct SearchState {
+    focused: bool,
+    regex: bool,
 }
 
 macro_rules! active_entries {
@@ -110,9 +117,13 @@ macro_rules! active_list_state {
 
 macro_rules! selected_entry {
     ($entries:expr, $state:expr) => {{
-        active_list_state!($entries, $state)
-            .selected()
-            .and_then(|selected| active_entries!($entries, $state).get(selected))
+        if $state.query.is_empty() {
+            &$entries.loaded_state
+        } else {
+            &$entries.search_state
+        }
+        .selected()
+        .and_then(|selected| active_entries!($entries, $state).get(selected))
     }};
 }
 
@@ -219,7 +230,7 @@ impl App {
                 Action::Controller(message) => handle_message(message, state, &mut local_state)?,
                 Action::User(event) => {
                     if handle_event(
-                        &event.map_io_err(|| "Failed to read terminal.")?,
+                        event.map_io_err(|| "Failed to read terminal.")?,
                         state,
                         &requests,
                     ) {
@@ -256,9 +267,7 @@ fn handle_message(
     let UiState {
         details_requested,
         detailed_entry,
-        detail_scroll: _,
-        query: _,
-        show_help: _,
+        ..
     } = ui;
     match message {
         Message::FatalDbOpen(e) => return Err(e)?,
@@ -300,34 +309,39 @@ fn handle_message(
 }
 
 #[allow(clippy::too_many_lines)]
-fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) -> bool {
+fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> bool {
     let State { entries, ui } = state;
-    let refresh = || {
-        let _ = requests
-            .send(Command::RefreshDb)
-            .and_then(|()| requests.send(Command::LoadFirstPage));
-    };
-    macro_rules! unselect {
-        () => {{
-            ui.details_requested = None;
-            ui.detailed_entry = None;
-        }};
-    }
-    macro_rules! select {
-        () => {{
-            if let Some(&UiEntry { entry, ref cache }) = selected_entry!(entries, ui) {
-                ui.details_requested = Some(entry.id());
-                ui.detailed_entry = None;
-                ui.detail_scroll = 0;
-                let _ = requests.send(Command::GetDetails {
-                    entry,
-                    with_text: matches!(cache, UiEntryCache::Text { .. }),
-                });
-            }
-        }};
-    }
 
-    match *event {
+    let unselect = |ui: &mut UiState| {
+        ui.details_requested = None;
+        ui.detailed_entry = None;
+    };
+    let select = |entries: &UiEntries, ui: &mut UiState| {
+        if let Some(&UiEntry { entry, ref cache }) = selected_entry!(entries, ui) {
+            ui.details_requested = Some(entry.id());
+            ui.detailed_entry = None;
+            ui.detail_scroll = 0;
+            let _ = requests.send(Command::GetDetails {
+                entry,
+                with_text: matches!(cache, UiEntryCache::Text { .. }),
+            });
+        }
+    };
+    let refresh = |entries: &UiEntries, ui: &mut UiState| {
+        let _ = requests.send(Command::RefreshDb);
+        if ui.details_requested.is_some() {
+            select(entries, ui);
+        }
+        if let &Some(SearchState { focused: _, regex }) = &ui.search_state {
+            let _ = requests.send(Command::Search {
+                query: ui.query.lines().first().unwrap().to_string().into(),
+                regex,
+            });
+        }
+        let _ = requests.send(Command::LoadFirstPage);
+    };
+
+    match event {
         Event::Key(KeyEvent {
             code,
             modifiers,
@@ -338,97 +352,136 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
                 use ratatui::crossterm::event::KeyCode::{Char, Down, Enter, Esc, Left, Right, Up};
                 match code {
                     Esc => {
-                        if ui.details_requested.is_some() {
-                            unselect!();
+                        if let Some(SearchState { focused, regex: _ }) = &mut ui.search_state
+                            && *focused
+                        {
+                            *focused = false;
+                        } else if ui.details_requested.is_some() {
+                            unselect(ui);
+                        } else if ui.search_state.is_some() {
+                            ui.search_state = None;
+                            ui.query = TextArea::default();
                         } else {
                             return true;
                         }
                     }
-                    Char('q') => return true,
-                    Char('c') if modifiers == KeyModifiers::CONTROL => return true,
-                    Char('h') | Left => unselect!(),
-                    Char('j') | Down => {
-                        let state = active_list_state!(entries, ui);
-                        let next = state.selected().map_or(0, |i| {
-                            if i + 1 == active_entries!(entries, ui).len() {
-                                0
-                            } else {
-                                i + 1
-                            }
-                        });
-                        state.select(Some(next));
-                    }
-                    Char('J') => {
-                        ui.detail_scroll = ui.detail_scroll.saturating_add(1);
-                    }
-                    Char('k') | Up => {
-                        let state = active_list_state!(entries, ui);
-                        let previous = state.selected().map_or(usize::MAX, |i| {
-                            if i == 0 {
-                                active_entries!(entries, ui).len() - 1
-                            } else {
-                                i - 1
-                            }
-                        });
-                        state.select(Some(previous));
-                    }
-                    Char('K') => {
-                        ui.detail_scroll = ui.detail_scroll.saturating_sub(1);
-                    }
-                    Char('l') | Right => select!(),
-                    Char(' ') => {
-                        if ui.details_requested.is_some() {
-                            unselect!();
-                        } else {
-                            select!();
-                        }
-                    }
-                    Char('/' | 's') => {
-                        // TODO Search
-                    }
-                    Char('f') => {
-                        if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui) {
-                            match entry.ring() {
-                                RingKind::Favorites => {
-                                    let _ = requests.send(Command::Unfavorite(entry.id()));
-                                }
-                                RingKind::Main => {
-                                    let _ = requests.send(Command::Favorite(entry.id()));
-                                }
-                            }
-                            refresh();
-                        }
-                    }
-                    Char('d') => {
-                        if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui) {
-                            let _ = requests.send(Command::Delete(entry.id()));
-                            refresh();
-                        }
-                    }
-                    Char('?') => {
-                        ui.show_help ^= true;
-                    }
-                    Char('x') => {
-                        // TODO search with regex
-                    }
-                    Char('r') => {
-                        refresh();
-                        if modifiers == KeyModifiers::CONTROL {
-                            *state = State::default();
-                        } else {
-                            ui.detail_scroll = 0;
-                        }
-                        return false;
-                    }
                     Enter => {
-                        // TODO paste
+                        if let Some(SearchState { focused, regex: _ }) = &mut ui.search_state
+                            && *focused
+                        {
+                            *focused = false;
+                        } else {
+                            // TODO paste
+                        }
                     }
                     _ => {}
+                }
+
+                if let &mut Some(SearchState {
+                    ref mut focused,
+                    regex,
+                }) = &mut ui.search_state
+                    && *focused
+                {
+                    if ui.query.input(event) {
+                        let _ = requests.send(Command::Search {
+                            query: ui.query.lines().first().unwrap().to_string().into(),
+                            regex,
+                        });
+                    } else if code == Down {
+                        *focused = false;
+                    }
+                } else {
+                    match code {
+                        Char('q') => return true,
+                        Char('c') if modifiers == KeyModifiers::CONTROL => return true,
+                        Char('h') | Left => unselect(ui),
+                        Char('j') | Down => {
+                            let state = active_list_state!(entries, ui);
+                            let next = state.selected().map_or(0, |i| {
+                                if i + 1 == active_entries!(entries, ui).len() {
+                                    0
+                                } else {
+                                    i + 1
+                                }
+                            });
+                            state.select(Some(next));
+                        }
+                        Char('J') => {
+                            ui.detail_scroll = ui.detail_scroll.saturating_add(1);
+                        }
+                        Char('k') | Up => {
+                            let state = active_list_state!(entries, ui);
+                            let previous = state.selected().map_or(usize::MAX, |i| {
+                                if i == 0 {
+                                    active_entries!(entries, ui).len() - 1
+                                } else {
+                                    i - 1
+                                }
+                            });
+                            if let Some(SearchState { focused, regex: _ }) = &mut ui.search_state
+                                && Some(previous) > state.selected()
+                            {
+                                *focused = true;
+                            } else {
+                                state.select(Some(previous));
+                            }
+                        }
+                        Char('K') => {
+                            ui.detail_scroll = ui.detail_scroll.saturating_sub(1);
+                        }
+                        Char('l') | Right => select(entries, ui),
+                        Char(' ') => {
+                            if ui.details_requested.is_some() {
+                                unselect(ui);
+                            } else {
+                                select(entries, ui);
+                            }
+                        }
+                        Char(c @ ('/' | 's' | 'x')) => {
+                            ui.search_state = Some(SearchState {
+                                focused: true,
+                                regex: c == 'x',
+                            });
+                        }
+                        Char('f') => {
+                            if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
+                            {
+                                match entry.ring() {
+                                    RingKind::Favorites => {
+                                        let _ = requests.send(Command::Unfavorite(entry.id()));
+                                    }
+                                    RingKind::Main => {
+                                        let _ = requests.send(Command::Favorite(entry.id()));
+                                    }
+                                }
+                                refresh(entries, ui);
+                            }
+                        }
+                        Char('d') => {
+                            if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
+                            {
+                                let _ = requests.send(Command::Delete(entry.id()));
+                                refresh(entries, ui);
+                            }
+                        }
+                        Char('?') => {
+                            ui.show_help ^= true;
+                        }
+                        Char('r') => {
+                            if modifiers == KeyModifiers::CONTROL {
+                                *state = State::default();
+                            }
+                            refresh(&state.entries, &mut state.ui);
+                            return false;
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
         Event::FocusGained => {
-            refresh();
+            refresh(entries, ui);
         }
         _ => {}
     }
@@ -436,21 +489,17 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
         && let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
         && detail_id != entry.id()
     {
-        select!();
+        select(entries, ui);
     }
     false
 }
 
 impl Widget for &mut State {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let [header_area, rest_area, footer_area] = Layout::vertical([
+        let [header_area, main_area, footer_area] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Min(0),
-            if self.ui.show_help {
-                Constraint::Length(3)
-            } else {
-                Constraint::Length(0)
-            },
+            Constraint::Length(if self.ui.show_help { 3 } else { 0 }),
         ])
         .areas(area);
 
@@ -474,7 +523,7 @@ impl Widget for &mut State {
                     Constraint::Percentage(50),
                 ])
             }
-            .areas(rest_area);
+            .areas(main_area);
 
         State::render_title(header_area, buf);
         self.render_entries(entry_list_area, buf);
@@ -498,14 +547,34 @@ impl State {
     fn render_entries(&mut self, area: Rect, buf: &mut Buffer) {
         let Self { entries, ui } = self;
 
+        let [search_area, entries_area] = Layout::vertical([
+            Constraint::Length(if ui.search_state.is_some() { 3 } else { 0 }),
+            Constraint::Min(0),
+        ])
+        .areas(area);
+
+        if let &Some(SearchState { focused, regex }) = &ui.search_state {
+            ui.query.set_block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(if focused {
+                        Style::new().bold()
+                    } else {
+                        Style::default()
+                    })
+                    .title(if regex { "RegEx search" } else { "Search" }),
+            );
+            ui.query.widget().render(search_area, buf);
+        }
+
         let outer_block = Block::new()
             .title_alignment(Alignment::Center)
             .borders(Borders::TOP)
             .title("Entries");
         let inner_block = Block::new().borders(Borders::NONE);
-        let inner_area = outer_block.inner(area);
+        let inner_area = outer_block.inner(entries_area);
 
-        outer_block.render(area, buf);
+        outer_block.render(entries_area, buf);
 
         StatefulWidget::render(
             List::new(active_entries!(entries, ui).iter().map(ui_entry_line))

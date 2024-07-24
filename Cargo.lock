@@ -1063,6 +1063,7 @@ dependencies = [
  "ratatui",
  "regex",
  "thiserror",
+ "tui-textarea",
 ]
 
 [[package]]
@@ -4224,6 +4225,17 @@ name = "ttf-parser"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c591d83f69777866b9126b24c6dd9a18351f177e49d625920d19f989fd31cf8"
+
+[[package]]
+name = "tui-textarea"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a13589ef83273780b53a0e0be49282cb5d9cc10727b6c580e8f11366ccb460c"
+dependencies = [
+ "crossterm",
+ "ratatui",
+ "unicode-width",
+]
 
 [[package]]
 name = "type-map"
