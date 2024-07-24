@@ -293,18 +293,8 @@ fn main_ui(
     requests: &Sender<Command>,
 ) {
     let State { entries, ui: state } = state_;
-    let refresh = |entries: &UiEntries, state: &UiState| {
+    let refresh = |state: &UiState| {
         let _ = requests.send(Command::RefreshDb);
-        if let Some(id) = state.details_requested
-            && let Some(&UiEntry { entry, ref cache }) = active_entries(entries, state)
-                .iter()
-                .find(|e| e.entry.id() == id)
-        {
-            let _ = requests.send(Command::GetDetails {
-                entry,
-                with_text: matches!(cache, UiEntryCache::Text { .. }),
-            });
-        }
         if !state.query.is_empty() {
             let _ = requests.send(Command::Search {
                 query: state.query.clone().into(),
@@ -316,7 +306,7 @@ fn main_ui(
 
     ui.input(|i| {
         if !state.was_focused && i.focused && state.skipped_first_focus {
-            refresh(entries, state);
+            refresh(state);
         }
         if i.focused {
             state.skipped_first_focus = true;
@@ -337,7 +327,7 @@ fn main_ui(
     if ui.input_mut(|input| input.consume_key(Modifiers::CTRL, Key::R)) {
         *state_ = State::default();
         ui.memory_mut(egui::Memory::close_popup);
-        refresh(&state_.entries, &state_.ui);
+        refresh(&state_.ui);
         return;
     }
     if !active_entries(entries, state).is_empty() && ui.memory(|mem| !mem.any_popup_open()) {
@@ -375,7 +365,7 @@ fn main_ui(
                 entry,
                 state,
                 requests,
-                |state| refresh(entries, state),
+                refresh,
                 try_scroll,
                 try_popup,
             );
@@ -520,7 +510,7 @@ fn row_ui(
                 state.details_requested = Some(entry_id);
                 state.detailed_entry = None;
                 let _ = requests.send(Command::GetDetails {
-                    entry,
+                    id: entry_id,
                     with_text: matches!(cache, UiEntryCache::Text { .. }),
                 });
             }

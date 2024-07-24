@@ -243,7 +243,7 @@ impl App {
         for action in responses {
             match action {
                 Action::Controller(message) => {
-                    handle_message(message, state, &mut local_state, &mut picker)?;
+                    handle_message(message, state, &mut local_state, &mut picker, &requests)?;
                 }
                 Action::User(event) => {
                     if handle_event(
@@ -272,6 +272,7 @@ fn handle_message(
     State { entries, ui }: &mut State,
     pending_favorite_change: &mut Option<u64>,
     picker: &mut Picker,
+    requests: &Sender<Command>,
 ) -> Result<(), CommandError> {
     let UiEntries {
         loaded_entries,
@@ -306,6 +307,9 @@ fn handle_message(
                     .position(|e| e.entry.id() == id)
                 {
                     active_list_state!(entries, ui).select(Some(index));
+                    if details_requested.is_some() {
+                        *details_requested = Some(id);
+                    }
                 }
             }
         }
@@ -329,7 +333,25 @@ fn handle_message(
             }
         }
     }
+    if ui.details_requested.is_some() {
+        maybe_get_details(entries, ui, requests);
+    }
     Ok(())
+}
+
+fn maybe_get_details(entries: &UiEntries, ui: &mut UiState, requests: &Sender<Command>) {
+    if let Some(&UiEntry { entry, ref cache }) = selected_entry!(entries, ui)
+        && ui.details_requested != Some(entry.id())
+    {
+        ui.details_requested = Some(entry.id());
+        ui.detailed_entry = None;
+        ui.detail_scroll = 0;
+        ui.detail_image_state = None;
+        let _ = requests.send(Command::GetDetails {
+            id: entry.id(),
+            with_text: matches!(cache, UiEntryCache::Text { .. }),
+        });
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -340,23 +362,8 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
         ui.details_requested = None;
         ui.detailed_entry = None;
     };
-    let select = |entries: &UiEntries, ui: &mut UiState| {
-        if let Some(&UiEntry { entry, ref cache }) = selected_entry!(entries, ui) {
-            ui.details_requested = Some(entry.id());
-            ui.detailed_entry = None;
-            ui.detail_scroll = 0;
-            ui.detail_image_state = None;
-            let _ = requests.send(Command::GetDetails {
-                entry,
-                with_text: matches!(cache, UiEntryCache::Text { .. }),
-            });
-        }
-    };
-    let refresh = |entries: &UiEntries, ui: &mut UiState| {
+    let refresh = |ui: &mut UiState| {
         let _ = requests.send(Command::RefreshDb);
-        if ui.details_requested.is_some() {
-            select(entries, ui);
-        }
         if let &Some(SearchState { focused: _, regex }) = &ui.search_state {
             let _ = requests.send(Command::Search {
                 query: ui.query.lines().first().unwrap().to_string().into(),
@@ -455,12 +462,12 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                         Char('K') => {
                             ui.detail_scroll = ui.detail_scroll.saturating_sub(1);
                         }
-                        Char('l') | Right => select(entries, ui),
+                        Char('l') | Right => maybe_get_details(entries, ui, requests),
                         Char(' ') => {
                             if ui.details_requested.is_some() {
                                 unselect(ui);
                             } else {
-                                select(entries, ui);
+                                maybe_get_details(entries, ui, requests);
                             }
                         }
                         Char(c @ ('/' | 's' | 'x')) => {
@@ -480,14 +487,14 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                                         let _ = requests.send(Command::Favorite(entry.id()));
                                     }
                                 }
-                                refresh(entries, ui);
+                                refresh(ui);
                             }
                         }
                         Char('d') => {
                             if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
                             {
                                 let _ = requests.send(Command::Delete(entry.id()));
-                                refresh(entries, ui);
+                                refresh(ui);
                             }
                         }
                         Char('?') => {
@@ -497,7 +504,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                             if modifiers == KeyModifiers::CONTROL {
                                 *state = State::default();
                             }
-                            refresh(&state.entries, &mut state.ui);
+                            refresh(&mut state.ui);
                             return false;
                         }
                         _ => {}
@@ -506,15 +513,12 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
             }
         }
         Event::FocusGained => {
-            refresh(entries, ui);
+            refresh(ui);
         }
         _ => {}
     }
-    if let Some(detail_id) = ui.details_requested
-        && let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
-        && detail_id != entry.id()
-    {
-        select(entries, ui);
+    if ui.details_requested.is_some() {
+        maybe_get_details(entries, ui, requests);
     }
     false
 }

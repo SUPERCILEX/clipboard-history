@@ -54,7 +54,7 @@ impl From<IdNotFoundError> for CommandError {
 pub enum Command {
     RefreshDb,
     LoadFirstPage,
-    GetDetails { entry: Entry, with_text: bool },
+    GetDetails { id: u64, with_text: bool },
     Favorite(u64),
     Unfavorite(u64),
     Delete(u64),
@@ -239,8 +239,9 @@ fn handle_command<'a, Server: AsFd>(
                 },
             }))
         }
-        Command::GetDetails { entry, with_text } => {
+        Command::GetDetails { id, with_text } => {
             let mut run = || {
+                let entry = unsafe { database.get(id)? };
                 if with_text {
                     let loaded = entry.to_slice(reader)?;
                     Ok(DetailedEntry {
@@ -254,10 +255,7 @@ fn handle_command<'a, Server: AsFd>(
                     })
                 }
             };
-            Ok(Some(Message::EntryDetails {
-                id: entry.id(),
-                result: run(),
-            }))
+            Ok(Some(Message::EntryDetails { id, result: run() }))
         }
         ref c @ (Command::Favorite(id) | Command::Unfavorite(id)) => {
             let (server, addr) = server()?;

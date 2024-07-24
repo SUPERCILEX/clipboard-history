@@ -363,7 +363,7 @@ pub enum clipboard_history_client_sdk::ui_actor::Command
 pub clipboard_history_client_sdk::ui_actor::Command::Delete(u64)
 pub clipboard_history_client_sdk::ui_actor::Command::Favorite(u64)
 pub clipboard_history_client_sdk::ui_actor::Command::GetDetails
-pub clipboard_history_client_sdk::ui_actor::Command::GetDetails::entry: clipboard_history_client_sdk::Entry
+pub clipboard_history_client_sdk::ui_actor::Command::GetDetails::id: u64
 pub clipboard_history_client_sdk::ui_actor::Command::GetDetails::with_text: bool
 pub clipboard_history_client_sdk::ui_actor::Command::LoadFirstPage
 pub clipboard_history_client_sdk::ui_actor::Command::LoadImage(u64)
