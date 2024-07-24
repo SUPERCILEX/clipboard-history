@@ -3,7 +3,7 @@ use std::{
     io,
     io::ErrorKind,
     ops::Deref,
-    os::fd::{AsFd, OwnedFd},
+    os::fd::AsFd,
     ptr,
     ptr::NonNull,
     slice,
@@ -25,7 +25,7 @@ pub struct Ring {
     len: u32,
     capacity: u32,
     #[cfg(debug_assertions)]
-    fd: OwnedFd,
+    fd: std::os::fd::OwnedFd,
 }
 
 pub const MAGIC: [u8; 3] = [0x4D, 0x18, 0x32];
