@@ -3,7 +3,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use log::{error, info};
+use log::{error, info, warn};
 use ringboard_sdk::{
     core::{
         dirs::data_dir,
@@ -123,7 +123,7 @@ impl CopyDeduplication {
             .and_then(|id| {
                 let id = composite_id(kind, id);
                 let entry = unsafe { self.database.get(id) }
-                    .inspect_err(|e| error!("Failed to get entry for ID: {id:?}\nError: {e:?}"))
+                    .inspect_err(|e| warn!("Failed to get entry for ID: {id:?}\nError: {e:?}"))
                     .ok()?;
                 match data {
                     CopyData::Slice(data) => {
