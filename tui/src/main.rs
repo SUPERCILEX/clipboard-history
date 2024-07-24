@@ -301,7 +301,9 @@ fn handle_message(
         }
         Message::SearchResults(entries) => {
             *search_results = entries;
-            search_state.select_first();
+            if search_state.selected().is_none() {
+                search_state.select_first();
+            }
         }
         Message::FavoriteChange(id) => *pending_favorite_change = Some(id),
     }
@@ -388,7 +390,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                             query: ui.query.lines().first().unwrap().to_string().into(),
                             regex,
                         });
-                    } else if code == Down {
+                    } else if code == Up || code == Down {
                         *focused = false;
                     }
                 } else {
