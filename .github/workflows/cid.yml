@@ -58,6 +58,7 @@ jobs:
           cargo publish --package clipboard-history
           cargo publish --package clipboard-history-x11
           cargo publish --package clipboard-history-egui
+          cargo publish --package clipboard-history-tui
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
