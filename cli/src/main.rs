@@ -1,5 +1,4 @@
 #![feature(debug_closure_helpers)]
-#![feature(let_chains)]
 
 use std::{
     borrow::Cow,
@@ -1150,8 +1149,8 @@ fn migrate_from_gpaste(
                 Event::Start(e) => {
                     return match e.name().as_ref() {
                         b"history" => {
-                            if let Some(s) = e.try_get_attribute("version")?
-                                && s.value.as_ref() == b"2.0"
+                            if e.try_get_attribute("version")?
+                                .is_some_and(|s| s.value.as_ref() == b"2.0")
                             {
                                 break;
                             }
