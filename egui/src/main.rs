@@ -87,11 +87,9 @@ fn main() -> Result<(), eframe::Error> {
                 let ctx = cc.egui_ctx.clone();
                 move || {
                     ctx.send_viewport_cmd(ViewportCommand::Icon(Some(
-                        eframe::icon_data::from_png_bytes(include_bytes!(
-                            "../excited-clipboard.jpeg"
-                        ))
-                        .unwrap()
-                        .into(),
+                        eframe::icon_data::from_png_bytes(include_bytes!("../logo.jpeg"))
+                            .unwrap()
+                            .into(),
                     )));
                 }
             });

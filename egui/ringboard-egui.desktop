@@ -1,0 +1,10 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Terminal=false
+Type=Application
+Name=Ringboard
+GenericName=Clipboard Manager
+Exec=/bin/bash -c "PATH=~/.cargo/bin:\\$PATH ringboard-egui"
+Icon=ringboard
+StartupWMClass=ringboard-egui
