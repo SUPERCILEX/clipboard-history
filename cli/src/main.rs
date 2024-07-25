@@ -543,6 +543,7 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
         reader.clone(),
     );
     let mut results = BTreeMap::<BucketAndIndex, (u16, u16)>::new();
+    let mut buf = [0; CONTEXT_WINDOW];
     for result in result_stream {
         let QueryResult {
             location,
@@ -560,7 +561,6 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
                 let entry = unsafe { database.get(entry_id)? };
                 let file = entry.to_file_raw(&reader)?.unwrap();
 
-                let mut buf = [0; CONTEXT_WINDOW];
                 let remaining = {
                     let mut buf = buf.as_mut_slice();
                     let mut offset = u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap();
