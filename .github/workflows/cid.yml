@@ -122,3 +122,10 @@ jobs:
           file: target/${{ matrix.target }}/release/ringboard-egui
           asset_name: ringboard-egui-${{ matrix.target }}
           tag: ${{ github.ref }}
+      - name: Upload binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/ringboard-tui
+          asset_name: ringboard-tui-${{ matrix.target }}
+          tag: ${{ github.ref }}
