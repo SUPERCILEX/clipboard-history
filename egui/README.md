@@ -1,5 +1,7 @@
 # Ringboard egui
 
+<a href="https://crates.io/crates/clipboard-history-egui">![Crates.io Version](https://img.shields.io/crates/v/clipboard-history-egui)</a>
+
 This binary is a Ringboard client that provides a GUI built with
 [egui](https://github.com/emilk/egui).
 

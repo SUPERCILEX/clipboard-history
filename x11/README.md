@@ -1,5 +1,7 @@
 # Ringboard X11
 
+<a href="https://crates.io/crates/clipboard-history-x11">![Crates.io Version](https://img.shields.io/crates/v/clipboard-history-x11)</a>
+
 This binary provides an X11 clipboard watching service for the Ringboard database. It connects to
 the X11 and Ringboard servers and uses the X11 XFixes extension to monitor the clipboard for new
 clipboard selections to send to the Ringboard server.

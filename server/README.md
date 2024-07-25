@@ -1,5 +1,7 @@
 # Ringboard server
 
+<a href="https://crates.io/crates/clipboard-history-server">![Crates.io Version](https://img.shields.io/crates/v/clipboard-history-server)</a>
+
 This binary is the heart of Ringboard and is the only piece of code capable of writing data to the
 database. The server waits for client commands over a Unix socket, processing and responding to
 requests serially.
