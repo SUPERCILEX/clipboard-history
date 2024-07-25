@@ -35,6 +35,9 @@ pub const TEXT_MIMES: &[&str] = &[
 ];
 pub const NUM_BUCKETS: usize = 11;
 
+// The max composite ID is 2^40 (8 bit ring ID and 32 bit entry ID)
+pub const DIRECT_FILE_NAME_LEN: usize = "1099511627776".len();
+
 pub fn read_server_pid<Fd: AsFd, P: Arg + Copy + Debug>(
     dir: Fd,
     lock_file: P,
@@ -166,7 +169,7 @@ impl<T> Debug for DirectFileNameToken<'_, T> {
 }
 
 pub fn direct_file_name(
-    buf: &mut [u8; "1099511627776".len() + 1],
+    buf: &mut [u8; DIRECT_FILE_NAME_LEN + 1],
     to: RingKind,
     index: u32,
 ) -> DirectFileNameToken<()> {

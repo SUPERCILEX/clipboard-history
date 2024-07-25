@@ -824,6 +824,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::StringView<'a> wh
 pub fn clipboard_history_core::StringView<'a>::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::StringView<'a>
 pub fn clipboard_history_core::StringView<'a>::from(t: T) -> T
+pub const clipboard_history_core::DIRECT_FILE_NAME_LEN: usize
 pub const clipboard_history_core::NUM_BUCKETS: usize
 pub const clipboard_history_core::TEXT_MIMES: &[&str]
 pub trait clipboard_history_core::AsBytes: core::marker::Sized

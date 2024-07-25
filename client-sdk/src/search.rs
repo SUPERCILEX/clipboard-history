@@ -2,6 +2,7 @@ use std::{
     io,
     io::ErrorKind,
     mem::MaybeUninit,
+    str,
     str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -14,7 +15,9 @@ use std::{
 use arrayvec::ArrayVec;
 use memchr::memmem::Finder;
 use regex::bytes::Regex;
-use ringboard_core::{bucket_to_length, ring::Mmap, size_to_bucket, IoErr, TEXT_MIMES};
+use ringboard_core::{
+    bucket_to_length, ring::Mmap, size_to_bucket, IoErr, DIRECT_FILE_NAME_LEN, TEXT_MIMES,
+};
 use rustix::{
     fs::{openat, Mode, OFlags, RawDir},
     thread::{unshare, UnshareFlags},
@@ -142,10 +145,10 @@ pub fn search(
 fn search_impl(
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
-) -> (QueryIter, arrayvec::IntoIter<JoinHandle<()>, 12>) {
+) -> (QueryIter, arrayvec::IntoIter<JoinHandle<()>, 13>) {
     let (sender, receiver) = mpsc::sync_channel(0);
     let stop = Arc::new(AtomicBool::new(false));
-    let mut threads = ArrayVec::<_, 12>::new_const();
+    let mut threads = ArrayVec::<_, 13>::new_const();
 
     for bucket in usize::from(size_to_bucket(
         u16::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u16::MAX),
@@ -184,62 +187,99 @@ fn search_impl(
             }
         }));
     }
-    threads.push(thread::spawn({
-        let stop = stop.clone();
-        move || {
-            let direct_dir = match openat(reader.direct(), c".", OFlags::DIRECTORY, Mode::empty())
-                .map_io_err(|| "Failed to open direct dir.")
-                .and_then(|fd| {
-                    unshare(UnshareFlags::FILES).map_io_err(|| "Failed to unshare FD table.")?;
-                    Ok(fd)
-                }) {
-                Ok(fd) => fd,
-                Err(e) => {
-                    let _ = sender.send(Err(e));
-                    return;
-                }
-            };
+    {
+        let (direct_file_sender, direct_file_receiver) = mpsc::sync_channel(8);
+        threads.push(thread::spawn({
+            let stop = stop.clone();
+            let sender = sender.clone();
+            move || {
+                let direct_dir =
+                    match openat(reader.direct(), c".", OFlags::DIRECTORY, Mode::empty())
+                        .map_io_err(|| "Failed to open direct dir.")
+                        .and_then(|fd| {
+                            unshare(UnshareFlags::FILES)
+                                .map_io_err(|| "Failed to unshare FD table.")?;
+                            Ok(fd)
+                        }) {
+                        Ok(fd) => fd,
+                        Err(e) => {
+                            let _ = sender.send(Err(e));
+                            return;
+                        }
+                    };
 
-            let mut buf = [MaybeUninit::uninit(); 8192];
-            let mut iter = RawDir::new(&direct_dir, &mut buf);
-            while let Some(file) = iter.next() {
-                if stop.load(Ordering::Relaxed) {
-                    break;
-                }
+                let mut buf = [MaybeUninit::uninit(); 8192];
+                let mut iter = RawDir::new(&direct_dir, &mut buf);
+                while let Some(file) = iter.next() {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
 
-                if match file
-                    .map_io_err(|| "Failed to read direct allocation directory.")
-                    .and_then(|file| {
-                        {
-                            let name = file.file_name();
-                            if name == c"." || name == c".." {
-                                return Ok(None);
-                            }
+                    let run = || {
+                        let file =
+                            file.map_io_err(|| "Failed to read direct allocation directory.")?;
+
+                        let file_name = file.file_name();
+                        if file_name == c"." || file_name == c".." {
+                            return Ok(None);
                         }
 
-                        let fd =
-                            openat(&direct_dir, file.file_name(), OFlags::RDONLY, Mode::empty())
-                                .map_io_err(|| {
-                                    format!(
-                                        "Failed to open direct allocation: {:?}",
-                                        file.file_name().to_string_lossy()
-                                    )
-                                })?;
+                        let fd = openat(&direct_dir, file_name, OFlags::RDONLY, Mode::empty())
+                            .map_io_err(|| {
+                                format!("Failed to open direct allocation: {file_name:?}")
+                            })?;
                         let mime_type = xattr_mime_type(&fd)?;
                         if !is_searchable_mime(&mime_type) {
                             return Ok(None);
                         }
 
-                        let bytes =
-                            Mmap::from(&fd).map_io_err(|| "Failed to mmap direct allocation.")?;
+                        Ok(Some((
+                            Mmap::from(&fd).map_io_err(|| {
+                                format!("Failed to mmap direct allocation: {file_name:?}")
+                            })?,
+                            <[u8; DIRECT_FILE_NAME_LEN]>::try_from(file_name.to_bytes()).map_err(
+                                |_| ringboard_core::Error::Io {
+                                    error: io::Error::new(
+                                        ErrorKind::InvalidData,
+                                        "Not a Ringboard database.",
+                                    ),
+                                    context: format!(
+                                        "Direct allocation file name is of invalid size: \
+                                         {file_name:?}"
+                                    )
+                                    .into(),
+                                },
+                            )?,
+                        )))
+                    };
+
+                    if match run() {
+                        Ok(Some(f)) => direct_file_sender.send(f).map_err(|_| ()),
+                        Ok(None) => continue,
+                        Err(e) => sender.send(Err(e)).map_err(|_| ()),
+                    }
+                    .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+        }));
+        threads.push(thread::spawn({
+            let stop = stop.clone();
+            move || {
+                for (file, file_name) in direct_file_receiver {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
+
+                    let mut run = || {
                         // TODO consider splitting this off into its own thread if big enough
-                        let Some((start, end)) = query.find(&bytes) else {
+                        let Some((start, end)) = query.find(&file) else {
                             return Ok(None);
                         };
 
-                        let id = file
-                            .file_name()
-                            .to_str()
+                        let id = str::from_utf8(&file_name)
                             .ok()
                             .and_then(|id| u64::from_str(id).ok())
                             .ok_or_else(|| ringboard_core::Error::Io {
@@ -249,7 +289,7 @@ fn search_impl(
                                 ),
                                 context: format!(
                                     "Invalid direct allocation file name: {:?}",
-                                    file.file_name()
+                                    file_name.escape_ascii()
                                 )
                                 .into(),
                             })?;
@@ -259,19 +299,21 @@ fn search_impl(
                             start,
                             end,
                         }))
-                    }) {
-                    Ok(Some(r)) => sender.send(Ok(r)),
-                    Ok(None) => continue,
-                    Err(e) => sender.send(Err(e)),
-                }
-                .is_err()
-                {
-                    break;
+                    };
+
+                    if match run() {
+                        Ok(Some(r)) => sender.send(Ok(r)),
+                        Ok(None) => continue,
+                        Err(e) => sender.send(Err(e)),
+                    }
+                    .is_err()
+                    {
+                        break;
+                    }
                 }
             }
-        }
-    }));
-
+        }));
+    }
     (
         QueryIter {
             stream: receiver.into_iter(),

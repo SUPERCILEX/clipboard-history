@@ -5,7 +5,7 @@ use std::{borrow::Cow, io, num::ParseIntError};
 use thiserror::Error;
 pub use utils::{
     bucket_to_length, copy_file_range_all, direct_file_name, open_buckets, read_server_pid,
-    size_to_bucket, AsBytes, DirectFileNameToken, NUM_BUCKETS, TEXT_MIMES,
+    size_to_bucket, AsBytes, DirectFileNameToken, DIRECT_FILE_NAME_LEN, NUM_BUCKETS, TEXT_MIMES,
 };
 pub use views::{BucketAndIndex, PathView, RingAndIndex, StringView};
 
