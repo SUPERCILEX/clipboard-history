@@ -243,8 +243,7 @@ impl FreeLists {
         })
     }
 
-    #[allow(clippy::needless_pass_by_ref_mut)]
-    fn save(&mut self) -> Result<(), CliError> {
+    fn save(&self) -> Result<(), CliError> {
         info!("Saving allocator free list to disk.");
         let bytes = bitcode::encode(&self.lists);
         self.file
@@ -532,7 +531,6 @@ impl Allocator {
             .map(|bytes_freed| GarbageCollectResponse { bytes_freed })
     }
 
-    #[allow(clippy::too_many_lines)]
     fn gc_(&mut self, max_wasted_bytes: u64) -> Result<u64, CliError> {
         const MIN_BYTES_TO_FREE: u64 = 1 << 14;
 
@@ -770,7 +768,7 @@ impl Allocator {
         Ok(bytes_freed)
     }
 
-    pub fn shutdown(mut self) -> Result<(), CliError> {
+    pub fn shutdown(self) -> Result<(), CliError> {
         self.data.buckets.free_lists.save()
     }
 }
@@ -859,9 +857,8 @@ impl AllocatorData {
         Ok(Entry::Bucketed(entry))
     }
 
-    #[allow(clippy::needless_pass_by_ref_mut)]
     fn alloc_direct(
-        &mut self,
+        &self,
         data: File,
         &mime_type: &MimeType,
         to: RingKind,
@@ -902,8 +899,7 @@ impl AllocatorData {
         }
     }
 
-    #[allow(clippy::needless_pass_by_ref_mut)]
-    fn free_direct(&mut self, to: RingKind, id: u32) -> Result<(), CliError> {
+    fn free_direct(&self, to: RingKind, id: u32) -> Result<(), CliError> {
         debug!("Freeing direct allocation.");
         let mut buf = Default::default();
         let buf = direct_file_name(&mut buf, to, id);

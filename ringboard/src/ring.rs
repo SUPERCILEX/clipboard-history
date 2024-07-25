@@ -251,7 +251,6 @@ impl Drop for Mmap {
 
 impl Ring {
     /// Open a Ringboard database.
-    #[allow(clippy::missing_panics_doc)]
     pub fn open<P: Arg + Copy + Debug>(max_entries: u32, path: P) -> Result<Self> {
         let fd = openat(CWD, path, OFlags::RDONLY, Mode::empty())
             .map_io_err(|| format!("Failed to open Ringboard database for reading: {path:?}"))?;
@@ -322,7 +321,6 @@ impl Ring {
     }
 
     #[must_use]
-    #[allow(clippy::missing_panics_doc)]
     pub fn write_head(&self) -> u32 {
         let bytes = unsafe {
             slice::from_raw_parts(
@@ -372,7 +370,6 @@ impl Ring {
     }
 
     #[must_use]
-    #[allow(clippy::missing_panics_doc)]
     pub fn get(&self, index: u32) -> Option<Entry> {
         if index >= self.len() {
             return None;

@@ -21,4 +21,4 @@ smallvec = "1.13.2"
 thiserror = "1.0.63"
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.6", default-features = false, features = ["api"] }
+supercilex-tests = { version = "0.4.7", default-features = false, features = ["api"] }

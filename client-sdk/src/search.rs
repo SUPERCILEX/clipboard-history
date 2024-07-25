@@ -139,7 +139,6 @@ pub fn search(
     (results, threads.into_iter())
 }
 
-#[allow(clippy::too_many_lines)]
 fn search_impl(
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,

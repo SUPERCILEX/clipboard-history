@@ -488,7 +488,6 @@ fn get(EntryAction { id }: EntryAction) -> Result<(), CliError> {
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
 fn search(Search { regex, query }: Search) -> Result<(), CliError> {
     const PREFIX_CONTEXT: usize = 40;
     const CONTEXT_WINDOW: usize = 100;
@@ -814,7 +813,6 @@ fn migrate(
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
 fn migrate_from_gch(
     server: OwnedFd,
     addr: &SocketAddrUnix,
@@ -1063,7 +1061,6 @@ fn migrate_from_clipboard_indicator(
     unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
 }
 
-#[allow(clippy::too_many_lines)]
 fn migrate_from_gpaste(
     server: OwnedFd,
     addr: &SocketAddrUnix,
@@ -1213,7 +1210,7 @@ fn migrate_from_gpaste(
     unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
 }
 
-#[allow(clippy::too_many_lines, clippy::cast_precision_loss)]
+#[allow(clippy::cast_precision_loss)]
 fn stats() -> Result<(), CliError> {
     #[derive(Default, Debug)]
     struct RingStats {
@@ -1587,7 +1584,6 @@ fn generate(
     unsafe { drain_add_requests(server, true, None, &mut pending_adds) }
 }
 
-#[allow(clippy::too_many_lines)]
 fn fuzz(
     addr: &SocketAddrUnix,
     Fuzz {

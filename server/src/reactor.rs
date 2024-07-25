@@ -183,7 +183,6 @@ fn setup_uring() -> Result<(IoUring, BufRing), CliError> {
     Ok((uring, buf_ring))
 }
 
-#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     const REQ_TYPE_ACCEPT: u64 = 0;
     const REQ_TYPE_RECV: u64 = 1;

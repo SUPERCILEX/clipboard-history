@@ -353,7 +353,6 @@ fn maybe_get_details(entries: &UiEntries, ui: &mut UiState, requests: &Sender<Co
     }
 }
 
-#[allow(clippy::too_many_lines)]
 fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> bool {
     let State { entries, ui } = state;
 

@@ -1,5 +1,4 @@
 #![feature(core_io_borrowed_buf, read_buf)]
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 use std::{borrow::Cow, io, num::ParseIntError};
 

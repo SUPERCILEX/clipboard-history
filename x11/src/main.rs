@@ -172,7 +172,6 @@ impl TransferAtomAllocator {
     }
 }
 
-#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn run() -> Result<(), CliError> {
     info!(
         "Starting Ringboard X11 clipboard listener v{}.",

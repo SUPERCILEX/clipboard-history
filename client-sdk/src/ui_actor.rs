@@ -180,7 +180,6 @@ pub fn controller<T>(
     }
 }
 
-#[allow(clippy::too_many_lines)]
 fn handle_command<'a, Server: AsFd>(
     command: Command,
     server: impl FnOnce() -> Result<(Server, &'a SocketAddrUnix), ClientError>,

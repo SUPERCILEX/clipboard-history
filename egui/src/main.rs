@@ -316,7 +316,6 @@ fn show_error(ui: &mut Ui, e: &dyn Error) {
     ui.label(format!("Details: {e:#?}"));
 }
 
-#[allow(clippy::too_many_lines)]
 fn main_ui(
     ui: &mut Ui,
     entry_text_font: &FontFamily,
@@ -412,7 +411,6 @@ fn active_entries<'a>(entries: &'a UiEntries, state: &UiState) -> &'a [UiEntry] 
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn entry_ui(
     ui: &mut Ui,
     entry_text_font: &FontFamily,
@@ -482,7 +480,6 @@ fn entry_ui(
     }
 }
 
-#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn row_ui(
     ui: &mut Ui,
     widget: impl Widget,

@@ -912,10 +912,15 @@ impl<'a> core::marker::Sync for clipboard_history_client_sdk::RingReader<'a>
 impl<'a> core::marker::Unpin for clipboard_history_client_sdk::RingReader<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::RingReader<'a>
 impl<'a> core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::RingReader<'a>
+impl<'data, I> maybe_rayon::iter::IntoParallelRefMutIterator<'data> for clipboard_history_client_sdk::RingReader<'a> where I: 'data + core::marker::Sized, &'data mut I: maybe_rayon::iter::IntoParallelIterator
+pub type clipboard_history_client_sdk::RingReader<'a>::Item = <&'data mut I as maybe_rayon::iter::IntoParallelIterator>::Item
+pub type clipboard_history_client_sdk::RingReader<'a>::Iter = <&'data mut I as maybe_rayon::iter::IntoParallelIterator>::Iter
+pub fn clipboard_history_client_sdk::RingReader<'a>::par_iter_mut(&'data mut self) -> <I as maybe_rayon::iter::IntoParallelRefMutIterator<'data>>::Iter
 impl<I> core::iter::traits::collect::IntoIterator for clipboard_history_client_sdk::RingReader<'a> where I: core::iter::traits::iterator::Iterator
 pub type clipboard_history_client_sdk::RingReader<'a>::IntoIter = I
 pub type clipboard_history_client_sdk::RingReader<'a>::Item = <I as core::iter::traits::iterator::Iterator>::Item
 pub fn clipboard_history_client_sdk::RingReader<'a>::into_iter(self) -> I
+impl<I> maybe_rayon::iter::ParallelIterator for clipboard_history_client_sdk::RingReader<'a> where I: core::iter::traits::iterator::Iterator
 impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::RingReader<'a> where U: core::convert::From<T>
 pub fn clipboard_history_client_sdk::RingReader<'a>::into(self) -> U
 impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::RingReader<'a> where U: core::convert::Into<T>
