@@ -35,9 +35,9 @@ A detailed technical breakdown of the project is available at https://alexsaveau
 
 > Note: Ringboard is Linux-only and requires a relatively recent Kernel (6+).
 
-The easiest way to get going is
-to [install cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html) and then run
-the installation script for systemd:
+The easiest way to get going is to
+[install cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html) and then run the
+installation script for systemd:
 
 ```sh
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/install-with-cargo-systemd.sh | bash
@@ -49,28 +49,28 @@ curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/in
 
 You'll need the server, an X11 or Wayland clipboard watcher, and a way to view your clipboard:
 
-1. Install the server from source
-   with `cargo install clipboard-history-server --no-default-features --features systemd` or
-   download a [prebuilt binary](https://github.com/SUPERCILEX/clipboard-history/releases/latest).
+1. Install the server from source with
+   `cargo install clipboard-history-server --no-default-features --features systemd` or download a
+   [prebuilt binary](https://github.com/SUPERCILEX/clipboard-history/releases/latest).
 2. Determine whether you are using Wayland or X11 with `bash -c 'echo $XDG_SESSION_TYPE'`:
-    1. If on Wayland, install from source
-       with `cargo install clipboard-history-wayland --no-default-features` (prebuild binaries are
-       also available as before).
-    2. If on X11, install from source
-       with `cargo install clipboard-history-x11 --no-default-features`.
+   1. If on Wayland, install from source with
+      `cargo install clipboard-history-wayland --no-default-features` (prebuild binaries are also
+      available as before).
+   2. If on X11, install from source with
+      `cargo install clipboard-history-x11 --no-default-features`.
 3. Install a client of your choice:
-    * egui: `cargo install clipboard-history-egui`
-    * ratatui: `cargo install clipboard-history-tui`
-    * CLI: `cargo install clipboard-history`
-4. Add
-   a [custom shortcut](https://help.gnome.org/users/gnome-help/stable/keyboard-shortcuts-set.html.en)
+   - egui: `cargo install clipboard-history-egui`
+   - ratatui: `cargo install clipboard-history-tui`
+   - CLI: `cargo install clipboard-history`
+4. Add a
+   [custom shortcut](https://help.gnome.org/users/gnome-help/stable/keyboard-shortcuts-set.html.en)
    to start your GUI, for example with `bash -c 'PATH=~/.cargo/bin:$PATH ringboard-egui'`.
 
 #### For systemd
 
-Install the [server](server/ringboard-server.service) and [X11](x11/ringboard-x11.service)
-or [Wayland](wayland/ringboard-wayland.service) services into `~/.config/systemd/user` and enable
-them: `systemctl --user enable ringboard-{wayland,x11}`.
+Install the [server](server/ringboard-server.service) and [X11](x11/ringboard-x11.service) or
+[Wayland](wayland/ringboard-wayland.service) services into `~/.config/systemd/user` and enable them:
+`systemctl --user enable ringboard-{wayland,x11}`.
 
 #### For framework-less systems
 
@@ -80,21 +80,24 @@ You'll need to start the Ringboard server and X11/Wayland clipboard watcher on b
 
 Tooling is provided to migrate from other clipboard managers. Run:
 
-- `$ ringboard migrate gch` to import
-  your [Gnome Clipboard History](https://github.com/SUPERCILEX/gnome-clipboard-history) entries.
+- `$ ringboard migrate gch` to import your
+  [Gnome Clipboard History](https://github.com/SUPERCILEX/gnome-clipboard-history) entries.
+- `$ ringboard migrate g-paste` to import your [GPaste](https://github.com/Keruspe/GPaste) history.
+- `$ ringboard migrate clipboard-indicator` to import your
+  [Clipboard Indicator](https://extensions.gnome.org/extension/779/clipboard-indicator/) history.
 
 ## Project breakdown
 
 Each submodule contains its own README with details on how to use it.
 
 - `/`
-    - [`cli/`](cli): The Ringboard Command Line Interface contains tools for working with the
-      Ringboard database.
-    - [`client-sdk/`](client-sdk): The client SDK offers APIs to read and write Ringboard data.
-    - [`egui/`](egui): The egui Ringboard client displays clipboard entries in a standard GUI.
-    - [`ringboard/`](ringboard): The core code shared across many Ringboard crates.
-    - [`server/`](server): The Ringboard server writes data to the Ringboard database.
-    - [`tui/`](tui): The ratatui Ringboard client displays clipboard entries in your terminal.
-    - [`wayland/`](wayland): The Wayland clipboard watcher sends new clipboard entries to the
-      Ringboard server.
-    - [`x11/`](x11): The X11 clipboard watcher sends new clipboard entries to the Ringboard server.
+  - [`cli/`](cli): The Ringboard Command Line Interface contains tools for working with the
+    Ringboard database.
+  - [`client-sdk/`](client-sdk): The client SDK offers APIs to read and write Ringboard data.
+  - [`egui/`](egui): The egui Ringboard client displays clipboard entries in a standard GUI.
+  - [`ringboard/`](ringboard): The core code shared across many Ringboard crates.
+  - [`server/`](server): The Ringboard server writes data to the Ringboard database.
+  - [`tui/`](tui): The ratatui Ringboard client displays clipboard entries in your terminal.
+  - [`wayland/`](wayland): The Wayland clipboard watcher sends new clipboard entries to the
+    Ringboard server.
+  - [`x11/`](x11): The X11 clipboard watcher sends new clipboard entries to the Ringboard server.

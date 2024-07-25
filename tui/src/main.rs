@@ -730,7 +730,7 @@ impl AppWrapper<'_> {
 
         Paragraph::new(
             "Use ↓↑ to move, ←→ to (un)select, / to search, x to search with RegEx, r to reload, \
-             f to (un)favorite, d to delete.",
+             f to (un)favorite, d to delete, J/K to scroll entry details.",
         )
         .wrap(Wrap { trim: true })
         .block(inner_block)
