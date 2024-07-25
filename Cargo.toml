@@ -2,8 +2,8 @@
 members = [
     "cli",
     "client-sdk",
+    "core",
     "egui",
-    "ringboard",
     "server",
     "tui",
     "x11",

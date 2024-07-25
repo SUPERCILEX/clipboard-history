@@ -94,8 +94,8 @@ Each submodule contains its own README with details on how to use it.
   - [`cli/`](cli): The Ringboard Command Line Interface contains tools for working with the
     Ringboard database.
   - [`client-sdk/`](client-sdk): The client SDK offers APIs to read and write Ringboard data.
+  - [`core/`](core): The core code shared across many Ringboard crates.
   - [`egui/`](egui): The egui Ringboard client displays clipboard entries in a standard GUI.
-  - [`ringboard/`](ringboard): The core code shared across many Ringboard crates.
   - [`server/`](server): The Ringboard server writes data to the Ringboard database.
   - [`tui/`](tui): The ratatui Ringboard client displays clipboard entries in your terminal.
   - [`wayland/`](wayland): The Wayland clipboard watcher sends new clipboard entries to the
