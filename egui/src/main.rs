@@ -40,29 +40,42 @@ fn main() -> Result<(), eframe::Error> {
             ..Default::default()
         },
         Box::new(|cc| {
-            let cascadia = FontFamily::Name("cascadia".into());
+            let entry_font = FontFamily::Name("entry-font".into());
 
             let (command_sender, command_receiver) = mpsc::channel();
             let (response_sender, response_receiver) = mpsc::sync_channel(8);
 
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
-                let cascadia = cascadia.clone();
+                let entry_font = entry_font.clone();
                 let command_sender = command_sender.clone();
                 move || {
                     {
                         let mut fonts = egui::FontDefinitions::default();
+
                         fonts.font_data.insert(
                             "cascadia".to_owned(),
                             egui::FontData::from_static(include_bytes!(
                                 "../CascadiaCode-Light.ttf"
                             )),
                         );
+                        fonts.font_data.insert(
+                            "Noto Emoji".to_owned(),
+                            egui::FontData::from_static(include_bytes!(
+                                "../NotoEmoji-VariableFont_wght.ttf"
+                            )),
+                        );
+
+                        {
+                            let entry_fonts = fonts.families.entry(entry_font).or_default();
+                            entry_fonts.push("cascadia".into());
+                            entry_fonts.push("Noto Emoji".into());
+                        }
                         fonts
                             .families
-                            .entry(cascadia)
+                            .entry(FontFamily::Monospace)
                             .or_default()
-                            .push("cascadia".to_string());
+                            .push("Noto Emoji".into());
                         ctx.set_fonts(fonts);
                     }
 
@@ -94,7 +107,7 @@ fn main() -> Result<(), eframe::Error> {
                 }
             });
             Ok(Box::new(App::start(
-                cascadia,
+                entry_font,
                 command_sender,
                 response_receiver,
             )))
@@ -576,7 +589,7 @@ fn row_ui(
                             ScrollArea::both()
                                 .auto_shrink([false, true])
                                 .show(ui, |ui| {
-                                    ui.label(&**full);
+                                    ui.label(RichText::new(&**full).monospace());
                                 });
                         } else if matches!(cache, UiEntryCache::Image) {
                             ScrollArea::vertical()
