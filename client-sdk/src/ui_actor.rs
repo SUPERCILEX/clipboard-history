@@ -90,14 +90,9 @@ pub struct UiEntry {
 
 #[derive(Debug)]
 pub enum UiEntryCache {
-    Text {
-        one_liner: Box<str>,
-    },
+    Text { one_liner: Box<str> },
     Image,
-    Binary {
-        mime_type: Box<str>,
-        context: Box<str>,
-    },
+    Binary { mime_type: Box<str> },
     Error(CoreError),
 }
 
@@ -359,7 +354,6 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
             entry,
             cache: UiEntryCache::Binary {
                 mime_type: mime_type.into(),
-                context: Box::default(),
             },
         }
     };

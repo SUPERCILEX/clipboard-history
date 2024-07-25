@@ -461,12 +461,10 @@ fn entry_ui(
             try_scroll,
             try_popup,
         ),
-        UiEntryCache::Binary { mime_type, context } => row_ui(
+        UiEntryCache::Binary { mime_type } => row_ui(
             ui,
-            Label::new(format!(
-                "Unable to display format of type {mime_type:?} from {context:?}."
-            ))
-            .selectable(false),
+            Label::new(format!("Unable to display format of type {mime_type:?}."))
+                .selectable(false),
             state,
             requests,
             refresh,

@@ -505,7 +505,6 @@ pub unsafe fn clipboard_history_client_sdk::ui_actor::Message::init(init: <T as 
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::ui_actor::Message
 pub enum clipboard_history_client_sdk::ui_actor::UiEntryCache
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary
-pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary::context: alloc::boxed::Box<str>
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary::mime_type: alloc::boxed::Box<str>
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Error(clipboard_history_core::Error)
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Image

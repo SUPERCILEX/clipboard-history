@@ -576,10 +576,9 @@ fn ui_entry_line(UiEntry { entry: _, cache }: &UiEntry) -> Line {
     match cache {
         UiEntryCache::Text { one_liner } => Line::raw(&**one_liner),
         UiEntryCache::Image => Line::raw("Image: open details to view.").italic(),
-        UiEntryCache::Binary { mime_type, context } => Line::raw(format!(
-            "Unable to display format of type {mime_type:?} from {context:?}."
-        ))
-        .italic(),
+        UiEntryCache::Binary { mime_type } => {
+            Line::raw(format!("Unable to display format of type {mime_type:?}.")).italic()
+        }
         UiEntryCache::Error(e) => Line::raw(format!("Error: {e}\nDetails: {e:#?}")).italic(),
     }
 }
