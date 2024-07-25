@@ -204,8 +204,7 @@ struct Add {
 
     /// The entry mime type.
     #[clap(short, long)]
-    #[clap(default_value = "")]
-    mime_type: MimeType,
+    mime_type: Option<MimeType>,
 }
 
 #[derive(ValueEnum, Copy, Clone, Debug)]
@@ -646,7 +645,13 @@ fn add(
             server,
             addr,
             target.into(),
-            mime_type,
+            mime_type
+                .or_else(|| {
+                    mime_guess::from_path(data_file)
+                        .first_raw()
+                        .and_then(|s| MimeType::from(s).ok())
+                })
+                .unwrap_or_default(),
             file.as_ref().map_or(stdin(), |file| file.as_fd()),
         )?
     };

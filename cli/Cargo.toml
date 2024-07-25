@@ -19,6 +19,7 @@ clap-num = "1.1.1"
 dirs = "5.0.1"
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
 fuc_engine = "2.2.0"
+mime_guess = { version = "2.0.5", default-features = false }
 quick-xml = { version = "0.36.1", features = ["serialize"] }
 rand = { version = "0.8.5", default-features = false, features = ["std"] }
 rand_distr = "0.4.3"

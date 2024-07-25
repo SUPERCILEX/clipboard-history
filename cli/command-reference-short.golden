@@ -57,7 +57,7 @@ Arguments:
 
 Options:
   -t, --target <TARGET>        The target ring [default: main] [possible values: favorites, main]
-  -m, --mime-type <MIME_TYPE>  The entry mime type [default: ]
+  -m, --mime-type <MIME_TYPE>  The entry mime type
   -h, --help                   Print help (use `--help` for more detail)
 
 ---

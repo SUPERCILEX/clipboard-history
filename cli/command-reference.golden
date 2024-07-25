@@ -84,8 +84,6 @@ Options:
 
   -m, --mime-type <MIME_TYPE>
           The entry mime type
-          
-          [default: ]
 
   -h, --help
           Print help (use `-h` for a summary)
