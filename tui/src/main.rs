@@ -41,6 +41,11 @@ use ringboard_sdk::{
 use thiserror::Error;
 use tui_textarea::TextArea;
 
+#[cfg(feature = "trace")]
+#[global_allocator]
+static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
+    tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
+
 enum Action {
     Controller(Message),
     User(io::Result<Event>),

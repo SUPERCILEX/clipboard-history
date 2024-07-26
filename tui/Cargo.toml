@@ -16,7 +16,11 @@ ratatui-image = { version = "1.0.5", features = ["crossterm"] }
 regex = "1.10.5"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
 thiserror = "1.0.63"
+tracy-client = { version = "0.17.0", optional = true }
 tui-textarea = "0.5.1"
+
+[features]
+trace = ["dep:tracy-client"]
 
 [[bin]]
 name = "ringboard-tui"
