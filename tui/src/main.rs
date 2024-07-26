@@ -1,6 +1,7 @@
 #![feature(let_chains)]
 
 use std::{
+    fmt::Write,
     io,
     io::stdout,
     sync::{
@@ -95,6 +96,8 @@ struct UiState {
     search_state: Option<SearchState>,
 
     show_help: bool,
+
+    cache: String,
 }
 
 struct SearchState {
@@ -643,6 +646,9 @@ impl AppWrapper<'_> {
             state: State { entries, ui },
             requests,
         } = self;
+        if ui.details_requested.is_none() {
+            return;
+        }
         let Some(UiEntry { entry, cache }) = selected_entry!(entries, ui) else {
             return;
         };
@@ -657,19 +663,26 @@ impl AppWrapper<'_> {
             Block::new()
                 .borders(Borders::TOP)
                 .title_alignment(Alignment::Center)
-                .title(format!(
-                    "{} ({}{})",
-                    match entry.ring() {
-                        RingKind::Favorites => "Favorite entry",
-                        RingKind::Main => "Entry",
-                    },
-                    entry.id(),
+                .title({
+                    ui.cache.clear();
+                    write!(
+                        ui.cache,
+                        "{} ({}",
+                        match entry.ring() {
+                            RingKind::Favorites => "Favorite entry",
+                            RingKind::Main => "Entry",
+                        },
+                        entry.id()
+                    )
+                    .unwrap();
                     if mime_type.is_empty() {
-                        String::new()
+                        write!(ui.cache, ")")
                     } else {
-                        format!("; {mime_type}")
+                        write!(ui.cache, "; {mime_type})")
                     }
-                ))
+                    .unwrap();
+                    ui.cache.as_str()
+                })
         };
         let inner_block = Block::new()
             .borders(Borders::NONE)
