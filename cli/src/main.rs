@@ -237,6 +237,11 @@ struct Search {
     #[arg(short, long)]
     regex: bool,
 
+    /// Ignore ASCII casing when searching.
+    #[arg(short, long)]
+    #[arg(conflicts_with = "regex")]
+    ignore_case: bool,
+
     /// The query string to search for.
     #[arg(required = true)]
     query: String,
@@ -487,7 +492,13 @@ fn get(EntryAction { id }: EntryAction) -> Result<(), CliError> {
     Ok(())
 }
 
-fn search(Search { regex, query }: Search) -> Result<(), CliError> {
+fn search(
+    Search {
+        regex,
+        ignore_case,
+        mut query,
+    }: Search,
+) -> Result<(), CliError> {
     const PREFIX_CONTEXT: usize = 40;
     const CONTEXT_WINDOW: usize = 100;
 
@@ -536,11 +547,15 @@ fn search(Search { regex, query }: Search) -> Result<(), CliError> {
     let (result_stream, threads) = ringboard_sdk::search(
         if regex {
             Query::Regex(Regex::new(&query)?)
+        } else if ignore_case {
+            query.make_ascii_lowercase();
+            Query::PlainIgnoreCase(query.as_bytes())
         } else {
             Query::Plain(query.as_bytes())
         },
         reader.clone(),
     );
+    drop(query);
     let mut results = BTreeMap::<BucketAndIndex, (u16, u16)>::new();
     let mut buf = [0; CONTEXT_WINDOW];
     for result in result_stream {

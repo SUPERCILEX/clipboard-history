@@ -58,6 +58,9 @@ Options:
   -r, --regex
           Interpret the query string as regex instead of a plain-text match
 
+  -i, --ignore-case
+          Ignore ASCII casing when searching
+
   -h, --help
           Print help (use `-h` for a summary)
 
