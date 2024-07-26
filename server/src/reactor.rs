@@ -111,7 +111,8 @@ fn setup_uring() -> Result<(IoUring, BufRing), CliError> {
     };
 
     let low_mem_listener = {
-        let mut cgroup = String::from("/sys/fs/cgroup");
+        let mut cgroup = String::with_capacity(160);
+        cgroup.push_str("/sys/fs/cgroup");
         let start = cgroup.len();
         File::open("/proc/self/cgroup")
             .map_io_err(|| "Failed to open cgroup file: \"/proc/self/cgroup\"")?

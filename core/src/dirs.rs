@@ -6,6 +6,7 @@ use std::{
 #[must_use]
 pub fn data_dir() -> PathBuf {
     let mut dir = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("/tmp/data"));
+    dir.reserve("clipboard-history/buckets/(1024, 2048]".len());
     dir.push("clipboard-history");
     dir
 }
