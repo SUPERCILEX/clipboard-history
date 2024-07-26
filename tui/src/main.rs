@@ -2,8 +2,11 @@
 
 use std::{
     fmt::Write,
+    fs::File,
     io,
-    io::stdout,
+    io::BufWriter,
+    mem::ManuallyDrop,
+    os::fd::FromRawFd,
     sync::{
         mpsc,
         mpsc::{Receiver, Sender},
@@ -39,6 +42,7 @@ use ringboard_sdk::{
     ui_actor::{controller, Command, CommandError, DetailedEntry, Message, UiEntry, UiEntryCache},
     ClientError,
 };
+use rustix::stdio::raw_stdout;
 use thiserror::Error;
 use tui_textarea::TextArea;
 
@@ -180,24 +184,27 @@ fn main() -> error_stack::Result<(), Wrapper> {
 }
 
 fn run() -> Result<(), CommandError> {
-    let terminal = init_terminal()?;
+    let stdout = ManuallyDrop::new(unsafe { File::from_raw_fd(raw_stdout()) });
+    let mut stdout = BufWriter::new(&*stdout);
+
+    let terminal = init_terminal(&mut stdout)?;
     let r = App::new().run(terminal);
-    restore_terminal()?;
+    restore_terminal(&mut stdout)?;
     r
 }
 
-fn init_terminal() -> Result<Terminal<impl Backend>, CommandError> {
+fn init_terminal(mut stdout: impl io::Write) -> Result<Terminal<impl Backend>, CommandError> {
     enable_raw_mode().map_io_err(|| "Failed to enable raw mode.")?;
-    stdout()
+    stdout
         .execute(EnterAlternateScreen)
         .map_io_err(|| "Failed to enter alternate screen.")?;
-    Ok(Terminal::new(CrosstermBackend::new(stdout().lock()))
+    Ok(Terminal::new(CrosstermBackend::new(stdout))
         .map_io_err(|| "Failed to initialize terminal.")?)
 }
 
-fn restore_terminal() -> Result<(), CommandError> {
+fn restore_terminal(mut stdout: impl io::Write) -> Result<(), CommandError> {
     disable_raw_mode().map_io_err(|| "Failed to disable raw mode.")?;
-    stdout()
+    stdout
         .execute(LeaveAlternateScreen)
         .map_io_err(|| "Failed to leave alternate screen.")?;
     Ok(())

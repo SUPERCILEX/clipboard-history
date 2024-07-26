@@ -1091,6 +1091,7 @@ dependencies = [
  "ratatui",
  "ratatui-image",
  "regex",
+ "rustix 0.38.34",
  "thiserror",
  "tracy-client",
  "tui-textarea",
