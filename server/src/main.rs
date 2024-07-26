@@ -18,6 +18,11 @@ mod send_msg_bufs;
 mod startup;
 mod utils;
 
+#[cfg(feature = "trace")]
+#[global_allocator]
+static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
+    tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
+
 #[derive(Error, Debug)]
 enum CliError {
     #[error("{0}")]

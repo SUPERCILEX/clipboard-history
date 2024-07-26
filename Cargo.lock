@@ -1080,6 +1080,7 @@ dependencies = [
  "rustix 0.38.34",
  "sd-notify",
  "thiserror",
+ "tracy-client",
 ]
 
 [[package]]
