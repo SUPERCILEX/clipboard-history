@@ -62,8 +62,8 @@ struct PlainIgnoreCaseQuery {
 impl QueryImpl for PlainIgnoreCaseQuery {
     fn find(&mut self, haystack: &[u8]) -> Option<(usize, usize)> {
         self.cache.clear();
-        self.cache.extend_from_slice(haystack);
-        self.cache.make_ascii_lowercase();
+        self.cache
+            .extend(haystack.iter().map(u8::to_ascii_lowercase));
 
         self.inner.find(&self.cache)
     }
