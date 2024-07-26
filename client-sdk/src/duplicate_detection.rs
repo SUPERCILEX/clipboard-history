@@ -12,7 +12,7 @@ use crate::{DatabaseReader, Entry, EntryReader, Kind};
 
 #[derive(Default)]
 pub struct DuplicateDetector {
-    hashes: BTreeMap<u32, SmallVec<[RingAndIndex; 1]>>,
+    hashes: BTreeMap<u32, SmallVec<RingAndIndex, 1>>,
 }
 
 impl DuplicateDetector {

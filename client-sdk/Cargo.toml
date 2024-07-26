@@ -17,7 +17,7 @@ regex = "1.10.5"
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core" }
 rustc-hash = "2.0.0"
 rustix = { version = "0.38.34", features = ["net", "fs", "thread"] }
-smallvec = "1.13.2"
+smallvec = "2.0.0-alpha.6"
 thiserror = "1.0.63"
 
 [dev-dependencies]
