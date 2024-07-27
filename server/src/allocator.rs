@@ -668,9 +668,9 @@ impl Allocator {
             }
         }
         let swappable_allocations = swappable_allocations.map(|heap| {
-            heap.into_iter()
-                .map(|Reverse(item)| item)
-                .collect::<BinaryHeap<_>>()
+            let mut allocs = heap.into_vec();
+            allocs.sort_unstable_by_key(|&Reverse(e)| e);
+            allocs
         });
 
         let mut pending_frees = Vec::with_capacity(usize::try_from(layers_to_remove).unwrap());
@@ -687,7 +687,7 @@ impl Allocator {
                     let Some(&free) = free_slots.last() else {
                         break;
                     };
-                    let Some(&(alloc, rai)) = swappable_allocations.peek() else {
+                    let Some(&Reverse((alloc, rai))) = swappable_allocations.last() else {
                         break;
                     };
                     if free >= alloc {
@@ -736,20 +736,22 @@ impl Allocator {
                 r?;
             }
 
-            let drop_count =
-                if let Some(&(highest_allocated_bucket_index, _)) = swappable_allocations.peek() {
-                    free_slots.sort_unstable_by_key(|&index| Reverse(index));
-                    let (Ok(pivot) | Err(pivot)) = free_slots
-                        .binary_search_by_key(&Reverse(highest_allocated_bucket_index), |&index| {
-                            Reverse(index)
-                        });
-                    pivot
-                } else {
-                    free_slots.len()
-                };
+            let drop_count = if let Some(&Reverse((highest_allocated_bucket_index, _))) =
+                swappable_allocations.last()
+            {
+                free_slots.sort_unstable_by_key(|&index| Reverse(index));
+                let (Ok(pivot) | Err(pivot)) = free_slots
+                    .binary_search_by_key(&Reverse(highest_allocated_bucket_index), |&index| {
+                        Reverse(index)
+                    });
+                pivot
+            } else {
+                free_slots.len()
+            };
             if drop_count == 0 {
                 continue;
             }
+            drop(swappable_allocations);
             debug!("Dropping last {drop_count} slots for bucket of size {bucket_size}.");
 
             ftruncate(
