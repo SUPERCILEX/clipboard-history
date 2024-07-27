@@ -10,7 +10,7 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
-eframe = { version = "0.28.1" }
+eframe = { version = "0.28.1", default-features = false, features = ["glow", "wayland", "x11"] }
 image = "0.25.2"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
 rustc-hash = "2.0.0"

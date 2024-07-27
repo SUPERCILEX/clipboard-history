@@ -59,28 +59,53 @@ fn main() -> Result<(), eframe::Error> {
                         let mut fonts = egui::FontDefinitions::default();
 
                         fonts.font_data.insert(
-                            "cascadia".to_owned(),
+                            "Hack".to_owned(),
                             egui::FontData::from_static(include_bytes!(
-                                "../CascadiaCode-Light.ttf"
+                                "../fonts/Hack-Regular.ttf"
                             )),
                         );
                         fonts.font_data.insert(
-                            "Noto Emoji".to_owned(),
+                            "Ubuntu-Light".to_owned(),
                             egui::FontData::from_static(include_bytes!(
-                                "../NotoEmoji-VariableFont_wght.ttf"
+                                "../fonts/Ubuntu-Light.ttf"
+                            )),
+                        );
+                        fonts.font_data.insert(
+                            "cascadia".to_owned(),
+                            egui::FontData::from_static(include_bytes!(
+                                "../fonts/CascadiaCode-Light.ttf"
+                            )),
+                        );
+                        fonts.font_data.insert(
+                            "NotoEmoji".to_owned(),
+                            egui::FontData::from_static(include_bytes!(
+                                "../fonts/NotoEmoji-VariableFont_wght.ttf"
                             )),
                         );
 
-                        {
-                            let entry_fonts = fonts.families.entry(entry_font).or_default();
-                            entry_fonts.push("cascadia".into());
-                            entry_fonts.push("Noto Emoji".into());
-                        }
+                        fonts
+                            .families
+                            .entry(entry_font)
+                            .or_default()
+                            .extend_from_slice(&["cascadia".into(), "NotoEmoji".into()]);
                         fonts
                             .families
                             .entry(FontFamily::Monospace)
                             .or_default()
-                            .push("Noto Emoji".into());
+                            .extend_from_slice(&[
+                                "Hack".into(),
+                                "Ubuntu-Light".into(),
+                                "NotoEmoji".into(),
+                            ]);
+                        fonts
+                            .families
+                            .entry(FontFamily::Proportional)
+                            .or_default()
+                            .extend_from_slice(&[
+                                "Ubuntu-Light".to_owned(),
+                                "NotoEmoji".to_owned(),
+                            ]);
+
                         ctx.set_fonts(fonts);
                     }
 
