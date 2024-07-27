@@ -12,8 +12,10 @@ use crate::{DatabaseReader, Entry, EntryReader, Kind};
 
 #[derive(Default)]
 pub struct DuplicateDetector {
-    hashes: BTreeMap<u32, SmallVec<RingAndIndex, 1>>,
+    hashes: BTreeMap<u32, SmallVec<RingAndIndex, 4>>,
 }
+
+const _: () = assert!(size_of::<SmallVec<RingAndIndex, 4>>() <= size_of::<Vec<RingAndIndex>>());
 
 impl DuplicateDetector {
     pub fn add_entry(
@@ -48,7 +50,6 @@ impl DuplicateDetector {
             .hashes
             .entry(u32::try_from(hash & u64::from(u32::MAX)).unwrap())
             .or_default();
-        let mut duplicate = false;
         if !entries.is_empty() {
             let data = entry.to_slice_raw(reader)?.unwrap();
             for &entry in &*entries {
@@ -58,12 +59,11 @@ impl DuplicateDetector {
                         .to_slice_raw(reader)?
                         .ok_or_else(|| IdNotFoundError::Entry(entry.index()))?
                 {
-                    duplicate = true;
-                    break;
+                    return Ok(true);
                 }
             }
         }
         entries.push(RingAndIndex::new(entry.ring(), entry.index()));
-        Ok(duplicate)
+        Ok(false)
     }
 }
