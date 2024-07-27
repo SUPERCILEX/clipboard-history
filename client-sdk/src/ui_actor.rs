@@ -5,6 +5,7 @@ use std::{
     hash::BuildHasherDefault,
     io::BufReader,
     iter::once,
+    mem,
     os::fd::{AsFd, BorrowedFd, OwnedFd},
     str,
     sync::Arc,
@@ -154,6 +155,7 @@ pub fn controller<T>(
     };
     let mut reader = Some(reader);
     let mut reverse_index_cache = HashMap::default();
+    let mut search_result_buf = Vec::new();
 
     for command in once(Command::LoadFirstPage).chain(commands) {
         let result = handle_command(
@@ -163,6 +165,7 @@ pub fn controller<T>(
             &mut reader,
             &(&rings.0, &rings.1),
             &mut reverse_index_cache,
+            &mut search_result_buf,
         )
         .unwrap_or_else(|e| Some(Message::Error(e)));
 
@@ -182,6 +185,7 @@ fn handle_command<'a, Server: AsFd>(
     reader_: &mut Option<EntryReader>,
     rings: &(impl AsFd, impl AsFd),
     reverse_index_cache: &mut HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
+    search_result_buf: &mut Vec<RingAndIndex>,
 ) -> Result<Option<Message>, CommandError> {
     let reader = reader_.as_mut().unwrap();
     match command {
@@ -282,7 +286,14 @@ fn handle_command<'a, Server: AsFd>(
                 Query::Plain(query.trim().as_bytes())
             };
             Ok(Some(Message::SearchResults(
-                do_search(query, reader_, database, reverse_index_cache).into(),
+                do_search(
+                    query,
+                    reader_,
+                    database,
+                    reverse_index_cache,
+                    search_result_buf,
+                )
+                .into(),
             )))
         }
         Command::LoadImage(id) => {
@@ -359,6 +370,7 @@ fn do_search(
     reader_: &mut Option<EntryReader>,
     database: &mut DatabaseReader,
     reverse_index_cache: &mut HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
+    search_result_buf: &mut Vec<RingAndIndex>,
 ) -> Vec<UiEntry> {
     const MAX_SEARCH_ENTRIES: usize = 256;
 
@@ -378,7 +390,7 @@ fn do_search(
         }
     }
 
-    let mut results = BinaryHeap::new();
+    let mut results = BinaryHeap::from(mem::take(search_result_buf));
     let write_heads: [_; 2] = array::from_fn(|i| {
         let ring = if i == RingKind::Main as usize {
             database.main()
@@ -427,9 +439,10 @@ fn do_search(
     }
     let reader = reader_.insert(Arc::into_inner(reader).unwrap());
 
-    results
-        .into_sorted_vec()
-        .into_iter()
+    let mut results = results.into_vec();
+    results.sort_unstable();
+    let entries = results
+        .drain(..)
         .flat_map(|entry| {
             let ring = entry.ring();
             let index = write_heads[ring as usize].wrapping_sub(entry.index()) & MAX_ENTRIES;
@@ -444,5 +457,7 @@ fn do_search(
                 entry,
             })
         })
-        .collect()
+        .collect();
+    *search_result_buf = results;
+    entries
 }
