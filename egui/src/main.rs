@@ -243,6 +243,7 @@ fn search_ui(
                 query,
                 search_with_regex,
                 search_highlighted_id,
+                ref was_focused,
                 ..
             },
     }: &mut State,
@@ -284,6 +285,9 @@ fn search_ui(
     }
     if ui.input(|input| input.key_pressed(Key::Slash)) {
         ui.memory_mut(egui::Memory::close_popup);
+        response.request_focus();
+    }
+    if !was_focused && ui.input(|i| i.focused) {
         response.request_focus();
     }
 
@@ -334,15 +338,16 @@ fn main_ui(
         let _ = requests.send(Command::LoadFirstPage);
     };
 
-    ui.input(|i| {
-        if !state.was_focused && i.focused && state.skipped_first_focus {
+    {
+        let focused = ui.input(|i| i.focused);
+        if !state.was_focused && focused && state.skipped_first_focus {
             refresh(state);
         }
-        if i.focused {
+        if focused {
             state.skipped_first_focus = true;
         }
-        state.was_focused = i.focused;
-    });
+        state.was_focused = focused;
+    }
 
     if let Some(ref e) = state.fatal_error {
         show_error(ui, e);
