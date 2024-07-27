@@ -111,23 +111,18 @@ pub fn controller<T>(
     ) -> Result<(impl AsFd + '_, &SocketAddrUnix), ClientError> {
         if cache.is_some() {
             let (sock, addr) = cache.as_ref().unwrap();
-            Ok((sock, addr))
-        } else {
-            match {
-                let socket_file = socket_file();
-                SocketAddrUnix::new(&socket_file)
-                    .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))
-            }
-            .map_err(ClientError::from)
-            .and_then(|server_addr| Ok((connect_to_server(&server_addr)?, server_addr)))
-            {
-                Ok(s) => {
-                    let (sock, addr) = cache.get_or_insert(s);
-                    Ok((sock, addr))
-                }
-                Err(e) => Err(e),
-            }
+            return Ok((sock, addr));
         }
+
+        let addr = {
+            let socket_file = socket_file();
+            SocketAddrUnix::new(&socket_file)
+                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
+        };
+        let sock = connect_to_server(&addr)?;
+
+        let (sock, addr) = cache.insert((sock, addr));
+        Ok((sock, addr))
     }
 
     let mut server = None;
