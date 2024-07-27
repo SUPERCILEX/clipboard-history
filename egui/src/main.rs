@@ -28,6 +28,11 @@ use ringboard_sdk::{
 
 use crate::loader::RingboardLoader;
 
+#[cfg(feature = "trace")]
+#[global_allocator]
+static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
+    tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
+
 fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "Ringboard",
