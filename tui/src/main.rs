@@ -382,7 +382,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
         ui.detailed_entry = None;
     };
     let refresh = |ui: &mut UiState| {
-        let _ = requests.send(Command::RefreshDb);
+        let _ = requests.send(Command::LoadFirstPage);
         if let &Some(SearchState { focused: _, regex }) = &ui.search_state {
             if let Some(token) = &ui.pending_search_token {
                 token.cancel();
@@ -392,7 +392,6 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                 regex,
             });
         }
-        let _ = requests.send(Command::LoadFirstPage);
     };
 
     match event {

@@ -465,7 +465,6 @@ pub clipboard_history_client_sdk::ui_actor::Command::GetDetails::id: u64
 pub clipboard_history_client_sdk::ui_actor::Command::GetDetails::with_text: bool
 pub clipboard_history_client_sdk::ui_actor::Command::LoadFirstPage
 pub clipboard_history_client_sdk::ui_actor::Command::LoadImage(u64)
-pub clipboard_history_client_sdk::ui_actor::Command::RefreshDb
 pub clipboard_history_client_sdk::ui_actor::Command::Search
 pub clipboard_history_client_sdk::ui_actor::Command::Search::query: alloc::boxed::Box<str>
 pub clipboard_history_client_sdk::ui_actor::Command::Search::regex: bool

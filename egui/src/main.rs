@@ -368,7 +368,7 @@ fn main_ui(
 ) {
     let State { entries, ui: state } = state_;
     let refresh = |state: &mut UiState| {
-        let _ = requests.send(Command::RefreshDb);
+        let _ = requests.send(Command::LoadFirstPage);
         if !state.query.is_empty() {
             if let Some(token) = &state.pending_search_token {
                 token.cancel();
@@ -378,7 +378,6 @@ fn main_ui(
                 regex: state.search_with_regex,
             });
         }
-        let _ = requests.send(Command::LoadFirstPage);
     };
 
     {

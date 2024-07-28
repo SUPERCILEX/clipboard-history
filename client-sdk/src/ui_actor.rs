@@ -6,7 +6,7 @@ use std::{
     io::BufReader,
     iter::once,
     mem,
-    os::fd::{AsFd, BorrowedFd, OwnedFd},
+    os::fd::{AsFd, OwnedFd},
     str,
     sync::Arc,
 };
@@ -14,10 +14,7 @@ use std::{
 use image::{DynamicImage, ImageError, ImageReader};
 use regex::bytes::Regex;
 use rustc_hash::FxHasher;
-use rustix::{
-    fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
-    net::SocketAddrUnix,
-};
+use rustix::net::SocketAddrUnix;
 use thiserror::Error;
 
 use crate::{
@@ -25,8 +22,8 @@ use crate::{
     core::{
         dirs::{data_dir, socket_file},
         protocol::{composite_id, IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind},
-        ring::{offset_to_entries, Ring, MAX_ENTRIES},
-        size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, PathView, RingAndIndex,
+        ring::{Ring, MAX_ENTRIES},
+        size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, RingAndIndex,
     },
     search,
     search::{CancellationToken, EntryLocation, Query},
@@ -53,7 +50,6 @@ impl From<IdNotFoundError> for CommandError {
 
 #[derive(Debug)]
 pub enum Command {
-    RefreshDb,
     LoadFirstPage,
     GetDetails { id: u64, with_text: bool },
     Favorite(u64),
@@ -128,22 +124,14 @@ pub fn controller<E>(
     }
 
     let mut server = None;
-    let ((mut database, reader), rings) = {
+    let (mut database, reader) = {
         let run = || {
             let mut dir = data_dir();
 
             let database = DatabaseReader::open(&mut dir)?;
             let reader = EntryReader::open(&mut dir)?;
 
-            let mut open_ring = |kind: RingKind| {
-                let path = PathView::new(&mut dir, kind.file_name());
-                openat(CWD, &*path, OFlags::PATH, Mode::empty()).map_io_err(|| {
-                    format!("Failed to open Ringboard database for reading: {path:?}")
-                })
-            };
-            let rings = (open_ring(RingKind::Main)?, open_ring(RingKind::Favorites)?);
-
-            Ok(((database, reader), rings))
+            Ok((database, reader))
         };
 
         match run() {
@@ -155,8 +143,7 @@ pub fn controller<E>(
         }
     };
     let mut reader = Some(reader);
-    let mut reverse_index_cache = HashMap::default();
-    let mut search_result_buf = Vec::new();
+    let mut cache = Default::default();
 
     for command in once(Command::LoadFirstPage).chain(commands) {
         let result = handle_command(
@@ -165,9 +152,7 @@ pub fn controller<E>(
             &mut send,
             &mut database,
             &mut reader,
-            &(&rings.0, &rings.1),
-            &mut reverse_index_cache,
-            &mut search_result_buf,
+            &mut cache,
         )
         .unwrap_or_else(|e| Some(Message::Error(e)));
 
@@ -186,30 +171,33 @@ fn handle_command<'a, Server: AsFd, E>(
     send: impl FnMut(Message) -> Result<(), E>,
     database: &mut DatabaseReader,
     reader_: &mut Option<EntryReader>,
-    rings: &(impl AsFd, impl AsFd),
-    reverse_index_cache: &mut HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
-    search_result_buf: &mut Vec<RingAndIndex>,
+    cache: &mut (
+        Option<(u32, u32)>,
+        HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
+        Vec<RingAndIndex>,
+    ),
 ) -> Result<Option<Message>, CommandError> {
     let reader = reader_.as_mut().unwrap();
     match command {
-        Command::RefreshDb => {
-            reverse_index_cache.clear();
-            let run = |ring: &mut Ring, fd: BorrowedFd| {
-                let len = statx(fd, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
-                    .map_io_err(|| "Failed to statx Ringboard database file.")?
-                    .stx_size;
-                let len = offset_to_entries(usize::try_from(len).unwrap());
-                unsafe {
-                    ring.set_len(len);
-                }
-                Ok::<_, CoreError>(())
-            };
-            run(database.main_ring_mut(), rings.0.as_fd())?;
-            run(database.favorites_ring_mut(), rings.1.as_fd())?;
-
-            Ok(None)
-        }
         Command::LoadFirstPage => {
+            // This will trigger every time once the ring has reached capacity and doesn't
+            // work if the ring fully wrapped around while we weren't looking.
+            let shitty_refresh = |ring: &mut Ring| {
+                let head = ring.write_head();
+                #[allow(clippy::comparison_chain)]
+                if head < ring.len() {
+                    unsafe {
+                        ring.set_len(ring.capacity());
+                    }
+                } else if head > ring.len() {
+                    unsafe {
+                        ring.set_len(head);
+                    }
+                }
+            };
+            shitty_refresh(database.favorites_ring_mut());
+            shitty_refresh(database.main_ring_mut());
+
             let mut entries = Vec::with_capacity(100);
             for entry in database
                 .favorites()
@@ -289,15 +277,7 @@ fn handle_command<'a, Server: AsFd, E>(
                 Query::Plain(query.trim().as_bytes())
             };
             Ok(Some(Message::SearchResults(
-                do_search(
-                    query,
-                    reader_,
-                    database,
-                    send,
-                    reverse_index_cache,
-                    search_result_buf,
-                )
-                .into(),
+                do_search(query, reader_, database, send, cache).into(),
             )))
         }
         Command::LoadImage(id) => {
@@ -374,8 +354,11 @@ fn do_search<E>(
     reader_: &mut Option<EntryReader>,
     database: &mut DatabaseReader,
     mut send: impl FnMut(Message) -> Result<(), E>,
-    reverse_index_cache: &mut HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
-    search_result_buf: &mut Vec<RingAndIndex>,
+    (cached_write_heads, reverse_index_cache, search_result_buf): &mut (
+        Option<(u32, u32)>,
+        HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
+        Vec<RingAndIndex>,
+    ),
 ) -> Vec<UiEntry> {
     const MAX_SEARCH_ENTRIES: usize = 256;
 
@@ -386,6 +369,14 @@ fn do_search<E>(
         result_stream.cancellation_token().clone(),
     ));
 
+    if *cached_write_heads
+        != Some((
+            database.favorites().ring().write_head(),
+            database.main().ring().write_head(),
+        ))
+    {
+        reverse_index_cache.clear();
+    }
     if reverse_index_cache.is_empty() {
         for entry in database.favorites().chain(database.main()) {
             let Kind::Bucket(bucket) = entry.kind() else {
