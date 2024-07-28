@@ -409,7 +409,7 @@ impl Entry {
                 {
                     let bucket = &mut reader.buckets[bucket];
                     bucket
-                        .remap(needed_len.max(bucket.len() * 2))
+                        .remap(needed_len)
                         .map_io_err(|| "Failed to remap bucket.")?;
                 }
             }

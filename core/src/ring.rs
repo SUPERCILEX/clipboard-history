@@ -197,19 +197,25 @@ impl Mmap {
             return Ok(());
         }
 
+        let backing_len = len.max(
+            self.backing_len
+                .saturating_add(1)
+                .checked_next_power_of_two()
+                .unwrap_or(usize::MAX),
+        );
         self.ptr = unsafe {
             NonNull::new_unchecked(
                 mremap(
                     self.ptr.as_ptr().cast(),
                     self.backing_len,
-                    len,
+                    backing_len,
                     MremapFlags::MAYMOVE,
                 )?
                 .cast(),
             )
         };
         self.requested_len = len;
-        self.backing_len = len;
+        self.backing_len = backing_len;
         Ok(())
     }
 
