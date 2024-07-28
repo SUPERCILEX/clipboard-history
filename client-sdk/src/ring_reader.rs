@@ -494,6 +494,12 @@ pub struct EntryReader {
 
 impl EntryReader {
     pub fn open(database_dir: &mut PathBuf) -> Result<Self, ringboard_core::Error> {
+        let direct_dir = {
+            let file = PathView::new(database_dir, "direct");
+            openat(CWD, &*file, OFlags::DIRECTORY | OFlags::PATH, Mode::empty())
+                .map_io_err(|| format!("Failed to open directory: {file:?}"))
+        }?;
+
         let buckets = {
             let mut buckets = PathView::new(database_dir, "buckets");
             let (buckets, lengths) = open_buckets(|name| {
@@ -511,12 +517,6 @@ impl EntryReader {
             }
             maps.into_inner().unwrap()
         };
-
-        let direct_dir = {
-            let file = PathView::new(database_dir, "direct");
-            openat(CWD, &*file, OFlags::DIRECTORY | OFlags::PATH, Mode::empty())
-                .map_io_err(|| format!("Failed to open directory: {file:?}"))
-        }?;
 
         Ok(Self {
             buckets,
