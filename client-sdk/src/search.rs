@@ -99,9 +99,38 @@ pub enum EntryLocation {
     File { entry_id: u64 },
 }
 
-struct QueryIter {
-    stream: mpsc::IntoIter<Result<QueryResult, ringboard_core::Error>>,
+#[derive(Clone, Debug)]
+pub struct CancellationToken {
     stop: Arc<AtomicBool>,
+}
+
+impl CancellationToken {
+    fn new() -> Self {
+        Self {
+            stop: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.stop.store(true, Ordering::Relaxed);
+    }
+
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.stop.load(Ordering::Relaxed)
+    }
+}
+
+pub struct QueryIter {
+    stream: mpsc::IntoIter<Result<QueryResult, ringboard_core::Error>>,
+    token: CancellationToken,
+}
+
+impl QueryIter {
+    #[must_use]
+    pub const fn cancellation_token(&self) -> &CancellationToken {
+        &self.token
+    }
 }
 
 impl Iterator for QueryIter {
@@ -114,7 +143,7 @@ impl Iterator for QueryIter {
 
 impl Drop for QueryIter {
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
+        self.token.cancel();
     }
 }
 
@@ -122,8 +151,8 @@ pub fn search(
     query: Query,
     reader: Arc<EntryReader>,
 ) -> (
-    impl Iterator<Item = Result<QueryResult, ringboard_core::Error>>,
-    impl Iterator<Item = JoinHandle<()>>,
+    QueryIter,
+    impl Iterator<Item = JoinHandle<()>> + Send + Sync + 'static,
 ) {
     let (results, threads) = match query {
         Query::Plain(p) => search_impl(PlainQuery(Arc::new(Finder::new(p).into_owned())), reader),
@@ -147,7 +176,7 @@ fn search_impl(
     reader: Arc<EntryReader>,
 ) -> (QueryIter, arrayvec::IntoIter<JoinHandle<()>, 13>) {
     let (sender, receiver) = mpsc::sync_channel(0);
-    let stop = Arc::new(AtomicBool::new(false));
+    let token = CancellationToken::new();
     let mut threads = ArrayVec::<_, 13>::new_const();
 
     for bucket in usize::from(size_to_bucket(
@@ -157,13 +186,13 @@ fn search_impl(
         let mut query = query.clone();
         let reader = reader.clone();
         let sender = sender.clone();
-        let stop = stop.clone();
+        let token = token.clone();
         threads.push(thread::spawn(move || {
             for (index, entry) in reader.buckets()[bucket]
                 .chunks_exact(usize::from(bucket_to_length(bucket)))
                 .enumerate()
             {
-                if stop.load(Ordering::Relaxed) {
+                if token.is_cancelled() {
                     break;
                 }
 
@@ -190,7 +219,7 @@ fn search_impl(
     {
         let (direct_file_sender, direct_file_receiver) = mpsc::sync_channel(8);
         threads.push(thread::spawn({
-            let stop = stop.clone();
+            let token = token.clone();
             let sender = sender.clone();
             move || {
                 let direct_dir =
@@ -211,7 +240,7 @@ fn search_impl(
                 let mut buf = [MaybeUninit::uninit(); 8192];
                 let mut iter = RawDir::new(&direct_dir, &mut buf);
                 while let Some(file) = iter.next() {
-                    if stop.load(Ordering::Relaxed) {
+                    if token.is_cancelled() {
                         break;
                     }
 
@@ -266,10 +295,10 @@ fn search_impl(
             }
         }));
         threads.push(thread::spawn({
-            let stop = stop.clone();
+            let token = token.clone();
             move || {
                 for (file, file_name) in direct_file_receiver {
-                    if stop.load(Ordering::Relaxed) {
+                    if token.is_cancelled() {
                         break;
                     }
 
@@ -314,10 +343,11 @@ fn search_impl(
             }
         }));
     }
+
     (
         QueryIter {
             stream: receiver.into_iter(),
-            stop,
+            token,
         },
         threads.into_iter(),
     )

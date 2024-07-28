@@ -29,7 +29,7 @@ use crate::{
         size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, PathView, RingAndIndex,
     },
     search,
-    search::{EntryLocation, Query},
+    search::{CancellationToken, EntryLocation, Query},
     ClientError, DatabaseReader, Entry, EntryReader, Kind,
 };
 
@@ -75,6 +75,7 @@ pub enum Message {
         id: u64,
         result: Result<DetailedEntry, CoreError>,
     },
+    PendingSearch(CancellationToken),
     SearchResults(Box<[UiEntry]>),
     FavoriteChange(u64),
     LoadedImage {
@@ -103,9 +104,9 @@ pub struct DetailedEntry {
     pub full_text: Option<Box<str>>,
 }
 
-pub fn controller<T>(
+pub fn controller<E>(
     commands: impl IntoIterator<Item = Command>,
-    mut send: impl FnMut(Message) -> Result<(), T>,
+    mut send: impl FnMut(Message) -> Result<(), E>,
 ) {
     fn maybe_init_server(
         cache: &mut Option<(OwnedFd, SocketAddrUnix)>,
@@ -161,6 +162,7 @@ pub fn controller<T>(
         let result = handle_command(
             command,
             || maybe_init_server(&mut server),
+            &mut send,
             &mut database,
             &mut reader,
             &(&rings.0, &rings.1),
@@ -178,9 +180,10 @@ pub fn controller<T>(
     }
 }
 
-fn handle_command<'a, Server: AsFd>(
+fn handle_command<'a, Server: AsFd, E>(
     command: Command,
     server: impl FnOnce() -> Result<(Server, &'a SocketAddrUnix), ClientError>,
+    send: impl FnMut(Message) -> Result<(), E>,
     database: &mut DatabaseReader,
     reader_: &mut Option<EntryReader>,
     rings: &(impl AsFd, impl AsFd),
@@ -290,6 +293,7 @@ fn handle_command<'a, Server: AsFd>(
                     query,
                     reader_,
                     database,
+                    send,
                     reverse_index_cache,
                     search_result_buf,
                 )
@@ -365,10 +369,11 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
     Ok(entry)
 }
 
-fn do_search(
+fn do_search<E>(
     query: Query,
     reader_: &mut Option<EntryReader>,
     database: &mut DatabaseReader,
+    mut send: impl FnMut(Message) -> Result<(), E>,
     reverse_index_cache: &mut HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
     search_result_buf: &mut Vec<RingAndIndex>,
 ) -> Vec<UiEntry> {
@@ -377,6 +382,9 @@ fn do_search(
     let reader = Arc::new(reader_.take().unwrap());
 
     let (result_stream, threads) = search(query, reader.clone());
+    let _ = send(Message::PendingSearch(
+        result_stream.cancellation_token().clone(),
+    ));
 
     if reverse_index_cache.is_empty() {
         for entry in database.favorites().chain(database.main()) {
@@ -441,6 +449,7 @@ fn do_search(
 
     let mut results = results.into_vec();
     results.sort_unstable();
+    #[allow(clippy::iter_with_drain)] // https://github.com/rust-lang/rust-clippy/issues/8539
     let entries = results
         .drain(..)
         .flat_map(|entry| {

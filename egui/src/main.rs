@@ -22,6 +22,7 @@ use eframe::{
 };
 use ringboard_sdk::{
     core::{protocol::RingKind, Error as CoreError},
+    search::CancellationToken,
     ui_actor::{controller, Command, CommandError, DetailedEntry, Message, UiEntry, UiEntryCache},
     ClientError,
 };
@@ -177,6 +178,7 @@ struct UiState {
     query: String,
     search_highlighted_id: Option<u64>,
     search_with_regex: bool,
+    pending_search_token: Option<CancellationToken>,
 
     was_focused: bool,
     skipped_first_focus: bool,
@@ -215,6 +217,7 @@ fn handle_message(
                 query: _,
                 search_highlighted_id,
                 search_with_regex: _,
+                pending_search_token,
                 was_focused: _,
                 skipped_first_focus: _,
             },
@@ -238,11 +241,14 @@ fn handle_message(
             }
         }
         Message::SearchResults(entries) => {
-            *search_highlighted_id = entries.first().map(|e| e.entry.id());
-            *search_results = entries;
+            if pending_search_token.take().is_some() {
+                *search_highlighted_id = entries.first().map(|e| e.entry.id());
+                *search_results = entries;
+            }
         }
         Message::FavoriteChange(_) => {}
         Message::LoadedImage { .. } => unreachable!(),
+        Message::PendingSearch(token) => *pending_search_token = Some(token),
     }
 }
 
@@ -273,6 +279,7 @@ fn search_ui(
                 query,
                 search_with_regex,
                 search_highlighted_id,
+                pending_search_token,
                 ref was_focused,
                 ..
             },
@@ -329,6 +336,9 @@ fn search_ui(
         return;
     }
 
+    if let Some(token) = pending_search_token {
+        token.cancel();
+    }
     let _ = requests.send(Command::Search {
         query: query.clone().into(),
         regex: *search_with_regex,
@@ -357,9 +367,12 @@ fn main_ui(
     requests: &Sender<Command>,
 ) {
     let State { entries, ui: state } = state_;
-    let refresh = |state: &UiState| {
+    let refresh = |state: &mut UiState| {
         let _ = requests.send(Command::RefreshDb);
         if !state.query.is_empty() {
+            if let Some(token) = &state.pending_search_token {
+                token.cancel();
+            }
             let _ = requests.send(Command::Search {
                 query: state.query.clone().into(),
                 regex: state.search_with_regex,
@@ -392,7 +405,7 @@ fn main_ui(
     if ui.input_mut(|input| input.consume_key(Modifiers::CTRL, Key::R)) {
         *state_ = State::default();
         ui.memory_mut(egui::Memory::close_popup);
-        refresh(&state_.ui);
+        refresh(&mut state_.ui);
         return;
     }
     if !active_entries(entries, state).is_empty() && ui.memory(|mem| !mem.any_popup_open()) {
@@ -452,7 +465,7 @@ fn entry_ui(
     entry: &UiEntry,
     state: &mut UiState,
     requests: &Sender<Command>,
-    refresh: impl FnMut(&UiState),
+    refresh: impl FnMut(&mut UiState),
     try_scroll: bool,
     try_popup: bool,
 ) {
@@ -520,7 +533,7 @@ fn row_ui(
     widget: impl Widget,
     state: &mut UiState,
     requests: &Sender<Command>,
-    mut refresh: impl FnMut(&UiState),
+    mut refresh: impl FnMut(&mut UiState),
     &UiEntry { entry, ref cache }: &UiEntry,
     try_scroll: bool,
     try_popup: bool,

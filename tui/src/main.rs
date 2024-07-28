@@ -39,6 +39,7 @@ use ringboard_sdk::{
         protocol::{IdNotFoundError, RingKind},
         Error as CoreError, IoErr,
     },
+    search::CancellationToken,
     ui_actor::{controller, Command, CommandError, DetailedEntry, Message, UiEntry, UiEntryCache},
     ClientError,
 };
@@ -98,6 +99,7 @@ struct UiState {
 
     query: TextArea<'static>,
     search_state: Option<SearchState>,
+    pending_search_token: Option<CancellationToken>,
 
     show_help: bool,
 
@@ -298,6 +300,7 @@ fn handle_message(
     let UiState {
         details_requested,
         detailed_entry,
+        pending_search_token,
         ..
     } = ui;
     match message {
@@ -333,9 +336,11 @@ fn handle_message(
             }
         }
         Message::SearchResults(entries) => {
-            *search_results = entries;
-            if search_state.selected().is_none() {
-                search_state.select_first();
+            if pending_search_token.take().is_some() {
+                *search_results = entries;
+                if search_state.selected().is_none() {
+                    search_state.select_first();
+                }
             }
         }
         Message::FavoriteChange(id) => *pending_favorite_change = Some(id),
@@ -346,6 +351,7 @@ fn handle_message(
                 ui.detail_image_state = Some(ImageState::Loaded(picker.new_resize_protocol(image)));
             }
         }
+        Message::PendingSearch(token) => *pending_search_token = Some(token),
     }
     if ui.details_requested.is_some() {
         maybe_get_details(entries, ui, requests);
@@ -378,6 +384,9 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
     let refresh = |ui: &mut UiState| {
         let _ = requests.send(Command::RefreshDb);
         if let &Some(SearchState { focused: _, regex }) = &ui.search_state {
+            if let Some(token) = &ui.pending_search_token {
+                token.cancel();
+            }
             let _ = requests.send(Command::Search {
                 query: ui.query.lines().first().unwrap().to_string().into(),
                 regex,
@@ -429,6 +438,9 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                     && *focused
                 {
                     if ui.query.input(event) {
+                        if let Some(token) = &ui.pending_search_token {
+                            token.cancel();
+                        }
                         let _ = requests.send(Command::Search {
                             query: ui.query.lines().first().unwrap().to_string().into(),
                             regex,
