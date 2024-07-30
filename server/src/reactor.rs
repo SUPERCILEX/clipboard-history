@@ -40,44 +40,45 @@ const URING_ENTRIES: u32 = MAX_NUM_CLIENTS * 3;
 struct Clients {
     connections: u32,
     pending_closes: u32,
-    dropped: ArrayVec<(u32, u64), { MAX_NUM_CLIENTS as usize }>,
+    dropped: ArrayVec<(u8, u64), { MAX_NUM_CLIENTS as usize }>,
 }
 
+const _: () = assert!(u8::MAX as u32 >= MAX_NUM_CLIENTS);
 impl Clients {
-    const fn is_connected(&self, id: u32) -> bool {
-        debug_assert!(id < u32::BITS);
+    fn is_connected(&self, id: u8) -> bool {
+        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         (self.connections & (1 << id)) != 0
     }
 
-    const fn is_closing(&self, id: u32) -> bool {
-        debug_assert!(id < u32::BITS);
+    fn is_closing(&self, id: u8) -> bool {
+        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         (self.pending_closes & (1 << id)) != 0
     }
 
-    fn set_connected(&mut self, id: u32) {
-        debug_assert!(id < u32::BITS);
+    fn set_connected(&mut self, id: u8) {
+        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         self.connections |= 1 << id;
         self.pending_closes &= !(1 << id);
     }
 
-    fn set_disconnected(&mut self, id: u32) {
-        debug_assert!(id < u32::BITS);
+    fn set_disconnected(&mut self, id: u8) {
+        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         self.connections &= !(1 << id);
         self.pending_closes |= 1 << id;
     }
 
-    fn set_closed(&mut self, id: u32) {
-        debug_assert!(id < u32::BITS);
+    fn set_closed(&mut self, id: u8) {
+        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         self.connections &= !(1 << id);
         self.pending_closes &= !(1 << id);
     }
 
-    fn add_dropped(&mut self, id: u32, data: u64) {
-        debug_assert!(id < u32::BITS);
+    fn add_dropped(&mut self, id: u8, data: u64) {
+        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         self.dropped.push((id, data));
     }
 
-    fn pop_dropped(&mut self) -> Option<(u32, u64)> {
+    fn pop_dropped(&mut self) -> Option<(u8, u64)> {
         self.dropped.pop()
     }
 }
@@ -216,18 +217,18 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         hdr
     };
     let recvmsg = |fd| {
-        RecvMsgMulti::new(Fixed(fd), &receive_hdr, 0)
+        RecvMsgMulti::new(Fixed(u32::from(fd)), &receive_hdr, 0)
             .flags(RecvFlags::TRUNC.bits())
             .build()
     };
 
     let store_fd = |fd| u64::from(fd) << (u64::BITS - MAX_NUM_CLIENTS_SHIFT);
     let restore_fd = |entry: &Entry| {
-        u32::try_from(entry.user_data() >> (u64::BITS - MAX_NUM_CLIENTS_SHIFT)).unwrap()
+        u8::try_from(entry.user_data() >> (u64::BITS - MAX_NUM_CLIENTS_SHIFT)).unwrap()
     };
 
     let close = |fd| {
-        Close::new(Fixed(fd))
+        Close::new(Fixed(u32::from(fd)))
             .build()
             .user_data(REQ_TYPE_CLOSE | store_fd(fd))
     };
@@ -275,7 +276,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
             match entry.user_data() & REQ_TYPE_MASK {
                 REQ_TYPE_ACCEPT => 'accept: {
                     debug!("Handling accept completion.");
-                    let result = match result {
+                    let client = match result {
                         Err(e) if e.raw_os_error() == Some(Errno::NFILE.raw_os_error()) => {
                             warn!("Too many clients clients connected, dropping connection.");
                             pending_accept = true;
@@ -283,12 +284,15 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         }
                         r => r.map_io_err(|| "Failed to accept socket connection.")?,
                     };
+                    debug_assert!(client < MAX_NUM_CLIENTS);
+                    #[allow(clippy::cast_possible_truncation)]
+                    let client = client as u8;
+
                     if !more(entry.flags()) {
                         pending_entries.push(accept.clone());
                     }
                     pending_entries
-                        .push(recvmsg(result).user_data(REQ_TYPE_RECV | store_fd(result)));
-                    debug_assert_eq!(0, result >> MAX_NUM_CLIENTS_SHIFT);
+                        .push(recvmsg(client).user_data(REQ_TYPE_RECV | store_fd(client)));
                 }
                 REQ_TYPE_RECV => 'recv: {
                     debug!("Handling recv completion.");
@@ -375,7 +379,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         };
                         if let Some((token, msghdr)) = response {
                             pending_entries.push(
-                                SendMsg::new(Fixed(fd), msghdr)
+                                SendMsg::new(Fixed(fd.into()), msghdr)
                                     .build()
                                     .flags(if clients.is_connected(fd) {
                                         Flags::empty()
@@ -394,7 +398,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
 
                         if !clients.is_connected(fd) {
                             pending_entries.push(
-                                Shutdown::new(Fixed(fd), libc::SHUT_RDWR)
+                                Shutdown::new(Fixed(fd.into()), libc::SHUT_RDWR)
                                     .build()
                                     .flags(Flags::IO_LINK | Flags::SKIP_SUCCESS)
                                     .user_data(REQ_TYPE_SHUTDOWN_CONN | store_fd(fd)),
