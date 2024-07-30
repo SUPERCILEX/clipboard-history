@@ -183,6 +183,7 @@ pub clipboard_history_core::protocol::RingKind::Main
 impl clipboard_history_core::protocol::RingKind
 pub const fn clipboard_history_core::protocol::RingKind::default_max_entries(&self) -> u32
 pub const fn clipboard_history_core::protocol::RingKind::file_name(&self) -> &'static str
+pub const fn clipboard_history_core::protocol::RingKind::file_name_cstr(&self) -> &'static core::ffi::c_str::CStr
 impl core::clone::Clone for clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_core::protocol::RingKind::clone(&self) -> clipboard_history_core::protocol::RingKind
 impl core::cmp::Eq for clipboard_history_core::protocol::RingKind
@@ -550,6 +551,7 @@ pub const fn clipboard_history_core::ring::Ring::len(&self) -> u32
 pub const fn clipboard_history_core::ring::Ring::next_entry(&self, current: u32) -> u32
 pub const fn clipboard_history_core::ring::Ring::next_head(&self, current: u32) -> u32
 pub fn clipboard_history_core::ring::Ring::open<P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(max_entries: u32, path: P) -> clipboard_history_core::Result<Self>
+pub fn clipboard_history_core::ring::Ring::open_fd<Fd: std::os::fd::owned::AsFd>(max_entries: u32, fd: Fd) -> clipboard_history_core::Result<Self>
 pub const fn clipboard_history_core::ring::Ring::prev_entry(&self, current: u32) -> u32
 pub unsafe fn clipboard_history_core::ring::Ring::set_len(&mut self, len: u32)
 pub fn clipboard_history_core::ring::Ring::write_head(&self) -> u32

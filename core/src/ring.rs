@@ -1,9 +1,10 @@
 use std::{
     fmt::{Debug, Formatter},
-    io,
+    fs, io,
     io::ErrorKind,
     ops::Deref,
-    os::fd::AsFd,
+    os::fd::{AsFd, AsRawFd},
+    path::PathBuf,
     ptr,
     ptr::NonNull,
     slice,
@@ -260,7 +261,10 @@ impl Ring {
     pub fn open<P: Arg + Copy + Debug>(max_entries: u32, path: P) -> Result<Self> {
         let fd = openat(CWD, path, OFlags::RDONLY, Mode::empty())
             .map_io_err(|| format!("Failed to open Ringboard database for reading: {path:?}"))?;
+        Self::open_fd(max_entries, fd)
+    }
 
+    pub fn open_fd<Fd: AsFd>(max_entries: u32, fd: Fd) -> Result<Self> {
         let len = statx(&fd, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
             .map_io_err(|| "Failed to statx Ringboard database file.")?
             .stx_size;
@@ -275,6 +279,11 @@ impl Ring {
         if len < MAGIC.len()
             || unsafe { slice::from_raw_parts(mem.ptr().as_ptr(), MAGIC.len()) } != MAGIC
         {
+            let path = fs::read_link(PathBuf::from(format!(
+                "/proc/self/fd/{}",
+                fd.as_fd().as_raw_fd()
+            )))
+            .unwrap_or_else(|_| PathBuf::from("unknown"));
             return Err(Error::Io {
                 error: io::Error::new(ErrorKind::InvalidData, "Not a Ringboard database."),
                 context: format!("Ring file has invalid magic header: {path:?}").into(),
@@ -286,7 +295,10 @@ impl Ring {
             len: offset_to_entries(len),
             capacity: max_entries,
             #[cfg(debug_assertions)]
-            fd,
+            fd: fd
+                .as_fd()
+                .try_clone_to_owned()
+                .map_io_err(|| "Failed to clone ring FD.")?,
         })
     }
 

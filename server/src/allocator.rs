@@ -2,19 +2,18 @@ use std::{
     array,
     cmp::{min, Reverse},
     collections::BinaryHeap,
+    ffi::CStr,
     fmt::Debug,
-    fs,
     fs::File,
     io,
-    io::{ErrorKind, IoSlice, Read, Write},
+    io::{ErrorKind, ErrorKind::AlreadyExists, IoSlice, Read, Write},
     mem::ManuallyDrop,
     ops::{Index, IndexMut},
     os::{fd::OwnedFd, unix::fs::FileExt},
-    path::PathBuf,
     slice,
 };
 
-use arrayvec::ArrayVec;
+use arrayvec::{ArrayString, ArrayVec};
 use bitcode::{Decode, Encode};
 use bitvec::{order::Lsb0, vec::BitVec};
 use log::{debug, error, info, trace, warn};
@@ -26,12 +25,12 @@ use ringboard_core::{
     },
     ring,
     ring::{entries_to_offset, Entry, Header, InitializedEntry, RawEntry, Ring},
-    size_to_bucket, IoErr, PathView, RingAndIndex, NUM_BUCKETS, TEXT_MIMES,
+    size_to_bucket, IoErr, RingAndIndex, NUM_BUCKETS, TEXT_MIMES,
 };
 use rustix::{
     fs::{
-        fsetxattr, ftruncate, openat, renameat, renameat_with, unlinkat, AtFlags, Mode, OFlags,
-        RenameFlags, XattrFlags, CWD,
+        fsetxattr, ftruncate, mkdir, openat, renameat, renameat_with, unlinkat, AtFlags, Mode,
+        OFlags, RenameFlags, XattrFlags, CWD,
     },
     path::Arg,
 };
@@ -45,12 +44,12 @@ struct RingWriter {
 
 impl RingWriter {
     fn open<P: Arg + Copy + Debug>(path: P) -> Result<Self, CliError> {
-        let ring = match openat(CWD, path, OFlags::WRONLY, Mode::empty()) {
+        let ring = match openat(CWD, path, OFlags::RDWR, Mode::empty()) {
             Err(e) if e.kind() == ErrorKind::NotFound => {
                 let fd = openat(
                     CWD,
                     path,
-                    OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL,
+                    OFlags::RDWR | OFlags::CREATE | OFlags::EXCL,
                     Mode::RUSR | Mode::WUSR,
                 )
                 .map_io_err(|| format!("Failed to create Ringboard database: {path:?}"))?;
@@ -147,7 +146,6 @@ struct Buckets {
 #[derive(Debug)]
 struct FreeLists {
     lists: RawFreeLists,
-    file: File,
 }
 
 #[derive(Encode, Decode, Default, Debug)]
@@ -172,49 +170,37 @@ impl Drop for BucketSlotGuard<'_> {
 }
 
 impl FreeLists {
-    fn load(data_dir: &mut PathBuf) -> Result<Self, CliError> {
-        let path = PathView::new(data_dir, "free-lists");
-        let mut file = match openat(CWD, &*path, OFlags::RDWR, Mode::empty()) {
+    fn load(rings: &Rings) -> Result<Self, CliError> {
+        let mut file = match openat(CWD, c"free-lists", OFlags::RDWR, Mode::empty()) {
             Err(e) if e.kind() == ErrorKind::NotFound => {
-                let file = File::from(
-                    openat(
-                        CWD,
-                        &*path,
-                        OFlags::RDWR | OFlags::CREATE | OFlags::EXCL,
-                        Mode::RUSR | Mode::WUSR,
-                    )
-                    .map_io_err(|| format!("Failed to create free lists file: {path:?}"))?,
-                );
                 return Ok(Self {
                     lists: RawFreeLists::default(),
-                    file,
                 });
             }
-            r => File::from(r.map_io_err(|| format!("Failed to open free lists: {path:?}"))?),
+            r => File::from(r.map_io_err(|| "Failed to open free lists file.")?),
         };
 
         {
             let mut bytes = Vec::new();
             file.read_to_end(&mut bytes)
-                .map_io_err(|| format!("Failed to read free lists: {path:?}"))?;
+                .map_io_err(|| "Failed to read free lists file.")?;
 
             if !bytes.is_empty() {
                 file.set_len(0)
-                    .map_io_err(|| format!("Failed to truncate free lists: {path:?}"))?;
+                    .map_io_err(|| "Failed to truncate free lists file.")?;
                 match bitcode::decode(&bytes) {
-                    Ok(lists) => return Ok(Self { lists, file }),
+                    Ok(lists) => return Ok(Self { lists }),
                     Err(e) => {
-                        error!("Corrupted free lists file: {path:?}\nError: {e:?}");
+                        error!("Corrupted free lists file.\nError: {e:?}");
                     }
                 }
             }
         }
-        drop(path);
         warn!("Reconstructing allocator free lists.");
 
         let mut allocations = [BitVec::<usize, Lsb0>::EMPTY; NUM_BUCKETS];
         for ring in [RingKind::Favorites, RingKind::Main] {
-            let ring = Ring::open(0, &*PathView::new(data_dir, ring.file_name()))?;
+            let ring = &rings[ring].ring;
             for entry in (0..ring.len()).filter_map(|i| ring.get(i)) {
                 match entry {
                     Entry::Bucketed(entry) => {
@@ -239,14 +225,21 @@ impl FreeLists {
                     .map(|i| u32::try_from(i).unwrap())
                     .collect()
             })),
-            file,
         })
     }
 
     fn save(&self) -> Result<(), CliError> {
         info!("Saving allocator free list to disk.");
+        let file = openat(
+            CWD,
+            c"free-lists",
+            OFlags::WRONLY | OFlags::CREATE,
+            Mode::RUSR | Mode::WUSR,
+        )
+        .map_io_err(|| "Failed to open free lists file.")?;
         let bytes = bitcode::encode(&self.lists);
-        self.file
+        debug_assert!(!bytes.is_empty());
+        File::from(file)
             .write_all_at(&bytes, 0)
             .map_io_err(|| "Failed to write free lists.")?;
         Ok(())
@@ -264,35 +257,38 @@ impl FreeLists {
 }
 
 impl Allocator {
-    pub fn open(mut data_dir: PathBuf) -> Result<Self, CliError> {
-        let mut open_ring = |kind: RingKind| -> Result<_, CliError> {
-            let ring = PathView::new(&mut data_dir, kind.file_name());
+    pub fn open() -> Result<Self, CliError> {
+        let open_ring = |kind: RingKind| -> Result<_, CliError> {
+            let writer = RingWriter::open(kind.file_name_cstr())?;
             Ok(WritableRing {
-                writer: RingWriter::open(&*ring)?,
-                ring: Ring::open(kind.default_max_entries(), &*ring)?,
+                ring: Ring::open_fd(kind.default_max_entries(), &writer.ring)?,
+                writer,
             })
         };
         let main_ring = open_ring(RingKind::Main)?;
         let favorites_ring = open_ring(RingKind::Favorites)?;
 
-        let mut create_dir = |name| {
-            let dir = PathView::new(&mut data_dir, name);
-            fs::create_dir_all(&dir).map_io_err(|| format!("Failed to create directory: {dir:?}"))
+        let create_dir = |name| match mkdir(name, Mode::RWXU) {
+            Err(e) if e.kind() == AlreadyExists => Ok(()),
+            r => r.map_io_err(|| format!("Failed to create directory: {name:?}")),
         };
-        create_dir("direct")?;
-        create_dir("buckets")?;
+        create_dir(c"direct")?;
+        create_dir(c"buckets")?;
 
         let (buckets, slot_counts) = {
-            let mut buckets = PathView::new(&mut data_dir, "buckets");
+            let mut path = ArrayString::<{ "buckets/(1024, 2048]".len() + 1 }>::new_const();
+            path.push_str("buckets/");
             open_buckets(|name| {
-                let file = PathView::new(&mut buckets, name);
+                path.truncate("buckets/".len());
+                path.push_str(name);
+                path.push(char::from(0));
                 openat(
                     CWD,
-                    &*file,
+                    unsafe { CStr::from_ptr(path.as_ptr().cast()) },
                     OFlags::RDWR | OFlags::CREATE,
                     Mode::RUSR | Mode::WUSR,
                 )
-                .map_io_err(|| format!("Failed to create bucket: {file:?}"))
+                .map_io_err(|| format!("Failed to create bucket: {path:?}"))
             })?
         };
         let slot_counts = {
@@ -304,16 +300,19 @@ impl Allocator {
             })
         };
 
-        let direct_dir = {
-            let file = PathView::new(&mut data_dir, "direct");
-            openat(CWD, &*file, OFlags::DIRECTORY | OFlags::PATH, Mode::empty())
-                .map_io_err(|| format!("Failed to open directory: {file:?}"))
-        }?;
+        let direct_dir = openat(
+            CWD,
+            c"direct",
+            OFlags::DIRECTORY | OFlags::PATH,
+            Mode::empty(),
+        )
+        .map_io_err(|| "Failed to open direct directory.")?;
 
-        let free_lists = FreeLists::load(&mut data_dir)?;
+        let rings = Rings([favorites_ring, main_ring]);
+        let free_lists = FreeLists::load(&rings)?;
 
         Ok(Self {
-            rings: Rings([favorites_ring, main_ring]),
+            rings,
             data: AllocatorData {
                 buckets: Buckets {
                     files: buckets.map(File::from),

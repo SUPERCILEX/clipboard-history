@@ -1,3 +1,5 @@
+use std::ffi::CStr;
+
 use arrayvec::ArrayString;
 
 use crate::AsBytes;
@@ -18,6 +20,14 @@ impl RingKind {
         match self {
             Self::Main => "main.ring",
             Self::Favorites => "favorites.ring",
+        }
+    }
+
+    #[must_use]
+    pub const fn file_name_cstr(&self) -> &'static CStr {
+        match self {
+            Self::Main => c"main.ring",
+            Self::Favorites => c"favorites.ring",
         }
     }
 

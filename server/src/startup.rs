@@ -1,8 +1,9 @@
 use std::{
+    fs,
     fs::File,
     io::{ErrorKind::AlreadyExists, Write},
-    os::fd::OwnedFd,
-    path::Path,
+    marker::PhantomData,
+    path::PathBuf,
     process,
 };
 
@@ -16,34 +17,28 @@ use rustix::{
 use crate::{utils::link_tmp_file, CliError};
 
 #[must_use]
-pub struct OwnedServer(OwnedFd);
+pub struct OwnedServer(PhantomData<()>);
 
 impl OwnedServer {
+    #[allow(clippy::unused_self)]
     pub fn shutdown(self) -> Result<(), CliError> {
-        unlinkat(self.0, c"server.lock", AtFlags::empty())
+        unlinkat(CWD, c"server.lock", AtFlags::empty())
             .map_io_err(|| "Failed to delete server lock file.")
             .map_err(CliError::from)
     }
 }
 
-pub fn claim_server_ownership(data_dir: &Path) -> Result<Option<OwnedServer>, CliError> {
-    let dir = openat(
-        CWD,
-        data_dir,
-        OFlags::DIRECTORY | OFlags::PATH,
-        Mode::empty(),
-    )
-    .map_io_err(|| format!("Failed to open directory: {data_dir:?}"))?;
+pub fn claim_server_ownership() -> Result<Option<OwnedServer>, CliError> {
     let mut lock_file = File::from(
-        openat(&dir, c".", OFlags::WRONLY | OFlags::TMPFILE, Mode::RUSR)
+        openat(CWD, c".", OFlags::WRONLY | OFlags::TMPFILE, Mode::RUSR)
             .map_io_err(|| "Failed to create server lock temp file.")?,
     );
 
     write!(lock_file, "{}", process::id()).map_io_err(|| "Failed to write to server lock file.")?;
 
-    match link_tmp_file(lock_file, &dir, c"server.lock") {
+    match link_tmp_file(lock_file, CWD, c"server.lock") {
         Err(e) if e.kind() == AlreadyExists => {
-            let pid = read_server_pid(&dir, c"server.lock")?;
+            let pid = read_server_pid(CWD, c"server.lock")?;
             let Some(pid) = pid else {
                 return Ok(None);
             };
@@ -57,16 +52,17 @@ pub fn claim_server_ownership(data_dir: &Path) -> Result<Option<OwnedServer>, Cl
 
             return Err(CliError::ServerAlreadyRunning {
                 pid,
-                lock_file: data_dir.join("server.lock"),
+                lock_file: fs::canonicalize("server.lock")
+                    .unwrap_or_else(|_| PathBuf::from("server.lock")),
             });
         }
         r => r.map_io_err(|| {
             format!(
                 "Failed to acquire server lock: {:?}",
-                data_dir.join("server.lock")
+                fs::canonicalize("server.lock").unwrap_or_else(|_| PathBuf::from("server.lock"))
             )
         })?,
     };
 
-    Ok(Some(OwnedServer(dir)))
+    Ok(Some(OwnedServer(PhantomData)))
 }

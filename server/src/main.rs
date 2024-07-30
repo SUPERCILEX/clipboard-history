@@ -4,8 +4,11 @@ use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 
 use error_stack::Report;
 use log::{info, warn};
-use ringboard_core::{dirs::data_dir, protocol::IdNotFoundError, Error, IoErr, PathView};
-use rustix::process::Pid;
+use ringboard_core::{dirs::data_dir, protocol::IdNotFoundError, Error, IoErr};
+use rustix::{
+    fs::unlink,
+    process::{chdir, Pid},
+};
 use thiserror::Error;
 
 use crate::{allocator::Allocator, startup::claim_server_ownership};
@@ -105,26 +108,28 @@ fn into_result(errs: Vec<CliError>) -> Result<(), CliError> {
 fn run() -> Result<(), CliError> {
     info!("Starting Ringboard server v{}.", env!("CARGO_PKG_VERSION"));
 
-    let mut data_dir = data_dir();
-    info!("Using database in {data_dir:?}.");
+    {
+        let data_dir = data_dir();
+        info!("Using database in {data_dir:?}.");
 
-    fs::create_dir_all(&data_dir)
-        .map_io_err(|| format!("Failed to create data directory: {data_dir:?}"))?;
+        fs::create_dir_all(&data_dir)
+            .map_io_err(|| format!("Failed to create data directory: {data_dir:?}"))?;
+        chdir(&data_dir)
+            .map_io_err(|| format!("Failed to change working directory: {data_dir:?}"))?;
+    }
     let server_guard = {
         loop {
-            if let Some(g) = claim_server_ownership(&data_dir)? {
+            if let Some(g) = claim_server_ownership()? {
                 break g;
             }
             warn!("Unclean shutdown detected, forcibly claiming server lock.");
 
-            let lock = PathView::new(&mut data_dir, "server.lock");
-            fs::remove_file(&lock)
-                .map_io_err(|| format!("Failed to delete server lock: {lock:?}"))?;
+            unlink(c"server.lock").map_io_err(|| "Failed to delete server lock.")?;
         }
     };
     info!("Acquired server lock.");
 
-    let mut allocator = Allocator::open(data_dir)?;
+    let mut allocator = Allocator::open()?;
     into_result(
         [
             reactor::run(&mut allocator),
