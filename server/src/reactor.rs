@@ -147,6 +147,10 @@ fn setup_uring() -> Result<(IoUring, BufRing), CliError> {
             }
             .map_io_err(|| format!("Failed to remove old socket: {socket_file:?}"))?;
 
+            if let Some(parent) = socket_file.parent() {
+                fs::create_dir_all(parent)
+                    .map_io_err(|| format!("Failed to create socket directory: {parent:?}"))?;
+            }
             SocketAddrUnix::new(&socket_file)
                 .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))
         }?;

@@ -17,15 +17,17 @@ pub fn socket_file() -> PathBuf {
         return PathBuf::from(s);
     }
 
-    let mut file = PathBuf::from("/tmp");
+    let mut file = PathBuf::with_capacity("/tmp/.ringboard/username.ch".len());
+    #[allow(clippy::path_buf_push_overwrite)]
+    file.push("/tmp/.ringboard");
     file.push(
         dirs::home_dir()
             .as_deref()
             .map(|p| p.to_string_lossy())
             .as_deref()
-            .and_then(|p| p.split(MAIN_SEPARATOR).last())
+            .and_then(|p| p.rsplit(MAIN_SEPARATOR).next())
             .unwrap_or("default"),
     );
-    file.set_extension("clipboard-history");
+    file.set_extension("ch");
     file
 }
