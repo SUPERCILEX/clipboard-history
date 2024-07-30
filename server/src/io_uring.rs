@@ -22,7 +22,7 @@ pub fn register_buf_ring(
     unsafe {
         submitter.register_buf_ring(ring.ptr().as_ptr() as u64, ring_entries, bgid)?;
     }
-    Ok(BufRing::init(ring, ring_entries, entry_size))
+    Ok(BufRing::init(ring, ring_entries, entry_size, bgid))
 }
 
 pub mod types {
@@ -167,6 +167,7 @@ pub mod types {
 pub mod buf_ring {
     use std::{
         convert::TryFrom,
+        io,
         marker::PhantomData,
         mem::ManuallyDrop,
         num::Wrapping,
@@ -175,6 +176,7 @@ pub mod buf_ring {
         sync::atomic,
     };
 
+    use io_uring::Submitter;
     use ringboard_core::ring::Mmap;
     use rustix::io_uring::{io_uring_buf, IORING_CQE_BUFFER_SHIFT};
 
@@ -182,14 +184,16 @@ pub mod buf_ring {
         ring: Mmap,
         ring_entries: u16,
         entry_size: u32,
+        group_id: u16,
     }
 
     impl BufRing {
-        pub(super) fn init(ring: Mmap, ring_entries: u16, entry_size: u32) -> Self {
+        pub(super) fn init(ring: Mmap, ring_entries: u16, entry_size: u32, group_id: u16) -> Self {
             let mut this = Self {
                 ring,
                 ring_entries,
                 entry_size,
+                group_id,
             };
 
             {
@@ -219,6 +223,10 @@ pub mod buf_ring {
 
                 _marker: PhantomData,
             }
+        }
+
+        pub fn unregister(self, submitter: &Submitter) -> io::Result<()> {
+            submitter.unregister_buf_ring(self.group_id)
         }
     }
 

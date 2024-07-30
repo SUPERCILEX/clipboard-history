@@ -1,4 +1,5 @@
 #![feature(write_all_vectored)]
+#![feature(vec_into_raw_parts)]
 
 use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 

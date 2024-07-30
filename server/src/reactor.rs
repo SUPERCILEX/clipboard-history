@@ -32,15 +32,17 @@ use crate::{
     CliError,
 };
 
+pub const MAX_NUM_CLIENTS: u32 = 1 << MAX_NUM_CLIENTS_SHIFT;
+pub const MAX_NUM_BUFS_PER_CLIENT: u16 = 8;
+
 const MAX_NUM_CLIENTS_SHIFT: u32 = 5;
-const MAX_NUM_CLIENTS: u32 = 1 << MAX_NUM_CLIENTS_SHIFT;
 const URING_ENTRIES: u32 = MAX_NUM_CLIENTS * 3;
 
 #[derive(Default, Debug)]
 struct Clients {
     connections: u32,
     pending_closes: u32,
-    dropped: ArrayVec<(u8, u64), { MAX_NUM_CLIENTS as usize }>,
+    pending_recv: u32,
 }
 
 const _: () = assert!(u8::MAX as u32 >= MAX_NUM_CLIENTS);
@@ -73,17 +75,20 @@ impl Clients {
         self.pending_closes &= !(1 << id);
     }
 
-    fn add_dropped(&mut self, id: u8, data: u64) {
+    fn set_pending_recv(&mut self, id: u8) {
         debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
-        self.dropped.push((id, data));
+        self.pending_recv |= 1 << id;
     }
 
-    fn pop_dropped(&mut self) -> Option<(u8, u64)> {
-        self.dropped.pop()
+    fn take_pending_recv(&mut self, id: u8) -> bool {
+        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
+        let r = (self.pending_recv & (1 << id)) != 0;
+        self.pending_recv &= !(1 << id);
+        r
     }
 }
 
-fn setup_uring() -> Result<(IoUring, BufRing), CliError> {
+fn setup_uring() -> Result<IoUring, CliError> {
     let uring = IoUring::<io_uring::squeue::Entry>::builder()
         .setup_coop_taskrun()
         .setup_single_issuer()
@@ -178,15 +183,8 @@ fn setup_uring() -> Result<(IoUring, BufRing), CliError> {
         .submitter()
         .register_files_update(MAX_NUM_CLIENTS, &built_ins)
         .map_io_err(|| "Failed to register socket FD with io_uring.")?;
-    let buf_ring = register_buf_ring(
-        &uring.submitter(),
-        u16::try_from(MAX_NUM_CLIENTS * 2).unwrap(),
-        0,
-        256,
-    )
-    .map_io_err(|| "Failed to register buffer ring with io_uring.")?;
 
-    Ok((uring, buf_ring))
+    Ok(uring)
 }
 
 pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
@@ -217,7 +215,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         hdr
     };
     let recvmsg = |fd| {
-        RecvMsgMulti::new(Fixed(u32::from(fd)), &receive_hdr, 0)
+        RecvMsgMulti::new(Fixed(u32::from(fd)), &receive_hdr, u16::from(fd))
             .flags(RecvFlags::TRUNC.bits())
             .build()
     };
@@ -233,7 +231,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
             .user_data(REQ_TYPE_CLOSE | store_fd(fd))
     };
 
-    let (mut uring, mut buf_ring) = setup_uring()?;
+    let mut uring = setup_uring()?;
 
     #[cfg(feature = "systemd")]
     sd_notify::notify(false, &[sd_notify::NotifyState::Ready])
@@ -257,8 +255,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
 
     info!("Server event loop started.");
 
-    let mut bufs = buf_ring.submissions();
-    let mut freed_bufs = false;
+    let mut client_buffers = [const { None::<BufRing> }; MAX_NUM_CLIENTS as usize];
     let mut send_bufs = SendMsgBufs::new();
     let mut clients = Clients::default();
     let mut pending_accept = false;
@@ -270,7 +267,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         .map_io_err(|| "Failed to wait for io_uring.")?;
         let mut pending_entries = ArrayVec::<_, { URING_ENTRIES as usize }>::new();
 
-        for entry in uring.completion() {
+        for entry in unsafe { uring.completion_shared() } {
             let result = u32::try_from(entry.result())
                 .map_err(|_| io::Error::from_raw_os_error(-entry.result()));
             match entry.user_data() & REQ_TYPE_MASK {
@@ -288,6 +285,17 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     #[allow(clippy::cast_possible_truncation)]
                     let client = client as u8;
 
+                    debug_assert!(client_buffers[usize::from(client)].is_none());
+                    client_buffers[usize::from(client)] = Some(
+                        register_buf_ring(
+                            &uring.submitter(),
+                            MAX_NUM_BUFS_PER_CLIENT,
+                            client.into(),
+                            256,
+                        )
+                        .map_io_err(|| "Failed to register buffer ring with io_uring.")?,
+                    );
+
                     if !more(entry.flags()) {
                         pending_entries.push(accept.clone());
                     }
@@ -303,13 +311,8 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                 .iter()
                                 .any(|kind| e.raw_os_error() == Some(kind.raw_os_error())) =>
                         {
-                            if freed_bufs {
-                                pending_entries.push(recvmsg(fd).user_data(entry.user_data()));
-                                freed_bufs = false;
-                            } else {
-                                warn!("No buffers available to receive client {fd}'s message.");
-                                clients.add_dropped(fd, entry.user_data());
-                            }
+                            warn!("No buffers available to receive client {fd}'s message.");
+                            clients.set_pending_recv(fd);
                             break 'recv;
                         }
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
@@ -323,8 +326,12 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     };
 
                     debug_assert!(buffer_select(entry.flags()).is_some());
+                    let mut submissions = client_buffers[usize::from(fd)]
+                        .as_mut()
+                        .unwrap()
+                        .submissions();
                     let mut buf = unsafe {
-                        bufs.get(entry.flags(), usize::try_from(entry.result()).unwrap())
+                        submissions.get(entry.flags(), usize::try_from(entry.result()).unwrap())
                     };
                     let msg = RecvMsgOutMut::parse(&mut buf, &receive_hdr).map_err(|()| {
                         CliError::Internal {
@@ -409,6 +416,8 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                 }
                 REQ_TYPE_SENDMSG => {
                     debug!("Handling sendmsg completion.");
+                    let fd = restore_fd(&entry);
+
                     {
                         let token = entry.user_data() >> REQ_TYPE_SHIFT;
                         unsafe {
@@ -418,18 +427,20 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     {
                         let index = entry.user_data() >> (REQ_TYPE_SHIFT + u8::BITS);
                         let index = u16::try_from(index & u64::from(u16::MAX)).unwrap();
+                        let mut submissions = client_buffers[usize::from(fd)]
+                            .as_mut()
+                            .unwrap()
+                            .submissions();
                         unsafe {
-                            bufs.recycle_by_index(index);
+                            submissions.recycle_by_index(index);
                         }
-                        freed_bufs = true;
                     }
 
-                    if let Some((fd, data)) = clients.pop_dropped() {
+                    if clients.take_pending_recv(fd) {
                         info!("Restoring client {fd}'s connection.");
-                        pending_entries.push(recvmsg(fd).user_data(data));
+                        pending_entries.push(recvmsg(fd).user_data(REQ_TYPE_RECV | store_fd(fd)));
                     }
 
-                    let fd = restore_fd(&entry);
                     match result {
                         Err(e)
                             if matches!(
@@ -453,6 +464,11 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     debug!("Handling close completion.");
                     let fd = restore_fd(&entry);
                     result.map_io_err(|| format!("Failed to close client {fd}."))?;
+
+                    if let Some(bufs) = mem::take(&mut client_buffers[usize::from(fd)]) {
+                        bufs.unregister(&uring.submitter())
+                            .map_io_err(|| "Failed to unregister buffer ring with io_uring.")?;
+                    }
 
                     if pending_accept {
                         info!("Restoring ability to accept new clients.");
@@ -499,7 +515,6 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                 }
             }
         }
-        bufs.sync();
 
         trace!("Queueing entries: {pending_entries:?}");
         let mut submission = uring.submission();

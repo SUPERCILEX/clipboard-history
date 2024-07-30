@@ -1,27 +1,30 @@
 use std::{mem, mem::MaybeUninit, ptr};
 
 use arrayvec::ArrayVec;
+use bitvec::{array::BitArray, BitArr};
 use log::trace;
 
-const CAP: usize = u64::BITS as usize;
+use crate::reactor::{MAX_NUM_BUFS_PER_CLIENT, MAX_NUM_CLIENTS};
+
+const CAP: usize = MAX_NUM_CLIENTS as usize * MAX_NUM_BUFS_PER_CLIENT as usize;
 
 pub struct SendMsgBufs {
-    allocated_mask: u64,
-    bufs: [MaybeUninit<Vec<u8>>; CAP],
-    pool: ArrayVec<Vec<u8>, CAP>,
+    allocated_mask: BitArr!(for CAP),
+    bufs: [MaybeUninit<(*mut u8, usize)>; CAP],
+    pool: ArrayVec<(*mut u8, usize), CAP>,
 }
 
 pub type Token = u8;
+const _: () = assert!(CAP <= (1 << Token::BITS));
 pub type SendBufAllocation = (Token, *const libc::msghdr);
 
 impl SendMsgBufs {
     const TOKEN_MASK: u64 = CAP as u64 - 1;
 
     pub const fn new() -> Self {
-        const INIT: MaybeUninit<Vec<u8>> = MaybeUninit::uninit();
         Self {
-            allocated_mask: 0,
-            bufs: [INIT; CAP],
+            allocated_mask: BitArray::ZERO,
+            bufs: [const { MaybeUninit::uninit() }; CAP],
             pool: ArrayVec::new_const(),
         }
     }
@@ -31,12 +34,16 @@ impl SendMsgBufs {
         control: Control,
         data: Data,
     ) -> Result<SendBufAllocation, ()> {
-        let token = u8::try_from(self.allocated_mask.trailing_ones()).unwrap();
+        let token = self.allocated_mask.leading_ones();
         trace!("Allocating send buffer {token}.");
-        if usize::from(token) == CAP {
+        if token == CAP {
             return Err(());
         }
-        let mut buf = self.pool.pop().unwrap_or_default();
+        let mut buf = self
+            .pool
+            .pop()
+            .map(|(ptr, cap)| unsafe { Vec::from_raw_parts(ptr, 0, cap) })
+            .unwrap_or_default();
 
         control(&mut buf);
         let control_len = buf.len();
@@ -94,19 +101,21 @@ impl SendMsgBufs {
             ptr
         };
 
-        self.allocated_mask |= 1 << token;
-        self.bufs[usize::from(token)].write(buf);
-        Ok((token, ptr.cast()))
+        self.allocated_mask.set(token, true);
+        {
+            let (ptr, _len, cap) = buf.into_raw_parts();
+            self.bufs[token].write((ptr, cap));
+        }
+        Ok((u8::try_from(token).unwrap(), ptr.cast()))
     }
 
     pub unsafe fn free(&mut self, token: u64) {
         let token = u8::try_from(token & Self::TOKEN_MASK).unwrap();
         trace!("Freeing send buffer {token}.");
 
-        self.allocated_mask &= !(1 << token);
+        self.allocated_mask.set(token.into(), false);
 
-        let mut v = unsafe { self.bufs[usize::from(token)].assume_init_read() };
-        v.clear();
+        let v = unsafe { self.bufs[usize::from(token)].assume_init_read() };
         self.pool.push(v);
     }
 
@@ -117,11 +126,9 @@ impl SendMsgBufs {
 
 impl Drop for SendMsgBufs {
     fn drop(&mut self) {
-        for i in 0..CAP {
-            if (self.allocated_mask >> i) & 1 == 1 {
-                unsafe {
-                    self.bufs[i].assume_init_drop();
-                }
+        for i in self.allocated_mask.iter_ones() {
+            unsafe {
+                self.bufs[i].assume_init_drop();
             }
         }
     }
