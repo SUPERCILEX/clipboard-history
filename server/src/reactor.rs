@@ -301,10 +301,12 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     }
                     pending_entries
                         .push(recvmsg(client).user_data(REQ_TYPE_RECV | store_fd(client)));
+
+                    debug!("Accepted client {client}.");
                 }
                 REQ_TYPE_RECV => 'recv: {
-                    debug!("Handling recv completion.");
                     let fd = restore_fd(&entry);
+                    debug!("Handling recv completion for client {fd}.");
                     match result {
                         Err(e)
                             if [Errno::MSGSIZE, Errno::NOBUFS]
@@ -415,8 +417,8 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     }
                 }
                 REQ_TYPE_SENDMSG => {
-                    debug!("Handling sendmsg completion.");
                     let fd = restore_fd(&entry);
+                    debug!("Handling sendmsg completion for client {fd}.");
 
                     {
                         let token = entry.user_data() >> REQ_TYPE_SHIFT;
@@ -456,13 +458,13 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     }
                 }
                 REQ_TYPE_SHUTDOWN_CONN => {
-                    debug!("Handling connection shutdown completion.");
                     let fd = restore_fd(&entry);
+                    debug!("Handling connection shutdown completion for client {fd}.");
                     result.map_io_err(|| format!("Failed to cancel recv for client {fd}."))?;
                 }
                 REQ_TYPE_CLOSE => {
-                    debug!("Handling close completion.");
                     let fd = restore_fd(&entry);
+                    debug!("Handling close completion for client {fd}.");
                     result.map_io_err(|| format!("Failed to close client {fd}."))?;
 
                     if let Some(bufs) = mem::take(&mut client_buffers[usize::from(fd)]) {
