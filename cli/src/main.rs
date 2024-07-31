@@ -2,8 +2,8 @@
 
 use std::{
     borrow::Cow,
-    cmp::{max, min},
-    collections::{BTreeMap, HashMap},
+    cmp::{max, min, Ordering, Reverse},
+    collections::{BTreeMap, BinaryHeap, HashMap, VecDeque},
     fmt::{Debug, Display, Formatter},
     fs,
     fs::File,
@@ -19,6 +19,7 @@ use std::{
     sync::Arc,
 };
 
+use arrayvec::ArrayVec;
 use ask::Answer;
 use base64_serde::base64_serde_type;
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
@@ -343,6 +344,11 @@ struct Fuzz {
     #[clap(value_parser = si_number::< u32 >)]
     #[clap(default_value = "10")]
     cv_size: u32,
+
+    /// Print extra debugging output
+    #[clap(short, long)]
+    #[clap(default_value_t = false)]
+    verbose: bool,
 }
 
 #[derive(Error, Debug)]
@@ -1613,6 +1619,7 @@ fn fuzz(
         seed,
         mean_size,
         cv_size,
+        verbose,
     }: Fuzz,
 ) -> Result<(), CliError> {
     struct FuzzRingKind(RingKind);
@@ -1626,6 +1633,208 @@ fn fuzz(
         }
     }
 
+    #[derive(Debug)]
+    enum PendingOp {
+        Add { data: Mmap },
+        Move { id: u64 },
+        Swap { id1: u64, id2: u64 },
+        Remove { id: u64 },
+        Gc,
+    }
+
+    #[derive(Debug)]
+    struct LinearizableResponse {
+        seq_num: u64,
+        kind: ResponseKind,
+    }
+
+    #[derive(Debug)]
+    enum ResponseKind {
+        Add {
+            data: Mmap,
+            value: AddResponse,
+        },
+        Move {
+            move_id: u64,
+            value: MoveToFrontResponse,
+        },
+        Swap {
+            id1: u64,
+            id2: u64,
+            value: SwapResponse,
+        },
+        Remove {
+            id: u64,
+            value: RemoveResponse,
+        },
+        Gc(GarbageCollectResponse),
+    }
+
+    impl PartialEq for LinearizableResponse {
+        fn eq(&self, other: &Self) -> bool {
+            self.seq_num.eq(&other.seq_num)
+        }
+    }
+    impl Eq for LinearizableResponse {}
+
+    impl PartialOrd for LinearizableResponse {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    impl Ord for LinearizableResponse {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.seq_num.cmp(&other.seq_num)
+        }
+    }
+
+    fn recv(
+        mut out: impl Write,
+        flags: RecvFlags,
+        server: impl AsFd,
+        pending: &mut VecDeque<PendingOp>,
+        database: &mut HashMap<u64, Mmap, BuildHasherDefault<FxHasher>>,
+        linearizable_responses: &mut BinaryHeap<Reverse<LinearizableResponse>>,
+        sequence_num: &mut u64,
+        verbose: bool,
+    ) -> Result<(), ClientError> {
+        match pending.front().unwrap() {
+            PendingOp::Add { .. } => {
+                let Response {
+                    sequence_number,
+                    value,
+                } = unsafe { AddRequest::recv(server, flags) }?;
+                let PendingOp::Add { data } = pending.pop_front().unwrap() else {
+                    unreachable!()
+                };
+                linearizable_responses.push(Reverse(LinearizableResponse {
+                    seq_num: sequence_number,
+                    kind: ResponseKind::Add { value, data },
+                }));
+            }
+            PendingOp::Move { .. } => {
+                let Response {
+                    sequence_number,
+                    value,
+                } = unsafe { MoveToFrontRequest::recv(server, flags) }?;
+                let PendingOp::Move { id: move_id } = pending.pop_front().unwrap() else {
+                    unreachable!()
+                };
+                linearizable_responses.push(Reverse(LinearizableResponse {
+                    seq_num: sequence_number,
+                    kind: ResponseKind::Move { move_id, value },
+                }));
+            }
+            PendingOp::Swap { .. } => {
+                let Response {
+                    sequence_number,
+                    value,
+                } = unsafe { SwapRequest::recv(server, flags) }?;
+                let PendingOp::Swap { id1, id2 } = pending.pop_front().unwrap() else {
+                    unreachable!()
+                };
+                linearizable_responses.push(Reverse(LinearizableResponse {
+                    seq_num: sequence_number,
+                    kind: ResponseKind::Swap { id1, id2, value },
+                }));
+            }
+            PendingOp::Remove { .. } => {
+                let Response {
+                    sequence_number,
+                    value,
+                } = unsafe { RemoveRequest::recv(server, flags) }?;
+                let PendingOp::Remove { id } = pending.pop_front().unwrap() else {
+                    unreachable!()
+                };
+                linearizable_responses.push(Reverse(LinearizableResponse {
+                    seq_num: sequence_number,
+                    kind: ResponseKind::Remove { id, value },
+                }));
+            }
+            PendingOp::Gc => {
+                let Response {
+                    sequence_number,
+                    value,
+                } = unsafe { GarbageCollectRequest::recv(server, flags) }?;
+                let PendingOp::Gc = pending.pop_front().unwrap() else {
+                    unreachable!()
+                };
+                linearizable_responses.push(Reverse(LinearizableResponse {
+                    seq_num: sequence_number,
+                    kind: ResponseKind::Gc(value),
+                }));
+            }
+        }
+
+        while linearizable_responses
+            .peek()
+            .is_some_and(|Reverse(r)| r.seq_num == *sequence_num)
+        {
+            let Reverse(LinearizableResponse { seq_num, kind }) =
+                linearizable_responses.pop().unwrap();
+            *sequence_num = sequence_num.wrapping_add(1);
+
+            if verbose {
+                writeln!(out, "Processing linearized response: {seq_num}@{kind:?}.")
+                    .map_io_err(|| "Failed to write to stdout.")?;
+            }
+
+            match kind {
+                ResponseKind::Add {
+                    data,
+                    value: AddResponse::Success { id },
+                } => {
+                    database.insert(id, data);
+                }
+                ResponseKind::Move { move_id, value } => match value {
+                    MoveToFrontResponse::Success { id } => {
+                        let file = database.remove(&move_id).unwrap();
+                        database.insert(id, file);
+                    }
+                    MoveToFrontResponse::Error(_) => {
+                        assert!(!database.contains_key(&move_id));
+                    }
+                },
+                ResponseKind::Swap { id1, id2, value } => match value {
+                    SwapResponse {
+                        error1: None,
+                        error2: None,
+                    } => {
+                        let file1 = database.remove(&id1);
+                        let file2 = database.remove(&id2);
+                        assert!(file1.is_some() || file2.is_some());
+
+                        if let Some(file2) = file2 {
+                            database.insert(id1, file2);
+                        }
+                        if let Some(file1) = file1 {
+                            database.insert(id2, file1);
+                        }
+                    }
+                    SwapResponse { error1, error2 } => {
+                        if error1.is_some() {
+                            assert!(!database.contains_key(&id1));
+                        }
+                        if error2.is_some() {
+                            assert!(!database.contains_key(&id2));
+                        }
+                    }
+                },
+                ResponseKind::Remove { id, value } => match value {
+                    RemoveResponse { error: None } => {
+                        assert!(database.remove(&id).is_some());
+                    }
+                    RemoveResponse { error: Some(_) } => {
+                        assert!(!database.contains_key(&id));
+                    }
+                },
+                ResponseKind::Gc(GarbageCollectResponse { bytes_freed: _ }) => {}
+            }
+        }
+
+        Ok(())
+    }
+
     let distr =
         WeightedAliasIndex::new(vec![550u32, 450, 40000, 20000, 20000, 30000, 100, 10]).unwrap();
     let entry_size_distr =
@@ -1633,41 +1842,100 @@ fn fuzz(
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
     let mut buf = String::with_capacity(MimeType::new_const().capacity());
 
-    let mut clients = Vec::with_capacity(32);
-    let mut max_id_seen = 0;
-    let mut data = HashMap::new();
+    let mut clients = ArrayVec::<_, 32>::new_const();
+    let mut pending_ops = [const { VecDeque::new() }; 32];
+    let mut pending_requests = [0; 32];
+    let mut data = HashMap::default();
+    let mut sequence_num = 1;
+    let mut linearizable_ops = BinaryHeap::new();
 
     let (mut database, mut reader) = open_db()?;
     let mut out = io::stdout().lock();
     loop {
         match distr.sample(&mut rng) {
             0 => {
-                writeln!(out, "Connecting.").map_io_err(|| "Failed to write to stdout.")?;
                 if let Ok(client) = if clients.len() == 32 {
                     connect_to_server_with(addr, SocketFlags::NONBLOCK)
                 } else {
                     connect_to_server(addr)
                 } {
+                    if verbose {
+                        writeln!(out, "Client {} connected.", clients.len())
+                            .map_io_err(|| "Failed to write to stdout.")?;
+                    }
                     clients.push(client);
                 }
             }
             1 => {
-                writeln!(out, "Closing.").map_io_err(|| "Failed to write to stdout.")?;
                 if !clients.is_empty() {
-                    clients.swap_remove(rng.gen_range(0..clients.len()));
+                    let idx = rng.gen_range(0..clients.len());
+                    if verbose {
+                        writeln!(out, "Closing client {idx}.")
+                            .map_io_err(|| "Failed to write to stdout.")?;
+                    }
+
+                    drain_requests(
+                        |flags| {
+                            recv(
+                                &mut out,
+                                flags,
+                                &clients[idx],
+                                &mut pending_ops[idx],
+                                &mut data,
+                                &mut linearizable_ops,
+                                &mut sequence_num,
+                                verbose,
+                            )
+                        },
+                        true,
+                        &mut pending_requests[idx],
+                    )?;
+
+                    clients.swap_remove(idx);
+                    pending_ops.swap(idx, clients.len());
+                    pending_requests.swap(idx, clients.len());
                 }
             }
             action @ 2..=6 => {
-                let server = if clients.is_empty() {
+                if clients.is_empty() {
+                    if verbose {
+                        writeln!(out, "Client {} connected.", clients.len())
+                            .map_io_err(|| "Failed to write to stdout.")?;
+                    }
                     clients.push(connect_to_server(addr)?);
-                    &clients[0]
-                } else {
-                    &clients[rng.gen_range(0..clients.len())]
+                }
+                let (server, pending_ops, pending_requests) = {
+                    let idx = rng.gen_range(0..clients.len());
+                    (
+                        &clients[idx],
+                        &mut pending_ops[idx],
+                        &mut pending_requests[idx],
+                    )
                 };
+                macro_rules! pipeline_request {
+                    ($send:expr) => {
+                        pipeline_request(
+                            $send,
+                            |flags| {
+                                recv(
+                                    &mut out,
+                                    flags,
+                                    server,
+                                    pending_ops,
+                                    &mut data,
+                                    &mut linearizable_ops,
+                                    &mut sequence_num,
+                                    verbose,
+                                )
+                            },
+                            pending_requests,
+                        )?;
+                    };
+                }
 
                 match action {
                     2 => {
-                        writeln!(out, "Adding.").map_io_err(|| "Failed to write to stdout.")?;
+                        let kind = rng.gen::<FuzzRingKind>().0;
                         let mime_type = if rng.gen_range(0..50) == 0 {
                             let len = rng.gen_range(1..=MimeType::new_const().capacity());
                             Alphanumeric.append_string(&mut rng, &mut buf, len);
@@ -1681,92 +1949,49 @@ fn fuzz(
 
                         let (file, file_len) =
                             generate_random_entry_file(&mut rng, entry_size_distr)?;
-                        let AddResponse::Success { id } = AddRequest::response_add_unchecked(
-                            server,
-                            addr,
-                            rng.gen::<FuzzRingKind>().0,
-                            mime_type,
-                            &file,
-                        )?;
-                        data.insert(
-                            id,
-                            Mmap::new(&file, usize::try_from(file_len).unwrap())
+                        pending_ops.push_back(PendingOp::Add {
+                            data: Mmap::new(&file, usize::try_from(file_len).unwrap())
                                 .map_io_err(|| format!("Failed to mmap file: {file:?}"))?,
-                        );
-                        max_id_seen = max_id_seen.max(id);
+                        });
+                        pipeline_request!(|flags| AddRequest::send(
+                            server, addr, kind, mime_type, &file, flags
+                        ));
                     }
                     3 => {
-                        writeln!(out, "Moving.").map_io_err(|| "Failed to write to stdout.")?;
-                        let move_id = rng.gen_range(0..=max_id_seen);
-                        match MoveToFrontRequest::response(
-                            server,
-                            addr,
-                            move_id,
-                            rng.gen::<Option<FuzzRingKind>>().map(|r| r.0),
-                        )? {
-                            MoveToFrontResponse::Success { id } => {
-                                let file = data.remove(&move_id).unwrap();
-                                data.insert(id, file);
-                                max_id_seen = max_id_seen.max(id);
-                            }
-                            MoveToFrontResponse::Error(_) => {
-                                assert!(!data.contains_key(&move_id));
-                            }
-                        }
+                        let move_id = rng.gen_range(0..=sequence_num);
+                        let kind = rng.gen::<Option<FuzzRingKind>>().map(|r| r.0);
+
+                        pending_ops.push_back(PendingOp::Move { id: move_id });
+                        pipeline_request!(|flags| MoveToFrontRequest::send(
+                            server, addr, move_id, kind, flags
+                        ));
                     }
                     4 => {
-                        writeln!(out, "Swapping.").map_io_err(|| "Failed to write to stdout.")?;
-                        let idx1 = rng.gen_range(0..=max_id_seen);
-                        let idx2 = rng.gen_range(0..=max_id_seen);
-                        match SwapRequest::response(server, addr, idx1, idx2)? {
-                            SwapResponse {
-                                error1: None,
-                                error2: None,
-                            } => {
-                                let file1 = data.remove(&idx1);
-                                let file2 = data.remove(&idx2);
-                                assert!(file1.is_some() || file2.is_some());
+                        let id1 = rng.gen_range(0..=sequence_num);
+                        let id2 = rng.gen_range(0..=sequence_num);
 
-                                if let Some(file2) = file2 {
-                                    data.insert(idx1, file2);
-                                }
-                                if let Some(file1) = file1 {
-                                    data.insert(idx2, file1);
-                                }
-                            }
-                            SwapResponse { error1, error2 } => {
-                                if error1.is_some() {
-                                    assert!(!data.contains_key(&idx1));
-                                }
-                                if error2.is_some() {
-                                    assert!(!data.contains_key(&idx2));
-                                }
-                            }
-                        }
+                        pending_ops.push_back(PendingOp::Swap { id1, id2 });
+                        pipeline_request!(|flags| SwapRequest::send(server, addr, id1, id2, flags));
                     }
                     5 => {
-                        writeln!(out, "Removing.").map_io_err(|| "Failed to write to stdout.")?;
-                        let index = rng.gen_range(0..=max_id_seen);
-                        match RemoveRequest::response(server, addr, index)? {
-                            RemoveResponse { error: None } => {
-                                data.remove(&index);
-                            }
-                            RemoveResponse { error: Some(_) } => {
-                                assert!(!data.contains_key(&index));
-                            }
-                        }
+                        let id = rng.gen_range(0..=sequence_num);
+
+                        pending_ops.push_back(PendingOp::Remove { id });
+                        pipeline_request!(|flags| RemoveRequest::send(server, addr, id, flags));
                     }
                     6 => {
-                        writeln!(out, "Collecting garbage.")
-                            .map_io_err(|| "Failed to write to stdout.")?;
                         let max_wasted_bytes = match rng.gen_range(0..4) {
                             0 => 0,
                             _ => rng.gen_range(0..10_000) + 1,
                         };
-                        let GarbageCollectResponse { bytes_freed } =
-                            GarbageCollectRequest::response(server, addr, max_wasted_bytes)?;
-                        writeln!(out, "Freed {bytes_freed} bytes.")
-                            .map_io_err(|| "Failed to write to stdout.")?;
+
+                        pending_ops.push_back(PendingOp::Gc);
+                        pipeline_request!(|flags| GarbageCollectRequest::send(
+                            server,
+                            addr,
+                            max_wasted_bytes,
+                            flags
+                        ));
                     }
                     _ => unreachable!(),
                 }
@@ -1779,11 +2004,37 @@ fn fuzz(
                 )
                 .map_io_err(|| "Failed to write to stdout.")?;
 
+                for ((server, pending_ops), pending_requests) in clients
+                    .iter()
+                    .zip(&mut pending_ops)
+                    .zip(&mut pending_requests)
+                {
+                    drain_requests(
+                        |flags| {
+                            recv(
+                                &mut out,
+                                flags,
+                                server,
+                                pending_ops,
+                                &mut data,
+                                &mut linearizable_ops,
+                                &mut sequence_num,
+                                verbose,
+                            )
+                        },
+                        true,
+                        pending_requests,
+                    )?;
+                    debug_assert!(pending_ops.is_empty());
+                    debug_assert_eq!(*pending_requests, 0);
+                }
+                debug_assert!(linearizable_ops.is_empty());
+
                 for (&id, a) in &data {
                     let entry = unsafe { database.get(id) }?;
                     let b = &**entry.to_slice(&mut reader)?;
 
-                    assert_eq!(**a, *b);
+                    assert_eq!(**a, *b, "{entry:?}");
                 }
             }
             _ => unreachable!(),

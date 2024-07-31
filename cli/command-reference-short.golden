@@ -213,6 +213,7 @@ Options:
   -s, --seed <SEED>            The RNG seed [default: 42]
   -m, --mean-size <MEAN_SIZE>  The mean entry size [default: 512]
   -c, --cv-size <CV_SIZE>      The coefficient of variation of the entry size [default: 10]
+  -v, --verbose                Print extra debugging output
   -h, --help                   Print help (use `--help` for more detail)
 
 ---

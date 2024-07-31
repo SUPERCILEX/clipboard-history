@@ -327,6 +327,9 @@ Options:
           
           [default: 10]
 
+  -v, --verbose
+          Print extra debugging output
+
   -h, --help
           Print help (use `-h` for a summary)
 
