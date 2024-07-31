@@ -261,8 +261,6 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     let mut send_bufs = SendMsgBufs::new();
     let mut clients = Clients::default();
     let mut pending_accept = false;
-    // TODO https://github.com/axboe/liburing/issues/1193
-    let mut pending_closes = 0;
     'outer: loop {
         match uring.submit_and_wait(1) {
             Err(e) if e.kind() == ErrorKind::Interrupted => continue,
@@ -325,9 +323,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
                             warn!("Client {fd} reset the connection.");
                             pending_entries.push(close(fd));
-                            pending_closes += 1;
-
-                            clients.set_closed(fd);
+                            clients.set_disconnected(fd);
                             break 'recv;
                         }
                         r => r.map_io_err(|| format!("Failed to recv from client {fd}."))?,
@@ -361,10 +357,8 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         } else {
                             info!("Client {fd} closed the connection.");
                             pending_entries.push(close(fd));
-                            pending_closes += 1;
+                            clients.set_disconnected(fd);
                         }
-
-                        clients.set_closed(fd);
                     } else {
                         if clients.is_closing(fd) {
                             warn!("Dropping spurious message for client {fd}.");
@@ -421,11 +415,10 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                     .user_data(REQ_TYPE_SHUTDOWN_CONN | store_fd(fd)),
                             );
                             pending_entries.push(close(fd));
-                            pending_closes += 1;
                         }
                     }
                 }
-                REQ_TYPE_SENDMSG => 'send: {
+                REQ_TYPE_SENDMSG => {
                     let fd = restore_fd(&entry);
                     debug!("Handling sendmsg completion for client {fd}.");
 
@@ -449,24 +442,28 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
 
                     match result {
                         Err(e) if e.kind() == ErrorKind::BrokenPipe => {
-                            debug!(
-                                "Client {fd} closed the connection before consuming all responses."
-                            );
-                            break 'send;
+                            if !clients.is_closing(fd) {
+                                debug!(
+                                    "Client {fd} closed the connection before consuming all \
+                                     responses."
+                                );
+                                pending_entries.push(close(fd));
+                                clients.set_disconnected(fd);
+                            }
                         }
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
                             if !clients.is_closing(fd) {
                                 warn!("Client {fd} forcefully disconnected.");
                                 pending_entries.push(close(fd));
                                 clients.set_disconnected(fd);
-                                pending_closes += 1;
                             }
-                            break 'send;
                         }
-                        r => r.map_io_err(|| format!("Failed to send response to client {fd}."))?,
+                        r => {
+                            r.map_io_err(|| format!("Failed to send response to client {fd}."))?;
+                        }
                     };
 
-                    if clients.take_pending_recv(fd) {
+                    if !clients.is_closing(fd) && clients.take_pending_recv(fd) {
                         info!("Restoring client {fd}'s connection.");
                         pending_entries.push(recvmsg(fd).user_data(REQ_TYPE_RECV | store_fd(fd)));
                     }
@@ -481,13 +478,14 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     debug!("Handling close completion for client {fd}.");
                     result.map_io_err(|| format!("Failed to close client {fd}."))?;
 
+                    clients.set_closed(fd);
                     if let Some(bufs) = mem::take(&mut client_buffers[usize::from(fd)]) {
                         bufs.unregister(&uring.submitter())
                             .map_io_err(|| "Failed to unregister buffer ring with io_uring.")?;
                     }
 
-                    pending_closes -= 1;
-                    if pending_accept && pending_closes == 0 {
+                    // TODO pending closes: https://github.com/axboe/liburing/issues/1193
+                    if pending_accept && clients.pending_closes == 0 {
                         info!("Restoring ability to accept new clients.");
                         pending_entries.push(accept.clone());
                         pending_accept = false;
