@@ -101,6 +101,7 @@ impl SendMsgBufs {
             ptr
         };
 
+        debug_assert!(!self.allocated_mask[token]);
         self.allocated_mask.set(token, true);
         {
             let (ptr, _len, cap) = buf.into_raw_parts();
@@ -110,12 +111,13 @@ impl SendMsgBufs {
     }
 
     pub unsafe fn free(&mut self, token: u64) {
-        let token = u8::try_from(token & Self::TOKEN_MASK).unwrap();
+        let token = usize::try_from(token & Self::TOKEN_MASK).unwrap();
         trace!("Freeing send buffer {token}.");
 
-        self.allocated_mask.set(token.into(), false);
+        debug_assert!(self.allocated_mask[token]);
+        self.allocated_mask.set(token, false);
 
-        let v = unsafe { self.bufs[usize::from(token)].assume_init_read() };
+        let v = unsafe { self.bufs[token].assume_init_read() };
         self.pool.push(v);
     }
 
