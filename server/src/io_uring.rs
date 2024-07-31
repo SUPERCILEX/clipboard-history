@@ -1,8 +1,10 @@
-use std::io;
+use std::{io, ptr, ptr::NonNull};
 
 use io_uring::Submitter;
-use ringboard_core::ring::Mmap;
-use rustix::io_uring::io_uring_buf;
+use rustix::{
+    io_uring::io_uring_buf,
+    mm::{mmap_anonymous, munmap, MapFlags, ProtFlags},
+};
 
 use crate::io_uring::buf_ring::BufRing;
 
@@ -18,11 +20,40 @@ pub fn register_buf_ring(
         )
     };
 
-    let ring = Mmap::new_anon(bytes().ok_or(io::ErrorKind::InvalidInput)?)?;
+    let ring = MmapAnon::new(bytes().ok_or(io::ErrorKind::InvalidInput)?)?;
     unsafe {
-        submitter.register_buf_ring(ring.ptr().as_ptr() as u64, ring_entries, bgid)?;
+        submitter.register_buf_ring(ring.ptr.as_ptr() as u64, ring_entries, bgid)?;
     }
     Ok(BufRing::init(ring, ring_entries, entry_size, bgid))
+}
+
+#[derive(Debug)]
+pub struct MmapAnon {
+    ptr: NonNull<u8>,
+    len: usize,
+}
+
+impl MmapAnon {
+    pub fn new(len: usize) -> io::Result<Self> {
+        Ok(Self {
+            ptr: unsafe {
+                NonNull::new_unchecked(mmap_anonymous(
+                    ptr::null_mut(),
+                    len,
+                    ProtFlags::READ | ProtFlags::WRITE,
+                    MapFlags::PRIVATE,
+                )?)
+            }
+            .cast(),
+            len,
+        })
+    }
+}
+
+impl Drop for MmapAnon {
+    fn drop(&mut self) {
+        let _ = unsafe { munmap(self.ptr.as_ptr().cast(), self.len) };
+    }
 }
 
 pub mod types {
@@ -177,18 +208,24 @@ pub mod buf_ring {
     };
 
     use io_uring::Submitter;
-    use ringboard_core::ring::Mmap;
     use rustix::io_uring::{io_uring_buf, IORING_CQE_BUFFER_SHIFT};
 
+    use crate::io_uring::MmapAnon;
+
     pub struct BufRing {
-        ring: Mmap,
+        ring: MmapAnon,
         ring_entries: u16,
         entry_size: u32,
         group_id: u16,
     }
 
     impl BufRing {
-        pub(super) fn init(ring: Mmap, ring_entries: u16, entry_size: u32, group_id: u16) -> Self {
+        pub(super) fn init(
+            ring: MmapAnon,
+            ring_entries: u16,
+            entry_size: u32,
+            group_id: u16,
+        ) -> Self {
             let mut this = Self {
                 ring,
                 ring_entries,
@@ -209,8 +246,8 @@ pub mod buf_ring {
 
         #[allow(clippy::cast_ptr_alignment)]
         pub fn submissions(&mut self) -> BufRingSubmissions<'_> {
-            let ring_ptr = self.ring.ptr().as_ptr().cast::<io_uring_buf>();
-            let tail_ptr = unsafe { self.ring.ptr().as_ptr().add(8 + 4 + 2) };
+            let ring_ptr = self.ring.ptr.as_ptr().cast::<io_uring_buf>();
+            let tail_ptr = unsafe { self.ring.ptr.as_ptr().add(8 + 4 + 2) };
             let ring_entries = usize::from(self.ring_entries);
             BufRingSubmissions {
                 ring_ptr,

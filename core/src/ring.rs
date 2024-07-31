@@ -12,7 +12,7 @@ use std::{
 
 use rustix::{
     fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
-    mm::{mmap, mmap_anonymous, mremap, munmap, MapFlags, MremapFlags, ProtFlags},
+    mm::{mmap, mremap, munmap, MapFlags, MremapFlags, ProtFlags},
     path::Arg,
 };
 
@@ -173,22 +173,6 @@ impl Mmap {
             .cast(),
             requested_len: len,
             backing_len,
-        })
-    }
-
-    pub fn new_anon(len: usize) -> rustix::io::Result<Self> {
-        Ok(Self {
-            ptr: unsafe {
-                NonNull::new_unchecked(mmap_anonymous(
-                    ptr::null_mut(),
-                    len,
-                    ProtFlags::READ | ProtFlags::WRITE,
-                    MapFlags::PRIVATE,
-                )?)
-            }
-            .cast(),
-            requested_len: len,
-            backing_len: len,
         })
     }
 
