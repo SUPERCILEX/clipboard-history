@@ -269,7 +269,9 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         .map_io_err(|| "Failed to wait for io_uring.")?;
         let mut pending_entries = ArrayVec::<_, { URING_ENTRIES as usize }>::new();
 
-        for entry in unsafe { uring.completion_shared() } {
+        for entry in
+            unsafe { uring.completion_shared() }.take(usize::try_from(URING_ENTRIES / 2).unwrap())
+        {
             let result = u32::try_from(entry.result())
                 .map_err(|_| io::Error::from_raw_os_error(-entry.result()));
             match entry.user_data() & REQ_TYPE_MASK {
