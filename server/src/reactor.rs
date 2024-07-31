@@ -261,6 +261,8 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     let mut send_bufs = SendMsgBufs::new();
     let mut clients = Clients::default();
     let mut pending_accept = false;
+    // TODO https://github.com/axboe/liburing/issues/1193
+    let mut pending_closes = 0;
     'outer: loop {
         match uring.submit_and_wait(1) {
             Err(e) if e.kind() == ErrorKind::Interrupted => continue,
@@ -288,6 +290,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     debug_assert!(client < MAX_NUM_CLIENTS);
                     #[allow(clippy::cast_possible_truncation)]
                     let client = client as u8;
+                    debug!("Accepting client {client}.");
 
                     debug_assert!(client_buffers[usize::from(client)].is_none());
                     client_buffers[usize::from(client)] = Some(
@@ -305,8 +308,6 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     }
                     pending_entries
                         .push(recvmsg(client).user_data(REQ_TYPE_RECV | store_fd(client)));
-
-                    debug!("Accepted client {client}.");
                 }
                 REQ_TYPE_RECV => 'recv: {
                     let fd = restore_fd(&entry);
@@ -324,6 +325,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
                             warn!("Client {fd} reset the connection.");
                             pending_entries.push(close(fd));
+                            pending_closes += 1;
 
                             clients.set_closed(fd);
                             break 'recv;
@@ -359,6 +361,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         } else {
                             info!("Client {fd} closed the connection.");
                             pending_entries.push(close(fd));
+                            pending_closes += 1;
                         }
 
                         clients.set_closed(fd);
@@ -418,6 +421,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                     .user_data(REQ_TYPE_SHUTDOWN_CONN | store_fd(fd)),
                             );
                             pending_entries.push(close(fd));
+                            pending_closes += 1;
                         }
                     }
                 }
@@ -455,6 +459,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                 warn!("Client {fd} forcefully disconnected.");
                                 pending_entries.push(close(fd));
                                 clients.set_disconnected(fd);
+                                pending_closes += 1;
                             }
                             break 'send;
                         }
@@ -481,7 +486,8 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             .map_io_err(|| "Failed to unregister buffer ring with io_uring.")?;
                     }
 
-                    if pending_accept {
+                    pending_closes -= 1;
+                    if pending_accept && pending_closes == 0 {
                         info!("Restoring ability to accept new clients.");
                         pending_entries.push(accept.clone());
                         pending_accept = false;
