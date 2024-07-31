@@ -45,7 +45,7 @@ use ringboard_sdk::{
 };
 use rustix::stdio::raw_stdout;
 use thiserror::Error;
-use tui_textarea::TextArea;
+use tui_textarea::{CursorMove, Input, Key, TextArea};
 
 #[cfg(feature = "trace")]
 #[global_allocator]
@@ -436,7 +436,28 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                 }) = &mut ui.search_state
                     && *focused
                 {
-                    if ui.query.input(event) {
+                    let changed = match Input::from(event) {
+                        Input {
+                            key: Key::Left,
+                            ctrl: true,
+                            alt: false,
+                            shift: _,
+                        } => {
+                            ui.query.move_cursor(CursorMove::WordBack);
+                            false
+                        }
+                        Input {
+                            key: Key::Right,
+                            ctrl: true,
+                            alt: false,
+                            shift: _,
+                        } => {
+                            ui.query.move_cursor(CursorMove::WordForward);
+                            false
+                        }
+                        i => ui.query.input(i),
+                    };
+                    if changed {
                         if let Some(token) = &ui.pending_search_token {
                             token.cancel();
                         }
