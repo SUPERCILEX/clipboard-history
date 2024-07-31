@@ -258,7 +258,7 @@ impl Ring {
             &fd,
             usize::try_from(entries_to_offset(max_entries)).unwrap(),
         )
-        .map_io_err(|| "Failed to map memory.")?;
+        .map_io_err(|| "Failed to mmap ring.")?;
 
         if len < MAGIC.len()
             || unsafe { slice::from_raw_parts(mem.ptr().as_ptr(), MAGIC.len()) } != MAGIC
