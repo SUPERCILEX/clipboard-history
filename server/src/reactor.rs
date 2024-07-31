@@ -444,13 +444,17 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     }
 
                     match result {
-                        Err(e)
-                            if matches!(
-                                e.kind(),
-                                ErrorKind::BrokenPipe | ErrorKind::ConnectionReset
-                            ) =>
-                        {
-                            warn!("Client {fd} forcefully disconnected: {e:?}");
+                        Err(e) if e.kind() == ErrorKind::BrokenPipe => {
+                            debug!(
+                                "Client {fd} closed the connection before consuming all responses."
+                            );
+                        }
+                        Err(e) if e.kind() == ErrorKind::ConnectionReset => {
+                            if !clients.is_closing(fd) {
+                                warn!("Client {fd} forcefully disconnected.");
+                                pending_entries.push(close(fd));
+                                clients.set_disconnected(fd);
+                            }
                         }
                         r => {
                             r.map_io_err(|| format!("Failed to send response to client {fd}."))?;
