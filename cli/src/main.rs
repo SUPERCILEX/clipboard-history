@@ -1851,6 +1851,8 @@ fn fuzz(
             0 => {
                 if let Ok(client) = if clients.len() == 32 {
                     connect_to_server_with(addr, SocketFlags::NONBLOCK)
+                } else if clients.is_empty() {
+                    Ok(connect_to_server(addr)?)
                 } else {
                     connect_to_server(addr)
                 } {
