@@ -61,6 +61,7 @@ impl Clients {
         debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         self.connections |= 1 << id;
         self.pending_closes &= !(1 << id);
+        self.pending_recv &= !(1 << id);
     }
 
     fn set_disconnected(&mut self, id: u8) {
@@ -84,7 +85,7 @@ impl Clients {
         debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         let r = (self.pending_recv & (1 << id)) != 0;
         self.pending_recv &= !(1 << id);
-        r
+        r && self.is_connected(id)
     }
 }
 
@@ -416,7 +417,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         }
                     }
                 }
-                REQ_TYPE_SENDMSG => {
+                REQ_TYPE_SENDMSG => 'send: {
                     let fd = restore_fd(&entry);
                     debug!("Handling sendmsg completion for client {fd}.");
 
@@ -438,16 +439,12 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         }
                     }
 
-                    if clients.take_pending_recv(fd) {
-                        info!("Restoring client {fd}'s connection.");
-                        pending_entries.push(recvmsg(fd).user_data(REQ_TYPE_RECV | store_fd(fd)));
-                    }
-
                     match result {
                         Err(e) if e.kind() == ErrorKind::BrokenPipe => {
                             debug!(
                                 "Client {fd} closed the connection before consuming all responses."
                             );
+                            break 'send;
                         }
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
                             if !clients.is_closing(fd) {
@@ -455,10 +452,14 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                 pending_entries.push(close(fd));
                                 clients.set_disconnected(fd);
                             }
+                            break 'send;
                         }
-                        r => {
-                            r.map_io_err(|| format!("Failed to send response to client {fd}."))?;
-                        }
+                        r => r.map_io_err(|| format!("Failed to send response to client {fd}."))?,
+                    };
+
+                    if clients.take_pending_recv(fd) {
+                        info!("Restoring client {fd}'s connection.");
+                        pending_entries.push(recvmsg(fd).user_data(REQ_TYPE_RECV | store_fd(fd)));
                     }
                 }
                 REQ_TYPE_SHUTDOWN_CONN => {
