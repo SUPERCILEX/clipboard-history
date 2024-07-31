@@ -4,7 +4,7 @@ use arrayvec::ArrayVec;
 use log::{info, warn};
 use ringboard_core::{
     protocol,
-    protocol::{MimeType, Request, RingKind},
+    protocol::{AddResponse, MimeType, Request, RingKind},
     AsBytes,
 };
 use rustix::net::{AncillaryDrain, RecvAncillaryMessage};
@@ -48,6 +48,7 @@ pub fn handle(
     control_data: &mut [u8],
     send_bufs: &mut SendMsgBufs,
     allocator: &mut Allocator,
+    sequence_number: &mut u64,
 ) -> Result<Option<SendBufAllocation>, CliError> {
     if request_data.len() < size_of::<Request>() {
         warn!("Dropping invalid request (too short).");
@@ -55,32 +56,41 @@ pub fn handle(
     }
     let request = unsafe { &request_data.as_ptr().cast::<Request>().read_unaligned() };
 
+    macro_rules! reply {
+        ($response:expr) => {{ reply(send_bufs, *sequence_number, $response).map(Some) }};
+    }
+
     info!("Processing request: {request:?}");
+    *sequence_number = sequence_number.wrapping_add(1);
     match *request {
         Request::Add { to, ref mime_type } => {
-            add(control_data, send_bufs, allocator, to, mime_type).map(Some)
+            reply!(add(control_data, allocator, to, mime_type)?)
         }
         Request::MoveToFront { id, to } => {
-            reply(send_bufs, [allocator.move_to_front(id, to)?]).map(Some)
+            reply!([allocator.move_to_front(id, to)?])
         }
-        Request::Swap { id1, id2 } => reply(send_bufs, [allocator.swap(id1, id2)?]).map(Some),
-        Request::Remove { id } => reply(send_bufs, [allocator.remove(id)?]).map(Some),
+        Request::Swap { id1, id2 } => reply!([allocator.swap(id1, id2)?]),
+        Request::Remove { id } => reply!([allocator.remove(id)?]),
         Request::GarbageCollect { max_wasted_bytes } => {
-            reply(send_bufs, [allocator.gc(max_wasted_bytes)?]).map(Some)
+            reply!([allocator.gc(max_wasted_bytes)?])
         }
     }
 }
 
 fn reply<R: AsBytes + Debug>(
     send_bufs: &mut SendMsgBufs,
-    responses: impl IntoIterator<Item = R>,
+    sequence_number: u64,
+    responses: impl IntoIterator<Item = R, IntoIter: ExactSizeIterator<Item = R>>,
 ) -> Result<SendBufAllocation, CliError> {
     send_bufs
         .alloc(
             |_| (),
             |buf| {
+                let responses = responses.into_iter();
+                debug_assert_eq!(responses.len(), 1);
                 for response in responses {
-                    info!("Replying: {response:?}");
+                    info!("Replying: {sequence_number}@{response:?}");
+                    buf.extend_from_slice(&sequence_number.to_ne_bytes());
                     buf.extend_from_slice(response.as_bytes());
                 }
             },
@@ -92,11 +102,10 @@ fn reply<R: AsBytes + Debug>(
 
 fn add(
     control_data: &mut [u8],
-    send_bufs: &mut SendMsgBufs,
     allocator: &mut Allocator,
     kind: RingKind,
     mime_type: &MimeType,
-) -> Result<SendBufAllocation, CliError> {
+) -> Result<impl ExactSizeIterator<Item = AddResponse>, CliError> {
     let mut responses = ArrayVec::<_, 1>::new();
 
     for message in unsafe { AncillaryDrain::parse(control_data) } {
@@ -107,5 +116,5 @@ fn add(
         }
     }
 
-    reply(send_bufs, responses)
+    Ok(responses.into_iter())
 }

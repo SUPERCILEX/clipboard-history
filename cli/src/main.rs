@@ -44,7 +44,7 @@ use ringboard_sdk::{
         dirs::{data_dir, socket_file},
         protocol::{
             decompose_id, AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType,
-            MoveToFrontResponse, RemoveResponse, RingKind, SwapResponse,
+            MoveToFrontResponse, RemoveResponse, Response, RingKind, SwapResponse,
         },
         read_server_pid,
         ring::Mmap,
@@ -788,9 +788,12 @@ fn garbage_collect(
         let mut num_duplicates = 0;
 
         let recv = |flags| {
-            unsafe { RemoveRequest::recv(&server, flags) }.and_then(|RemoveResponse { error }| {
-                error.map_or_else(|| Ok(()), |e| Err(e.into()))
-            })
+            unsafe { RemoveRequest::recv(&server, flags) }.and_then(
+                |Response {
+                     sequence_number: _,
+                     value: RemoveResponse { error },
+                 }| { error.map_or_else(|| Ok(()), |e| Err(e.into())) },
+            )
         };
         let mut pending_requests = 0;
         for entry in database.favorites().rev().chain(database.main().rev()) {
@@ -1846,11 +1849,16 @@ fn pipelined_add_recv<'a>(
     mut translation: Option<&'a mut Vec<u64>>,
 ) -> impl FnMut(RecvFlags) -> Result<(), ClientError> + 'a {
     move |flags| {
-        unsafe { AddRequest::recv(&server, flags) }.map(|AddResponse::Success { id }| {
-            if let Some(translation) = translation.as_deref_mut() {
-                translation.push(id);
-            }
-        })
+        unsafe { AddRequest::recv(&server, flags) }.map(
+            |Response {
+                 sequence_number: _,
+                 value: AddResponse::Success { id },
+             }| {
+                if let Some(translation) = translation.as_deref_mut() {
+                    translation.push(id);
+                }
+            },
+        )
     }
 }
 

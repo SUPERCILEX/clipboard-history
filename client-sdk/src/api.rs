@@ -1,4 +1,5 @@
 use std::{
+    any::TypeId,
     fs::File,
     io,
     io::{IoSlice, IoSliceMut, Seek, SeekFrom},
@@ -10,7 +11,7 @@ use ringboard_core::{
     protocol,
     protocol::{
         AddResponse, GarbageCollectResponse, MimeType, MoveToFrontResponse, RemoveResponse,
-        Request, RingKind, SwapResponse,
+        Request, Response, RingKind, SwapResponse,
     },
     AsBytes, IoErr,
 };
@@ -36,8 +37,12 @@ macro_rules! response {
         pub unsafe fn recv<Server: AsFd>(
             server: Server,
             flags: RecvFlags,
-        ) -> Result<$t, ClientError> {
-            response::<$t, { size_of::<$t>() }>(&server, flags)
+        ) -> Result<Response<$t>, ClientError> {
+            if TypeId::of::<$t>() == TypeId::of::<VersionResponse>() {
+                response::<$t, { size_of::<$t>() }>(&server, flags)
+            } else {
+                response::<$t, { size_of::<Response<$t>>() }>(&server, flags)
+            }
         }
     };
 }
@@ -64,8 +69,11 @@ pub fn connect_to_server_with(
         )
         .map_io_err(|| "Failed to send version.")?;
 
-        let version = unsafe {
-            response!(u8);
+        let Response {
+            sequence_number: _,
+            value: VersionResponse(version),
+        } = unsafe {
+            response!(VersionResponse);
             recv(&socket, RecvFlags::empty())
         }?;
         if version != protocol::VERSION {
@@ -75,6 +83,10 @@ pub fn connect_to_server_with(
 
     Ok(socket)
 }
+
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug)]
+struct VersionResponse(u8);
 
 pub struct AddRequest;
 
@@ -119,7 +131,12 @@ impl AddRequest {
         data: Data,
     ) -> Result<AddResponse, ClientError> {
         Self::send(&server, addr, to, mime_type, data, SendFlags::empty())?;
-        unsafe { Self::recv(&server, RecvFlags::empty()) }
+        unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
+            |Response {
+                 sequence_number: _,
+                 value,
+             }| value,
+        )
     }
 
     pub fn send<Server: AsFd, Data: AsFd>(
@@ -146,7 +163,12 @@ impl MoveToFrontRequest {
         to: Option<RingKind>,
     ) -> Result<MoveToFrontResponse, ClientError> {
         Self::send(&server, addr, id, to, SendFlags::empty())?;
-        unsafe { Self::recv(&server, RecvFlags::empty()) }
+        unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
+            |Response {
+                 sequence_number: _,
+                 value,
+             }| value,
+        )
     }
 
     pub fn send<Server: AsFd>(
@@ -172,7 +194,12 @@ impl SwapRequest {
         id2: u64,
     ) -> Result<SwapResponse, ClientError> {
         Self::send(&server, addr, id1, id2, SendFlags::empty())?;
-        unsafe { Self::recv(&server, RecvFlags::empty()) }
+        unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
+            |Response {
+                 sequence_number: _,
+                 value,
+             }| value,
+        )
     }
 
     pub fn send<Server: AsFd>(
@@ -197,7 +224,12 @@ impl RemoveRequest {
         id: u64,
     ) -> Result<RemoveResponse, ClientError> {
         Self::send(&server, addr, id, SendFlags::empty())?;
-        unsafe { Self::recv(&server, RecvFlags::empty()) }
+        unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
+            |Response {
+                 sequence_number: _,
+                 value,
+             }| value,
+        )
     }
 
     pub fn send<Server: AsFd>(
@@ -221,7 +253,12 @@ impl GarbageCollectRequest {
         max_wasted_bytes: u64,
     ) -> Result<GarbageCollectResponse, ClientError> {
         Self::send(&server, addr, max_wasted_bytes, SendFlags::empty())?;
-        unsafe { Self::recv(&server, RecvFlags::empty()) }
+        unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
+            |Response {
+                 sequence_number: _,
+                 value,
+             }| value,
+        )
     }
 
     pub fn send<Server: AsFd>(
@@ -292,10 +329,10 @@ fn request_with_ancillary(
     Ok(())
 }
 
-unsafe fn response<T: Copy, const N: usize>(
+unsafe fn response<T: Copy + 'static, const N: usize>(
     server: impl AsFd,
     flags: RecvFlags,
-) -> Result<T, ClientError> {
+) -> Result<Response<T>, ClientError> {
     let type_name = || {
         let name = std::any::type_name::<T>();
         if let Some((_, name)) = name.rsplit_once(':') {
@@ -313,10 +350,20 @@ unsafe fn response<T: Copy, const N: usize>(
         RecvFlags::TRUNC | flags,
     )
     .map_io_err(|| format!("Failed to receive {}.", type_name()))?;
-    if result.bytes != size_of::<T>() {
+
+    if result.bytes != N {
         return Err(ClientError::InvalidResponse {
             context: format!("Bad {}.", type_name()).into(),
         });
     }
-    Ok(unsafe { *buf.as_ptr().cast::<T>() })
+    debug_assert!(!result.flags.contains(RecvFlags::TRUNC));
+
+    if TypeId::of::<T>() == TypeId::of::<VersionResponse>() {
+        Ok(Response {
+            sequence_number: 0,
+            value: *unsafe { &buf.as_ptr().cast::<T>().read_unaligned() },
+        })
+    } else {
+        Ok(*unsafe { &buf.as_ptr().cast::<Response<T>>().read_unaligned() })
+    }
 }

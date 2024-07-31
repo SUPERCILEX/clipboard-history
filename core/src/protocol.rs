@@ -45,7 +45,7 @@ impl RingKind {
 // enough while still letting the Request fit in two cache lines.
 pub type MimeType = ArrayString<96>;
 
-#[repr(u8)]
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub enum Request {
     Add { to: RingKind, mime_type: MimeType },
@@ -58,22 +58,20 @@ pub enum Request {
 const _: () = assert!(size_of::<Request>() <= 128);
 
 #[repr(C)]
+#[derive(Copy, Clone)]
+pub struct Response<T> {
+    pub sequence_number: u64,
+    pub value: T,
+}
+
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
 #[must_use]
 pub enum AddResponse {
     Success { id: u64 },
 }
 
-#[repr(u8)]
-#[derive(Copy, Clone, thiserror::Error, Debug)]
-pub enum IdNotFoundError {
-    #[error("Invalid ring ID: {0}.")]
-    Ring(u32),
-    #[error("Invalid entry ID: {0}.")]
-    Entry(u32),
-}
-
-#[repr(u8)]
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
 #[must_use]
 pub enum MoveToFrontResponse {
@@ -101,6 +99,15 @@ pub struct RemoveResponse {
 #[must_use]
 pub struct GarbageCollectResponse {
     pub bytes_freed: u64,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, thiserror::Error, Debug)]
+pub enum IdNotFoundError {
+    #[error("Invalid ring ID: {0}.")]
+    Ring(u32),
+    #[error("Invalid entry ID: {0}.")]
+    Entry(u32),
 }
 
 #[must_use]

@@ -256,6 +256,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
 
     info!("Server event loop started.");
 
+    let mut sequence_number = 0;
     let mut client_buffers = [const { None::<BufRing> }; MAX_NUM_CLIENTS as usize];
     let mut send_bufs = SendMsgBufs::new();
     let mut clients = Clients::default();
@@ -375,6 +376,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                 msg.control_data,
                                 &mut send_bufs,
                                 allocator,
+                                &mut sequence_number,
                             )?
                         } else {
                             let (version_valid, resp) =

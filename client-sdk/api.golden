@@ -3,7 +3,7 @@ pub use clipboard_history_client_sdk::core
 pub mod clipboard_history_client_sdk::api
 pub struct clipboard_history_client_sdk::api::AddRequest
 impl clipboard_history_client_sdk::api::AddRequest
-pub unsafe fn clipboard_history_client_sdk::api::AddRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::AddResponse, clipboard_history_client_sdk::ClientError>
+pub unsafe fn clipboard_history_client_sdk::api::AddRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::Response<clipboard_history_core::protocol::AddResponse>, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::AddRequest::response<Server: std::os::fd::owned::AsFd, Data: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, to: clipboard_history_core::protocol::RingKind, mime_type: clipboard_history_core::protocol::MimeType, data: Data) -> core::result::Result<clipboard_history_core::protocol::AddResponse, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::AddRequest::response_add_unchecked<Server: std::os::fd::owned::AsFd, Data: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, to: clipboard_history_core::protocol::RingKind, mime_type: clipboard_history_core::protocol::MimeType, data: Data) -> core::result::Result<clipboard_history_core::protocol::AddResponse, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::AddRequest::send<Server: std::os::fd::owned::AsFd, Data: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, to: clipboard_history_core::protocol::RingKind, mime_type: clipboard_history_core::protocol::MimeType, data: Data, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
@@ -39,7 +39,7 @@ pub unsafe fn clipboard_history_client_sdk::api::AddRequest::init(init: <T as cr
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::api::AddRequest
 pub struct clipboard_history_client_sdk::api::GarbageCollectRequest
 impl clipboard_history_client_sdk::api::GarbageCollectRequest
-pub unsafe fn clipboard_history_client_sdk::api::GarbageCollectRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::GarbageCollectResponse, clipboard_history_client_sdk::ClientError>
+pub unsafe fn clipboard_history_client_sdk::api::GarbageCollectRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::Response<clipboard_history_core::protocol::GarbageCollectResponse>, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::response<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, max_wasted_bytes: u64) -> core::result::Result<clipboard_history_core::protocol::GarbageCollectResponse, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::GarbageCollectRequest::send<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, max_wasted_bytes: u64, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
 impl core::marker::Freeze for clipboard_history_client_sdk::api::GarbageCollectRequest
@@ -74,7 +74,7 @@ pub unsafe fn clipboard_history_client_sdk::api::GarbageCollectRequest::init(ini
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::api::GarbageCollectRequest
 pub struct clipboard_history_client_sdk::api::MoveToFrontRequest
 impl clipboard_history_client_sdk::api::MoveToFrontRequest
-pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::MoveToFrontResponse, clipboard_history_client_sdk::ClientError>
+pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::Response<clipboard_history_core::protocol::MoveToFrontResponse>, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::response<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64, to: core::option::Option<clipboard_history_core::protocol::RingKind>) -> core::result::Result<clipboard_history_core::protocol::MoveToFrontResponse, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::MoveToFrontRequest::send<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64, to: core::option::Option<clipboard_history_core::protocol::RingKind>, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
 impl core::marker::Freeze for clipboard_history_client_sdk::api::MoveToFrontRequest
@@ -109,7 +109,7 @@ pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::init(init: 
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::api::MoveToFrontRequest
 pub struct clipboard_history_client_sdk::api::RemoveRequest
 impl clipboard_history_client_sdk::api::RemoveRequest
-pub unsafe fn clipboard_history_client_sdk::api::RemoveRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::RemoveResponse, clipboard_history_client_sdk::ClientError>
+pub unsafe fn clipboard_history_client_sdk::api::RemoveRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::Response<clipboard_history_core::protocol::RemoveResponse>, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::RemoveRequest::response<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64) -> core::result::Result<clipboard_history_core::protocol::RemoveResponse, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::RemoveRequest::send<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id: u64, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
 impl core::marker::Freeze for clipboard_history_client_sdk::api::RemoveRequest
@@ -144,7 +144,7 @@ pub unsafe fn clipboard_history_client_sdk::api::RemoveRequest::init(init: <T as
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::api::RemoveRequest
 pub struct clipboard_history_client_sdk::api::SwapRequest
 impl clipboard_history_client_sdk::api::SwapRequest
-pub unsafe fn clipboard_history_client_sdk::api::SwapRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::SwapResponse, clipboard_history_client_sdk::ClientError>
+pub unsafe fn clipboard_history_client_sdk::api::SwapRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::Response<clipboard_history_core::protocol::SwapResponse>, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::SwapRequest::response<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id1: u64, id2: u64) -> core::result::Result<clipboard_history_core::protocol::SwapResponse, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::SwapRequest::send<Server: std::os::fd::owned::AsFd>(server: Server, addr: &rustix::backend::net::addr::SocketAddrUnix, id1: u64, id2: u64, flags: rustix::backend::net::send_recv::SendFlags) -> core::result::Result<(), clipboard_history_client_sdk::ClientError>
 impl core::marker::Freeze for clipboard_history_client_sdk::api::SwapRequest
