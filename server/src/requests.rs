@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use arrayvec::ArrayVec;
-use log::{info, warn};
+use log::{debug, info, warn};
 use ringboard_core::{
     protocol,
     protocol::{AddResponse, MimeType, Request, RingKind},
@@ -19,7 +19,7 @@ pub fn connect(
     payload: &[u8],
     send_bufs: &mut SendMsgBufs,
 ) -> Result<(bool, SendBufAllocation), CliError> {
-    info!("Establishing client/server protocol connection.");
+    debug!("Establishing client/server protocol connection.");
     let version = payload[0];
     let valid = version == protocol::VERSION;
     if !valid {

@@ -352,16 +352,14 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     }
 
                     if msg.payload_data.is_empty() {
-                        if clients.is_closing(fd) {
-                            info!("Client {fd} shut down.");
-                        } else {
-                            info!("Client {fd} closed the connection.");
+                        debug!("Client {fd} closed the connection.");
+                        if !clients.is_closing(fd) {
                             pending_entries.push(close(fd));
                             clients.set_disconnected(fd);
                         }
                     } else {
                         if clients.is_closing(fd) {
-                            warn!("Dropping spurious message for client {fd}.");
+                            debug!("Dropping spurious message for client {fd}.");
                             break 'recv;
                         }
 
@@ -477,6 +475,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     let fd = restore_fd(&entry);
                     debug!("Handling close completion for client {fd}.");
                     result.map_io_err(|| format!("Failed to close client {fd}."))?;
+                    info!("Client {fd} disconnected.");
 
                     clients.set_closed(fd);
                     if let Some(bufs) = mem::take(&mut client_buffers[usize::from(fd)]) {
