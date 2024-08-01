@@ -692,7 +692,7 @@ dependencies = [
  "regex",
  "rustc-hash 2.0.0",
  "rustix",
- "smallvec 2.0.0-alpha.6",
+ "smallvec 2.0.0-alpha.7",
  "supercilex-tests",
  "thiserror",
 ]
@@ -3116,9 +3116,9 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "smallvec"
-version = "2.0.0-alpha.6"
+version = "2.0.0-alpha.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66778689f64ae4f4e9365890e55048783afc0bb07a8e214b0bcfe7b88e6bb2bf"
+checksum = "e6a96cb564e12be8458b004bd829787ebe887de197d94516d2ba5a2a32235a0c"
 
 [[package]]
 name = "smithay-client-toolkit"

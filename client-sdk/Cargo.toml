@@ -12,13 +12,13 @@ license.workspace = true
 [dependencies]
 arrayvec = "0.7.4"
 error-stack = { version = "0.5.0", default-features = false, optional = true }
-image = "0.25.2"
-memchr = "2.7.4"
-regex = "1.10.5"
+image = { version = "0.25.2", optional = true }
+memchr = { version = "2.7.4", optional = true }
+regex = { version = "1.10.5", optional = true }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core" }
-rustc-hash = "2.0.0"
+rustc-hash = { version = "2.0.0", optional = true }
 rustix = { version = "0.38.34", features = ["net", "fs", "thread"] }
-smallvec = "2.0.0-alpha.6"
+smallvec = { version = "2.0.0-alpha.7", optional = true }
 thiserror = "1.0.63"
 
 [dev-dependencies]
@@ -26,3 +26,6 @@ supercilex-tests = { version = "0.4.7", default-features = false, features = ["a
 
 [features]
 error-stack = ["dep:error-stack", "ringboard-core/error-stack"]
+deduplication = ["dep:rustc-hash", "dep:smallvec"]
+search = ["dep:memchr", "dep:regex"]
+ui = ["search", "dep:image", "dep:rustc-hash"]

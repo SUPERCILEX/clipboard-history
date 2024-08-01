@@ -12,7 +12,7 @@ license.workspace = true
 [dependencies]
 eframe = { version = "0.28.1", default-features = false, features = ["glow"] }
 image = "0.25.2"
-ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
+ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
 rustc-hash = "2.0.0"
 tracy-client = { version = "0.17.0", optional = true }
 

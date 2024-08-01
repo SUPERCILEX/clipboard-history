@@ -14,7 +14,7 @@ error-stack = { version = "0.5.0", default-features = false, features = ["std"] 
 ratatui = "0.27.0"
 ratatui-image = { version = "1.0.5", features = ["crossterm"] }
 regex = "1.10.5"
-ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack"] }
+ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "ui"] }
 rustix = { version = "0.38.34", features = ["stdio"] }
 thiserror = "1.0.63"
 tracy-client = { version = "0.17.0", optional = true }

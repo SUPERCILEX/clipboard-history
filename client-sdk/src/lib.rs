@@ -3,13 +3,17 @@ use std::borrow::Cow;
 pub use ring_reader::{DatabaseReader, Entry, EntryReader, Kind, LoadedEntry, RingReader};
 pub use ringboard_core as core;
 use ringboard_core::{protocol, protocol::IdNotFoundError};
+#[cfg(feature = "search")]
 pub use search::search;
 use thiserror::Error;
 
 pub mod api;
+#[cfg(feature = "deduplication")]
 pub mod duplicate_detection;
 mod ring_reader;
+#[cfg(feature = "search")]
 pub mod search;
+#[cfg(feature = "ui")]
 pub mod ui_actor;
 
 #[derive(Error, Debug)]
