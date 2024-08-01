@@ -18,6 +18,24 @@ pub fn socket_file() -> PathBuf {
     }
 
     let mut file = PathBuf::with_capacity("/tmp/.ringboard/username.ch".len());
+    push_sockets_prefix(&mut file);
+    file.set_extension("ch");
+    file
+}
+
+#[must_use]
+pub fn paste_socket_file() -> PathBuf {
+    if let Some(s) = env::var_os("PASTE_SOCK") {
+        return PathBuf::from(s);
+    }
+
+    let mut file = PathBuf::with_capacity("/tmp/.ringboard/username.paste".len());
+    push_sockets_prefix(&mut file);
+    file.set_extension("paste");
+    file
+}
+
+fn push_sockets_prefix(file: &mut PathBuf) {
     #[allow(clippy::path_buf_push_overwrite)]
     file.push("/tmp/.ringboard");
     file.push(
@@ -28,6 +46,4 @@ pub fn socket_file() -> PathBuf {
             .and_then(|p| p.rsplit(MAIN_SEPARATOR).next())
             .unwrap_or("default"),
     );
-    file.set_extension("ch");
-    file
 }
