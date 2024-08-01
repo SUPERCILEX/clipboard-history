@@ -12,7 +12,7 @@ use std::{
 use arrayvec::ArrayVec;
 use io_uring::{
     cqueue::{buffer_select, more, Entry},
-    opcode::{AcceptMulti, Close, PollAdd, RecvMsgMulti, SendMsg, Shutdown},
+    opcode::{AcceptMulti, Close, PollAdd, RecvMsgMulti, SendMsg},
     squeue::Flags,
     types::Fixed,
     IoUring,
@@ -194,8 +194,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     const REQ_TYPE_CLOSE: u64 = 2;
     const REQ_TYPE_READ_SIGNALS: u64 = 3;
     const REQ_TYPE_SENDMSG: u64 = 4;
-    const REQ_TYPE_SHUTDOWN_CONN: u64 = 5;
-    const REQ_TYPE_LOW_MEM: u64 = 6;
+    const REQ_TYPE_LOW_MEM: u64 = 5;
     const REQ_TYPE_MASK: u64 = 0b111;
     const REQ_TYPE_SHIFT: u32 = REQ_TYPE_MASK.count_ones();
 
@@ -406,12 +405,6 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         }
 
                         if !clients.is_connected(fd) {
-                            pending_entries.push(
-                                Shutdown::new(Fixed(fd.into()), libc::SHUT_RDWR)
-                                    .build()
-                                    .flags(Flags::IO_LINK | Flags::SKIP_SUCCESS)
-                                    .user_data(REQ_TYPE_SHUTDOWN_CONN | store_fd(fd)),
-                            );
                             pending_entries.push(close(fd));
                         }
                     }
@@ -465,11 +458,6 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         info!("Restoring client {fd}'s connection.");
                         pending_entries.push(recvmsg(fd).user_data(REQ_TYPE_RECV | store_fd(fd)));
                     }
-                }
-                REQ_TYPE_SHUTDOWN_CONN => {
-                    let fd = restore_fd(&entry);
-                    debug!("Handling connection shutdown completion for client {fd}.");
-                    result.map_io_err(|| format!("Failed to cancel recv for client {fd}."))?;
                 }
                 REQ_TYPE_CLOSE => {
                     let fd = restore_fd(&entry);
