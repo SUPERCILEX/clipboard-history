@@ -1,6 +1,10 @@
 #![feature(let_chains)]
 
-use std::{fs::File, mem, os::unix::fs::FileExt};
+use std::{
+    fs::File,
+    mem,
+    os::{fd::AsFd, unix::fs::FileExt},
+};
 
 use arrayvec::ArrayVec;
 use error_stack::Report;
@@ -33,6 +37,7 @@ use x11rb::{
         },
         Event,
     },
+    rust_connection::RustConnection,
     wrapper::ConnectionExt as WrapperConnExt,
 };
 
@@ -122,14 +127,14 @@ const BASE_TRANSFER_ATOM: AtomEnum = AtomEnum::CUT_BUFFE_R0;
 struct TransferAtomAllocator {
     windows: [Window; MAX_CONCURRENT_TRANSFERS],
     states: [State; MAX_CONCURRENT_TRANSFERS],
-    next: usize,
+    next: u8,
 }
 
 impl TransferAtomAllocator {
     fn alloc(&mut self) -> (&mut State, Window, Atom) {
         const _: () = assert!(MAX_CONCURRENT_TRANSFERS.is_power_of_two());
 
-        let next = self.next;
+        let next = usize::from(self.next);
 
         if !matches!(self.states[next], State::Free) {
             warn!("Too many ongoing transfers, dropping old transfer.");
@@ -138,7 +143,7 @@ impl TransferAtomAllocator {
         let transfer_window = self.windows[next];
         let transfer_atom = Self::transfer_atom(next);
 
-        self.next = (next + 1) & (MAX_CONCURRENT_TRANSFERS - 1);
+        self.next = u8::try_from((next + 1) & (MAX_CONCURRENT_TRANSFERS - 1)).unwrap();
         (state, transfer_window, transfer_atom)
     }
 
@@ -151,6 +156,18 @@ impl TransferAtomAllocator {
 
     fn transfer_atom(id: usize) -> Atom {
         Atom::from(BASE_TRANSFER_ATOM) + Atom::try_from(id).unwrap()
+    }
+}
+
+atom_manager! {
+    Atoms:
+    AtomsCookie {
+        _NET_WM_NAME,
+        UTF8_STRING,
+
+        CLIPBOARD,
+        TARGETS,
+        INCR,
     }
 }
 
@@ -177,23 +194,11 @@ fn run() -> Result<(), CliError> {
     debug!("X11 connection established.");
 
     conn.prefetch_extension_information(xfixes::X11_EXTENSION_NAME)?;
-    atom_manager! {
-        Atoms:
-        AtomsCookie {
-            _NET_WM_NAME,
-            UTF8_STRING,
-
-            CLIPBOARD,
-            TARGETS,
-            INCR,
-        }
-    }
-    let Atoms {
+    let atoms @ Atoms {
         _NET_WM_NAME: window_name_atom,
         UTF8_STRING: utf8_string_atom,
         CLIPBOARD: clipboard_atom,
-        TARGETS: targets_atom,
-        INCR: incr_atom,
+        ..
     } = Atoms::new(&conn)?.reply()?;
     debug!("Atom internment complete.");
 
@@ -246,7 +251,6 @@ fn run() -> Result<(), CliError> {
     .check()?;
     debug!("Selection owner listener registered.");
 
-    let mut pending_atom_cookies = ArrayVec::<(Cookie<_, GetAtomNameReply>, _), 8>::new_const();
     let mut allocator = TransferAtomAllocator {
         windows: transfer_windows.into_inner().unwrap(),
         states: [const { State::Free }; MAX_CONCURRENT_TRANSFERS],
@@ -258,348 +262,368 @@ fn run() -> Result<(), CliError> {
     info!("Starting event loop.");
     loop {
         trace!("Waiting for event.");
-        match conn.wait_for_event()? {
-            Event::XfixesSelectionNotify(event) => {
-                info!("Selection notification received.");
-                let (state, transfer_window, transfer_atom) = allocator.alloc();
-                *state = State::FastPathPendingSelection {
-                    selection: event.selection,
-                };
+        handle_x11_event(
+            conn.wait_for_event()?,
+            &conn,
+            &atoms,
+            &mut allocator,
+            &server,
+            &mut deduplicator,
+        )?;
+    }
+}
 
-                conn.convert_selection(
-                    transfer_window,
-                    event.selection,
-                    utf8_string_atom,
-                    transfer_atom,
-                    x11rb::CURRENT_TIME,
-                )?
-                .check()?;
-            }
-            Event::SelectionNotify(event) => {
-                let Some((state, transfer_atom)) = allocator.get(event.requestor) else {
-                    warn!(
-                        "Ignoring selection notification to unknown requester {}.",
-                        event.requestor
-                    );
-                    continue;
-                };
-                debug!("Stage 2 selection notification received.");
+fn handle_x11_event(
+    event: Event,
+    conn: &RustConnection,
+    atoms: &Atoms,
+    allocator: &mut TransferAtomAllocator,
+    server: impl AsFd,
+    deduplicator: &mut CopyDeduplication,
+) -> Result<(), CliError> {
+    let &Atoms {
+        _NET_WM_NAME: window_name_atom,
+        UTF8_STRING: utf8_string_atom,
+        TARGETS: targets_atom,
+        INCR: incr_atom,
+        ..
+    } = atoms;
+    let mut pending_atom_cookies = ArrayVec::<(Cookie<_, GetAtomNameReply>, _), 8>::new_const();
 
-                match state {
-                    &mut State::FastPathPendingSelection { selection } => {
-                        if event.property == x11rb::NONE {
-                            debug!(
-                                "UTF8_STRING target fast path failed. Retrying with target query."
-                            );
-                            *state = State::TargetsRequest {
-                                selection,
-                                allow_plain_text: true,
-                            };
-                            conn.convert_selection(
-                                event.requestor,
-                                selection,
-                                targets_atom,
-                                transfer_atom,
-                                x11rb::CURRENT_TIME,
-                            )?
-                            .check()?;
-                        }
-                    }
-                    State::TargetsRequest { .. } => {
-                        if event.property == x11rb::NONE {
-                            warn!("Targets response cancelled.");
-                            *state = State::default();
-                        }
-                    }
-                    State::PendingSelection { .. } => {
-                        if event.property == x11rb::NONE {
-                            warn!("Selection transfer cancelled.");
-                            *state = State::default();
-                        }
-                    }
-                    State::Free | State::PendingIncr { .. } => {
-                        // Nothing to do
-                    }
-                }
-            }
-            Event::PropertyNotify(event) => {
-                if event.state != Property::NEW_VALUE {
-                    trace!(
-                        "Ignoring uninteresting property state change: {:?}.",
-                        event.state
-                    );
-                    continue;
-                }
-                let Some((state, transfer_atom)) = allocator.get(event.window) else {
-                    warn!(
-                        "Ignoring property notify to unknown requester {}.",
-                        event.window
-                    );
-                    continue;
-                };
+    match event {
+        Event::XfixesSelectionNotify(event) => {
+            info!("Selection notification received.");
+            let (state, transfer_window, transfer_atom) = allocator.alloc();
+            *state = State::FastPathPendingSelection {
+                selection: event.selection,
+            };
 
-                match mem::take(state) {
-                    State::TargetsRequest {
-                        selection,
-                        allow_plain_text,
-                    } => {
-                        let property = conn
-                            .get_property(
-                                true,
-                                event.window,
-                                event.atom,
-                                GetPropertyType::ANY,
-                                0,
-                                u32::MAX,
-                            )?
-                            .reply()?;
-                        if property.type_ == incr_atom {
-                            warn!("Ignoring abusive TARGETS property.");
-                            continue;
-                        }
+            conn.convert_selection(
+                transfer_window,
+                event.selection,
+                utf8_string_atom,
+                transfer_atom,
+                x11rb::CURRENT_TIME,
+            )?
+            .check()?;
+        }
+        Event::SelectionNotify(event) => {
+            let Some((state, transfer_atom)) = allocator.get(event.requestor) else {
+                warn!(
+                    "Ignoring selection notification to unknown requester {}.",
+                    event.requestor
+                );
+                return Ok(());
+            };
+            debug!("Stage 2 selection notification received.");
 
-                        let Some(mut value) = property.value32() else {
-                            error!("Invalid TARGETS property value format.");
-                            continue;
-                        };
-
-                        let mut finder = BestMimeTypeFinder::default();
-                        loop {
-                            let atom = value.next();
-                            if pending_atom_cookies.is_full() || atom.is_none() {
-                                for (cookie, atom) in pending_atom_cookies.drain(..) {
-                                    let reply = cookie.reply()?;
-                                    let name = reply.name.to_string_lossy();
-                                    debug!("Target {name:?} available on atom {atom}.");
-
-                                    if name.len() > MimeType::new_const().capacity() {
-                                        warn!("Target {name:?} name too long, ignoring.");
-                                        continue;
-                                    }
-
-                                    finder.add_mime(&name, atom);
-                                }
-                            }
-                            let Some(atom) = atom else {
-                                break;
-                            };
-                            pending_atom_cookies.push((conn.get_atom_name(atom)?, atom));
-                        }
-
-                        if !allow_plain_text {
-                            debug!(
-                                "Blocking plain text as it returned a blank or empty result on \
-                                 the fast path."
-                            );
-                            finder.kill_text();
-                        }
-                        let target = finder.best();
-                        let Some(target) = target else {
-                            warn!("No usable targets returned, dropping selection.");
-                            continue;
-                        };
-                        if cfg!(debug_assertions) {
-                            info!(
-                                "Choosing target {:?} on atom {target}.",
-                                conn.get_atom_name(target)?.reply()?.name.to_string_lossy()
-                            );
-                        } else {
-                            info!("Choosing atom {:?}.", target);
-                        }
-
-                        *state = State::PendingSelection { mime_atom: target };
-                        conn.convert_selection(
-                            event.window,
+            match state {
+                &mut State::FastPathPendingSelection { selection } => {
+                    if event.property == x11rb::NONE {
+                        debug!("UTF8_STRING target fast path failed. Retrying with target query.");
+                        *state = State::TargetsRequest {
                             selection,
-                            target,
+                            allow_plain_text: true,
+                        };
+                        conn.convert_selection(
+                            event.requestor,
+                            selection,
+                            targets_atom,
                             transfer_atom,
                             x11rb::CURRENT_TIME,
                         )?
                         .check()?;
                     }
-                    s @ (State::FastPathPendingSelection { .. }
-                    | State::PendingSelection { .. }) => {
-                        let (mime_atom, fast_path) = match s {
-                            State::FastPathPendingSelection { selection } => {
-                                (utf8_string_atom, Some(selection))
-                            }
-                            State::PendingSelection { mime_atom } => (mime_atom, None),
-                            _ => unreachable!(),
-                        };
-
-                        let property = conn
-                            .get_property(
-                                true,
-                                event.window,
-                                event.atom,
-                                GetPropertyType::ANY,
-                                0,
-                                u32::MAX,
-                            )?
-                            .reply()?;
-                        if property.type_ == incr_atom {
-                            debug!("Waiting for INCR transfer.");
-                            *state = State::PendingIncr {
-                                mime_atom,
-                                file: None,
-                                written: 0,
-                            };
-                        } else {
-                            if property.value.is_empty()
-                                || property.value.iter().all(u8::is_ascii_whitespace)
-                            {
-                                if let Some(selection) = fast_path {
-                                    debug!(
-                                        "UTF8_STRING target fast path empty or blank. Retrying \
-                                         with target query."
-                                    );
-                                    *state = State::TargetsRequest {
-                                        selection,
-                                        allow_plain_text: false,
-                                    };
-                                    conn.convert_selection(
-                                        event.window,
-                                        selection,
-                                        targets_atom,
-                                        transfer_atom,
-                                        x11rb::CURRENT_TIME,
-                                    )?
-                                    .check()?;
-                                } else {
-                                    warn!("Dropping empty or blank selection.");
-                                }
-                                continue;
-                            }
-
-                            let data_hash = CopyDeduplication::hash(
-                                CopyData::Slice(&property.value),
-                                u64::try_from(property.value.len()).unwrap(),
-                            );
-                            if let Some(existing) =
-                                deduplicator.check(data_hash, CopyData::Slice(&property.value))
-                            {
-                                info!("Promoting duplicate small selection to front.");
-                                if let MoveToFrontResponse::Success { id } =
-                                    MoveToFrontRequest::response(&server, existing, None)?
-                                {
-                                    deduplicator.remember(data_hash, id);
-                                    continue;
-                                }
-                            }
-
-                            let mime_type = conn.get_atom_name(mime_atom)?;
-                            let file = File::from(
-                                memfd_create(c"ringboard_x11_selection", MemfdFlags::empty())
-                                    .map_io_err(|| {
-                                        "Failed to create selection transfer temp file."
-                                    })?,
-                            );
-                            file.write_all_at(&property.value, 0)
-                                .map_io_err(|| "Failed to write data to temp file.")?;
-                            let mime_type =
-                                MimeType::from(&mime_type.reply()?.name.to_string_lossy()).unwrap();
-
-                            let AddResponse::Success { id } = AddRequest::response_add_unchecked(
-                                &server,
-                                RingKind::Main,
-                                mime_type,
-                                file,
-                            )?;
-                            deduplicator.remember(data_hash, id);
-                            info!("Small selection transfer complete.");
-                        }
+                }
+                State::TargetsRequest { .. } => {
+                    if event.property == x11rb::NONE {
+                        warn!("Targets response cancelled.");
+                        *state = State::default();
                     }
-                    State::PendingIncr {
-                        mime_atom,
-                        file,
-                        written,
-                    } => {
-                        let property = conn.get_property(
+                }
+                State::PendingSelection { .. } => {
+                    if event.property == x11rb::NONE {
+                        warn!("Selection transfer cancelled.");
+                        *state = State::default();
+                    }
+                }
+                State::Free | State::PendingIncr { .. } => {
+                    // Nothing to do
+                }
+            }
+        }
+        Event::PropertyNotify(event) => {
+            if event.state != Property::NEW_VALUE {
+                trace!(
+                    "Ignoring uninteresting property state change: {:?}.",
+                    event.state
+                );
+                return Ok(());
+            }
+            let Some((state, transfer_atom)) = allocator.get(event.window) else {
+                warn!(
+                    "Ignoring property notify to unknown requester {}.",
+                    event.window
+                );
+                return Ok(());
+            };
+
+            match mem::take(state) {
+                State::TargetsRequest {
+                    selection,
+                    allow_plain_text,
+                } => {
+                    let property = conn
+                        .get_property(
                             true,
                             event.window,
                             event.atom,
                             GetPropertyType::ANY,
                             0,
                             u32::MAX,
-                        )?;
-                        let file = if let Some(file) = file {
-                            file
-                        } else {
-                            File::from(
-                                openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
-                                    .map_io_err(|| {
-                                        "Failed to create selection transfer temp file."
-                                    })?,
-                            )
-                        };
+                        )?
+                        .reply()?;
+                    if property.type_ == incr_atom {
+                        warn!("Ignoring abusive TARGETS property.");
+                        return Ok(());
+                    }
 
-                        let property = property.reply()?;
-                        if property.value.is_empty() {
-                            if written == 0 {
-                                warn!("Dropping empty INCR selection.");
-                                continue;
-                            }
+                    let Some(mut value) = property.value32() else {
+                        error!("Invalid TARGETS property value format.");
+                        return Ok(());
+                    };
 
-                            let data_hash = CopyDeduplication::hash(CopyData::File(&file), written);
-                            if let Some(existing) =
-                                deduplicator.check(data_hash, CopyData::File(&file))
-                            {
-                                info!("Promoting duplicate large selection to front.");
-                                if let MoveToFrontResponse::Success { id } =
-                                    MoveToFrontRequest::response(&server, existing, None)?
-                                {
-                                    deduplicator.remember(data_hash, id);
+                    let mut finder = BestMimeTypeFinder::default();
+                    loop {
+                        let atom = value.next();
+                        if pending_atom_cookies.is_full() || atom.is_none() {
+                            for (cookie, atom) in pending_atom_cookies.drain(..) {
+                                let reply = cookie.reply()?;
+                                let name = reply.name.to_string_lossy();
+                                debug!("Target {name:?} available on atom {atom}.");
+
+                                if name.len() > MimeType::new_const().capacity() {
+                                    warn!("Target {name:?} name too long, ignoring.");
                                     continue;
                                 }
-                            }
 
-                            let mime_type = MimeType::from(
-                                &conn
-                                    .get_atom_name(mime_atom)?
-                                    .reply()?
-                                    .name
-                                    .to_string_lossy(),
-                            )
-                            .unwrap();
-
-                            let AddResponse::Success { id } = AddRequest::response_add_unchecked(
-                                &server,
-                                RingKind::Main,
-                                mime_type,
-                                file,
-                            )?;
-                            deduplicator.remember(data_hash, id);
-                            info!("Large selection transfer complete.");
-                        } else {
-                            debug!("Writing {} bytes for INCR transfer.", property.value.len());
-                            file.write_all_at(&property.value, written)
-                                .map_io_err(|| "Failed to write data to temp file.")?;
-                            *state = State::PendingIncr {
-                                mime_atom,
-                                file: Some(file),
-                                written: written + u64::try_from(property.value.len()).unwrap(),
+                                finder.add_mime(&name, atom);
                             }
                         }
+                        let Some(atom) = atom else {
+                            break;
+                        };
+                        pending_atom_cookies.push((conn.get_atom_name(atom)?, atom));
                     }
-                    State::Free => {
-                        if event.atom != window_name_atom {
-                            error!(
-                                "Received property notification for free atom {}.",
-                                conn.get_atom_name(event.atom)?
-                                    .reply()?
-                                    .name
-                                    .to_string_lossy()
-                            );
+
+                    if !allow_plain_text {
+                        debug!(
+                            "Blocking plain text as it returned a blank or empty result on the \
+                             fast path."
+                        );
+                        finder.kill_text();
+                    }
+                    let target = finder.best();
+                    let Some(target) = target else {
+                        warn!("No usable targets returned, dropping selection.");
+                        return Ok(());
+                    };
+                    if cfg!(debug_assertions) {
+                        info!(
+                            "Choosing target {:?} on atom {target}.",
+                            conn.get_atom_name(target)?.reply()?.name.to_string_lossy()
+                        );
+                    } else {
+                        info!("Choosing atom {:?}.", target);
+                    }
+
+                    *state = State::PendingSelection { mime_atom: target };
+                    conn.convert_selection(
+                        event.window,
+                        selection,
+                        target,
+                        transfer_atom,
+                        x11rb::CURRENT_TIME,
+                    )?
+                    .check()?;
+                }
+                s @ (State::FastPathPendingSelection { .. } | State::PendingSelection { .. }) => {
+                    let (mime_atom, fast_path) = match s {
+                        State::FastPathPendingSelection { selection } => {
+                            (utf8_string_atom, Some(selection))
+                        }
+                        State::PendingSelection { mime_atom } => (mime_atom, None),
+                        _ => unreachable!(),
+                    };
+
+                    let property = conn
+                        .get_property(
+                            true,
+                            event.window,
+                            event.atom,
+                            GetPropertyType::ANY,
+                            0,
+                            u32::MAX,
+                        )?
+                        .reply()?;
+                    if property.type_ == incr_atom {
+                        debug!("Waiting for INCR transfer.");
+                        *state = State::PendingIncr {
+                            mime_atom,
+                            file: None,
+                            written: 0,
+                        };
+                    } else {
+                        if property.value.is_empty()
+                            || property.value.iter().all(u8::is_ascii_whitespace)
+                        {
+                            if let Some(selection) = fast_path {
+                                debug!(
+                                    "UTF8_STRING target fast path empty or blank. Retrying with \
+                                     target query."
+                                );
+                                *state = State::TargetsRequest {
+                                    selection,
+                                    allow_plain_text: false,
+                                };
+                                conn.convert_selection(
+                                    event.window,
+                                    selection,
+                                    targets_atom,
+                                    transfer_atom,
+                                    x11rb::CURRENT_TIME,
+                                )?
+                                .check()?;
+                            } else {
+                                warn!("Dropping empty or blank selection.");
+                            }
+                            return Ok(());
+                        }
+
+                        let data_hash = CopyDeduplication::hash(
+                            CopyData::Slice(&property.value),
+                            u64::try_from(property.value.len()).unwrap(),
+                        );
+                        if let Some(existing) =
+                            deduplicator.check(data_hash, CopyData::Slice(&property.value))
+                        {
+                            info!("Promoting duplicate small selection to front.");
+                            if let MoveToFrontResponse::Success { id } =
+                                MoveToFrontRequest::response(&server, existing, None)?
+                            {
+                                deduplicator.remember(data_hash, id);
+                                return Ok(());
+                            }
+                        }
+
+                        let mime_type = conn.get_atom_name(mime_atom)?;
+                        let file = File::from(
+                            memfd_create(c"ringboard_x11_selection", MemfdFlags::empty())
+                                .map_io_err(|| "Failed to create selection transfer temp file.")?,
+                        );
+                        file.write_all_at(&property.value, 0)
+                            .map_io_err(|| "Failed to write data to temp file.")?;
+                        let mime_type =
+                            MimeType::from(&mime_type.reply()?.name.to_string_lossy()).unwrap();
+
+                        let AddResponse::Success { id } = AddRequest::response_add_unchecked(
+                            &server,
+                            RingKind::Main,
+                            mime_type,
+                            file,
+                        )?;
+                        deduplicator.remember(data_hash, id);
+                        info!("Small selection transfer complete.");
+                    }
+                }
+                State::PendingIncr {
+                    mime_atom,
+                    file,
+                    written,
+                } => {
+                    let property = conn.get_property(
+                        true,
+                        event.window,
+                        event.atom,
+                        GetPropertyType::ANY,
+                        0,
+                        u32::MAX,
+                    )?;
+                    let file = if let Some(file) = file {
+                        file
+                    } else {
+                        File::from(
+                            openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
+                                .map_io_err(|| "Failed to create selection transfer temp file.")?,
+                        )
+                    };
+
+                    let property = property.reply()?;
+                    if property.value.is_empty() {
+                        if written == 0 {
+                            warn!("Dropping empty INCR selection.");
+                            return Ok(());
+                        }
+
+                        let data_hash = CopyDeduplication::hash(CopyData::File(&file), written);
+                        if let Some(existing) = deduplicator.check(data_hash, CopyData::File(&file))
+                        {
+                            info!("Promoting duplicate large selection to front.");
+                            if let MoveToFrontResponse::Success { id } =
+                                MoveToFrontRequest::response(&server, existing, None)?
+                            {
+                                deduplicator.remember(data_hash, id);
+                                return Ok(());
+                            }
+                        }
+
+                        let mime_type = MimeType::from(
+                            &conn
+                                .get_atom_name(mime_atom)?
+                                .reply()?
+                                .name
+                                .to_string_lossy(),
+                        )
+                        .unwrap();
+
+                        let AddResponse::Success { id } = AddRequest::response_add_unchecked(
+                            &server,
+                            RingKind::Main,
+                            mime_type,
+                            file,
+                        )?;
+                        deduplicator.remember(data_hash, id);
+                        info!("Large selection transfer complete.");
+                    } else {
+                        debug!("Writing {} bytes for INCR transfer.", property.value.len());
+                        file.write_all_at(&property.value, written)
+                            .map_io_err(|| "Failed to write data to temp file.")?;
+                        *state = State::PendingIncr {
+                            mime_atom,
+                            file: Some(file),
+                            written: written + u64::try_from(property.value.len()).unwrap(),
                         }
                     }
                 }
+                State::Free => {
+                    if event.atom != window_name_atom {
+                        error!(
+                            "Received property notification for free atom {}.",
+                            conn.get_atom_name(event.atom)?
+                                .reply()?
+                                .name
+                                .to_string_lossy()
+                        );
+                    }
+                }
             }
-            Event::Error(e) => {
-                error!("Unexpected X11 event error: {e:?}");
-            }
-            event => {
-                debug!("Ignoring unknown X11 event: {event:?}");
-            }
-        };
+        }
+        Event::Error(e) => {
+            error!("Unexpected X11 event error: {e:?}");
+        }
+        event => {
+            debug!("Ignoring unknown X11 event: {event:?}");
+        }
     }
+    Ok(())
 }
