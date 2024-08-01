@@ -176,6 +176,7 @@ fn run() -> Result<(), CliError> {
     };
     debug!("X11 connection established.");
 
+    conn.prefetch_extension_information(xfixes::X11_EXTENSION_NAME)?;
     atom_manager! {
         Atoms:
         AtomsCookie {
