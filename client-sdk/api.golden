@@ -506,6 +506,8 @@ pub clipboard_history_client_sdk::ui_actor::CommandError::Core(clipboard_history
 pub clipboard_history_client_sdk::ui_actor::CommandError::Image(image::error::ImageError)
 pub clipboard_history_client_sdk::ui_actor::CommandError::Regex(regex::error::Error)
 pub clipboard_history_client_sdk::ui_actor::CommandError::Sdk(clipboard_history_client_sdk::ClientError)
+impl clipboard_history_client_sdk::ui_actor::CommandError
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::into_report<W: error_stack::context::Context>(self, wrapper: W) -> error_stack::report::Report<W>
 impl core::convert::From<clipboard_history_client_sdk::ClientError> for clipboard_history_client_sdk::ui_actor::CommandError
 pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(source: clipboard_history_client_sdk::ClientError) -> Self
 impl core::convert::From<clipboard_history_core::Error> for clipboard_history_client_sdk::ui_actor::CommandError
@@ -528,6 +530,8 @@ impl core::marker::Sync for clipboard_history_client_sdk::ui_actor::CommandError
 impl core::marker::Unpin for clipboard_history_client_sdk::ui_actor::CommandError
 impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ui_actor::CommandError
 impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ui_actor::CommandError
+impl<C> error_stack::context::Context for clipboard_history_client_sdk::ui_actor::CommandError where C: core::error::Error + core::marker::Send + core::marker::Sync + 'static
+pub fn clipboard_history_client_sdk::ui_actor::CommandError::provide<'a>(&'a self, request: &mut core::error::Request<'a>)
 impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::ui_actor::CommandError where U: core::convert::From<T>
 pub fn clipboard_history_client_sdk::ui_actor::CommandError::into(self) -> U
 impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::ui_actor::CommandError where U: core::convert::Into<T>
@@ -717,6 +721,8 @@ pub clipboard_history_client_sdk::ClientError::InvalidResponse
 pub clipboard_history_client_sdk::ClientError::InvalidResponse::context: alloc::borrow::Cow<'static, str>
 pub clipboard_history_client_sdk::ClientError::VersionMismatch
 pub clipboard_history_client_sdk::ClientError::VersionMismatch::actual: u8
+impl clipboard_history_client_sdk::ClientError
+pub fn clipboard_history_client_sdk::ClientError::into_report<W: error_stack::context::Context>(self, wrapper: W) -> error_stack::report::Report<W>
 impl core::convert::From<clipboard_history_client_sdk::ClientError> for clipboard_history_client_sdk::ui_actor::CommandError
 pub fn clipboard_history_client_sdk::ui_actor::CommandError::from(source: clipboard_history_client_sdk::ClientError) -> Self
 impl core::convert::From<clipboard_history_core::Error> for clipboard_history_client_sdk::ClientError
@@ -735,6 +741,8 @@ impl core::marker::Sync for clipboard_history_client_sdk::ClientError
 impl core::marker::Unpin for clipboard_history_client_sdk::ClientError
 impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ClientError
 impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ClientError
+impl<C> error_stack::context::Context for clipboard_history_client_sdk::ClientError where C: core::error::Error + core::marker::Send + core::marker::Sync + 'static
+pub fn clipboard_history_client_sdk::ClientError::provide<'a>(&'a self, request: &mut core::error::Request<'a>)
 impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::ClientError where U: core::convert::From<T>
 pub fn clipboard_history_client_sdk::ClientError::into(self) -> U
 impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::ClientError where U: core::convert::Into<T>

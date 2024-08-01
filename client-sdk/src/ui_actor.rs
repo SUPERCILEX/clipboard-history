@@ -48,6 +48,24 @@ impl From<IdNotFoundError> for CommandError {
     }
 }
 
+#[cfg(feature = "error-stack")]
+mod error_stack_compat {
+    use error_stack::{Context, Report};
+
+    use super::CommandError;
+
+    impl CommandError {
+        pub fn into_report<W: Context>(self, wrapper: W) -> Report<W> {
+            match self {
+                Self::Core(e) => e.into_report(wrapper),
+                Self::Sdk(e) => e.into_report(wrapper),
+                Self::Regex(e) => Report::new(e).change_context(wrapper),
+                Self::Image(e) => Report::new(e).change_context(wrapper),
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Command {
     LoadFirstPage,

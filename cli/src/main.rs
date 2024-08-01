@@ -388,29 +388,11 @@ fn main() -> error_stack::Result<(), Wrapper> {
     run().map_err(|e| {
         let wrapper = Wrapper::W(e.to_string());
         match e {
-            CliError::Core(e) | CliError::Sdk(ClientError::Core(e)) => match e {
-                CoreError::Io { error, context } => Report::new(error)
-                    .attach_printable(context)
-                    .change_context(wrapper),
-                CoreError::InvalidPidError { error, context } => Report::new(error)
-                    .attach_printable(context)
-                    .change_context(wrapper),
-                CoreError::IdNotFound(IdNotFoundError::Ring(id)) => {
-                    Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
-                }
-                CoreError::IdNotFound(IdNotFoundError::Entry(id)) => {
-                    Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
-                }
-            },
+            CliError::Core(e) => e.into_report(wrapper),
             CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
                 .attach_printable(context)
                 .change_context(wrapper),
-            CliError::Sdk(ClientError::InvalidResponse { context }) => {
-                Report::new(wrapper).attach_printable(context)
-            }
-            CliError::Sdk(ClientError::VersionMismatch { actual: _ }) => {
-                Report::new(wrapper)
-            }
+            CliError::Sdk(e) => e.into_report(wrapper),
             CliError::DatabaseNotFound(db) => {
                 Report::new(wrapper).attach_printable(format!("Path: {:?}", db.display()))
             }

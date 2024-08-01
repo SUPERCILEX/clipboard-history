@@ -53,3 +53,29 @@ impl<T> IoErr<Result<T>> for rustix::io::Result<T> {
         self.map_err(io::Error::from).map_io_err(context)
     }
 }
+
+#[cfg(feature = "error-stack")]
+mod error_stack_compat {
+    use error_stack::{Context, Report};
+
+    use crate::{protocol::IdNotFoundError, Error};
+
+    impl Error {
+        pub fn into_report<W: Context>(self, wrapper: W) -> Report<W> {
+            match self {
+                Self::Io { error, context } => Report::new(error)
+                    .attach_printable(context)
+                    .change_context(wrapper),
+                Self::InvalidPidError { error, context } => Report::new(error)
+                    .attach_printable(context)
+                    .change_context(wrapper),
+                Self::IdNotFound(IdNotFoundError::Ring(id)) => {
+                    Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
+                }
+                Self::IdNotFound(IdNotFoundError::Entry(id)) => {
+                    Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
+                }
+            }
+        }
+    }
+}

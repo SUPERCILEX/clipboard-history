@@ -686,6 +686,7 @@ version = "0.2.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-core",
+ "error-stack",
  "image",
  "memchr",
  "regex",
@@ -702,6 +703,7 @@ version = "0.2.0"
 dependencies = [
  "arrayvec",
  "dirs",
+ "error-stack",
  "rustix",
  "supercilex-tests",
  "thiserror",

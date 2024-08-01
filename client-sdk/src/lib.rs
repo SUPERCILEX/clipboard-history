@@ -30,3 +30,20 @@ impl From<IdNotFoundError> for ClientError {
         Self::Core(ringboard_core::Error::IdNotFound(value))
     }
 }
+
+#[cfg(feature = "error-stack")]
+mod error_stack_compat {
+    use error_stack::{Context, Report};
+
+    use crate::ClientError;
+
+    impl ClientError {
+        pub fn into_report<W: Context>(self, wrapper: W) -> Report<W> {
+            match self {
+                Self::Core(e) => e.into_report(wrapper),
+                Self::InvalidResponse { context } => Report::new(wrapper).attach_printable(context),
+                Self::VersionMismatch { actual: _ } => Report::new(wrapper),
+            }
+        }
+    }
+}

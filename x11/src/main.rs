@@ -9,7 +9,7 @@ use ringboard_sdk::{
     api::{connect_to_server, AddRequest, MoveToFrontRequest},
     core::{
         dirs::socket_file,
-        protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
+        protocol::{AddResponse, MimeType, MoveToFrontResponse, RingKind},
         Error, IoErr,
     },
 };
@@ -84,26 +84,8 @@ fn main() -> error_stack::Result<(), Wrapper> {
 fn into_report(cli_err: CliError) -> Report<Wrapper> {
     let wrapper = Wrapper::W(cli_err.to_string());
     match cli_err {
-        CliError::Core(e) | CliError::Sdk(ringboard_sdk::ClientError::Core(e)) => match e {
-            Error::Io { error, context } => Report::new(error)
-                .attach_printable(context)
-                .change_context(wrapper),
-            Error::InvalidPidError { error, context } => Report::new(error)
-                .attach_printable(context)
-                .change_context(wrapper),
-            Error::IdNotFound(IdNotFoundError::Ring(id)) => {
-                Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
-            }
-            Error::IdNotFound(IdNotFoundError::Entry(id)) => {
-                Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
-            }
-        },
-        CliError::Sdk(ringboard_sdk::ClientError::InvalidResponse { context }) => {
-            Report::new(wrapper).attach_printable(context)
-        }
-        CliError::Sdk(ringboard_sdk::ClientError::VersionMismatch { actual: _ }) => {
-            Report::new(wrapper)
-        }
+        CliError::Core(e) => e.into_report(wrapper),
+        CliError::Sdk(e) => e.into_report(wrapper),
         CliError::X11Connect(e) => Report::new(e).change_context(wrapper),
         CliError::X11Connection(e) => Report::new(e).change_context(wrapper),
         CliError::X11Reply(e) => Report::new(e).change_context(wrapper),

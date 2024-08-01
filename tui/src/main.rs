@@ -14,7 +14,6 @@ use std::{
     thread,
 };
 
-use error_stack::Report;
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     buffer::Buffer,
@@ -35,13 +34,9 @@ use ratatui::{
 };
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol, StatefulImage};
 use ringboard_sdk::{
-    core::{
-        protocol::{IdNotFoundError, RingKind},
-        Error as CoreError, IoErr,
-    },
+    core::{protocol::RingKind, Error as CoreError, IoErr},
     search::CancellationToken,
     ui_actor::{controller, Command, CommandError, DetailedEntry, Message, UiEntry, UiEntryCache},
-    ClientError,
 };
 use rustix::stdio::raw_stdout;
 use thiserror::Error;
@@ -160,28 +155,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
 
     run().map_err(|e| {
         let wrapper = Wrapper::W(e.to_string());
-        match e {
-            CommandError::Core(e) | CommandError::Sdk(ClientError::Core(e)) => match e {
-                CoreError::Io { error, context } => Report::new(error)
-                    .attach_printable(context)
-                    .change_context(wrapper),
-                CoreError::InvalidPidError { error, context } => Report::new(error)
-                    .attach_printable(context)
-                    .change_context(wrapper),
-                CoreError::IdNotFound(IdNotFoundError::Ring(id)) => {
-                    Report::new(wrapper).attach_printable(format!("Unknown ring: {id}"))
-                }
-                CoreError::IdNotFound(IdNotFoundError::Entry(id)) => {
-                    Report::new(wrapper).attach_printable(format!("Unknown entry: {id}"))
-                }
-            },
-            CommandError::Sdk(ClientError::InvalidResponse { context }) => {
-                Report::new(wrapper).attach_printable(context)
-            }
-            CommandError::Sdk(ClientError::VersionMismatch { actual: _ }) => Report::new(wrapper),
-            CommandError::Regex(e) => Report::new(e).change_context(wrapper),
-            CommandError::Image(e) => Report::new(e).change_context(wrapper),
-        }
+        e.into_report(wrapper)
     })
 }
 
