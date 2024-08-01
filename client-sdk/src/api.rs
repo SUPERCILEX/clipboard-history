@@ -18,9 +18,9 @@ use ringboard_core::{
 use rustix::{
     fs::{openat, statx, AtFlags, FileType, Mode, OFlags, StatxFlags, CWD},
     net::{
-        connect_unix, recvmsg, sendmsg_unix, socket_with, AddressFamily, RecvAncillaryBuffer,
-        RecvFlags, SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix,
-        SocketFlags, SocketType,
+        connect_unix, recvmsg, sendmsg, socket_with, AddressFamily, RecvAncillaryBuffer, RecvFlags,
+        SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketFlags,
+        SocketType,
     },
 };
 
@@ -60,9 +60,8 @@ pub fn connect_to_server_with(
     connect_unix(&socket, addr).map_io_err(|| format!("Failed to connect to server: {addr:?}"))?;
 
     {
-        sendmsg_unix(
+        sendmsg(
             &socket,
-            addr,
             &[IoSlice::new(&[protocol::VERSION])],
             &mut SendAncillaryBuffer::default(),
             SendFlags::empty(),
@@ -93,7 +92,6 @@ pub struct AddRequest;
 impl AddRequest {
     pub fn response<Server: AsFd, Data: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         to: RingKind,
         mime_type: MimeType,
         data: Data,
@@ -105,7 +103,7 @@ impl AddRequest {
                 .into(),
         ) == FileType::RegularFile
         {
-            Self::response_add_unchecked(server, addr, to, mime_type, data)
+            Self::response_add_unchecked(server, to, mime_type, data)
         } else {
             let file = openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
                 .map_io_err(|| "Failed to create intermediary data file.")?;
@@ -119,18 +117,17 @@ impl AddRequest {
             file.seek(SeekFrom::Start(0))
                 .map_io_err(|| "Failed to reset intermediary data file offset.")?;
 
-            Self::response_add_unchecked(server, addr, to, mime_type, &file)
+            Self::response_add_unchecked(server, to, mime_type, &file)
         }
     }
 
     pub fn response_add_unchecked<Server: AsFd, Data: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         to: RingKind,
         mime_type: MimeType,
         data: Data,
     ) -> Result<AddResponse, ClientError> {
-        Self::send(&server, addr, to, mime_type, data, SendFlags::empty())?;
+        Self::send(&server, to, mime_type, data, SendFlags::empty())?;
         unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
             |Response {
                  sequence_number: _,
@@ -141,13 +138,12 @@ impl AddRequest {
 
     pub fn send<Server: AsFd, Data: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         to: RingKind,
         mime_type: MimeType,
         data: Data,
         flags: SendFlags,
     ) -> Result<(), ClientError> {
-        request_with_fd(&server, addr, Request::Add { to, mime_type }, data, flags)
+        request_with_fd(&server, Request::Add { to, mime_type }, data, flags)
     }
 
     response!(AddResponse);
@@ -158,11 +154,10 @@ pub struct MoveToFrontRequest;
 impl MoveToFrontRequest {
     pub fn response<Server: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         id: u64,
         to: Option<RingKind>,
     ) -> Result<MoveToFrontResponse, ClientError> {
-        Self::send(&server, addr, id, to, SendFlags::empty())?;
+        Self::send(&server, id, to, SendFlags::empty())?;
         unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
             |Response {
                  sequence_number: _,
@@ -173,12 +168,11 @@ impl MoveToFrontRequest {
 
     pub fn send<Server: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         id: u64,
         to: Option<RingKind>,
         flags: SendFlags,
     ) -> Result<(), ClientError> {
-        request(&server, addr, Request::MoveToFront { id, to }, flags)
+        request(&server, Request::MoveToFront { id, to }, flags)
     }
 
     response!(MoveToFrontResponse);
@@ -189,11 +183,10 @@ pub struct SwapRequest;
 impl SwapRequest {
     pub fn response<Server: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         id1: u64,
         id2: u64,
     ) -> Result<SwapResponse, ClientError> {
-        Self::send(&server, addr, id1, id2, SendFlags::empty())?;
+        Self::send(&server, id1, id2, SendFlags::empty())?;
         unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
             |Response {
                  sequence_number: _,
@@ -204,12 +197,11 @@ impl SwapRequest {
 
     pub fn send<Server: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         id1: u64,
         id2: u64,
         flags: SendFlags,
     ) -> Result<(), ClientError> {
-        request(&server, addr, Request::Swap { id1, id2 }, flags)
+        request(&server, Request::Swap { id1, id2 }, flags)
     }
 
     response!(SwapResponse);
@@ -218,12 +210,8 @@ impl SwapRequest {
 pub struct RemoveRequest;
 
 impl RemoveRequest {
-    pub fn response<Server: AsFd>(
-        server: Server,
-        addr: &SocketAddrUnix,
-        id: u64,
-    ) -> Result<RemoveResponse, ClientError> {
-        Self::send(&server, addr, id, SendFlags::empty())?;
+    pub fn response<Server: AsFd>(server: Server, id: u64) -> Result<RemoveResponse, ClientError> {
+        Self::send(&server, id, SendFlags::empty())?;
         unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
             |Response {
                  sequence_number: _,
@@ -234,11 +222,10 @@ impl RemoveRequest {
 
     pub fn send<Server: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         id: u64,
         flags: SendFlags,
     ) -> Result<(), ClientError> {
-        request(&server, addr, Request::Remove { id }, flags)
+        request(&server, Request::Remove { id }, flags)
     }
 
     response!(RemoveResponse);
@@ -249,10 +236,9 @@ pub struct GarbageCollectRequest;
 impl GarbageCollectRequest {
     pub fn response<Server: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         max_wasted_bytes: u64,
     ) -> Result<GarbageCollectResponse, ClientError> {
-        Self::send(&server, addr, max_wasted_bytes, SendFlags::empty())?;
+        Self::send(&server, max_wasted_bytes, SendFlags::empty())?;
         unsafe { Self::recv(&server, RecvFlags::empty()) }.map(
             |Response {
                  sequence_number: _,
@@ -263,39 +249,21 @@ impl GarbageCollectRequest {
 
     pub fn send<Server: AsFd>(
         server: Server,
-        addr: &SocketAddrUnix,
         max_wasted_bytes: u64,
         flags: SendFlags,
     ) -> Result<(), ClientError> {
-        request(
-            &server,
-            addr,
-            Request::GarbageCollect { max_wasted_bytes },
-            flags,
-        )
+        request(&server, Request::GarbageCollect { max_wasted_bytes }, flags)
     }
 
     response!(GarbageCollectResponse);
 }
 
-fn request(
-    server: impl AsFd,
-    addr: &SocketAddrUnix,
-    request: Request,
-    flags: SendFlags,
-) -> Result<(), ClientError> {
-    request_with_ancillary(
-        server,
-        addr,
-        request,
-        &mut SendAncillaryBuffer::default(),
-        flags,
-    )
+fn request(server: impl AsFd, request: Request, flags: SendFlags) -> Result<(), ClientError> {
+    request_with_ancillary(server, request, &mut SendAncillaryBuffer::default(), flags)
 }
 
 fn request_with_fd(
     server: impl AsFd,
-    addr: &SocketAddrUnix,
     request: Request,
     fd: impl AsFd,
     flags: SendFlags,
@@ -308,19 +276,17 @@ fn request_with_fd(
         debug_assert!(success);
     }
 
-    request_with_ancillary(server, addr, request, &mut buf, flags)
+    request_with_ancillary(server, request, &mut buf, flags)
 }
 
 fn request_with_ancillary(
     server: impl AsFd,
-    addr: &SocketAddrUnix,
     request: Request,
     ancillary: &mut SendAncillaryBuffer,
     flags: SendFlags,
 ) -> Result<(), ClientError> {
-    sendmsg_unix(
+    sendmsg(
         server,
-        addr,
         &[IoSlice::new(request.as_bytes())],
         ancillary,
         flags,

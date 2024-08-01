@@ -122,23 +122,19 @@ pub fn controller<E>(
     commands: impl IntoIterator<Item = Command>,
     mut send: impl FnMut(Message) -> Result<(), E>,
 ) {
-    fn maybe_init_server(
-        cache: &mut Option<(OwnedFd, SocketAddrUnix)>,
-    ) -> Result<(impl AsFd + '_, &SocketAddrUnix), ClientError> {
+    fn maybe_init_server(cache: &mut Option<OwnedFd>) -> Result<impl AsFd + '_, ClientError> {
         if cache.is_some() {
-            let (sock, addr) = cache.as_ref().unwrap();
-            return Ok((sock, addr));
+            return Ok(cache.as_ref().unwrap());
         }
 
-        let addr = {
+        let server = {
             let socket_file = socket_file();
-            SocketAddrUnix::new(&socket_file)
-                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
+            let addr = SocketAddrUnix::new(&socket_file)
+                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+            connect_to_server(&addr)?
         };
-        let sock = connect_to_server(&addr)?;
 
-        let (sock, addr) = cache.insert((sock, addr));
-        Ok((sock, addr))
+        Ok(cache.insert(server))
     }
 
     let mut server = None;
@@ -183,9 +179,9 @@ pub fn controller<E>(
     }
 }
 
-fn handle_command<'a, Server: AsFd, E>(
+fn handle_command<Server: AsFd, E>(
     command: Command,
-    server: impl FnOnce() -> Result<(Server, &'a SocketAddrUnix), ClientError>,
+    server: impl FnOnce() -> Result<Server, ClientError>,
     send: impl FnMut(Message) -> Result<(), E>,
     database: &mut DatabaseReader,
     reader_: &mut Option<EntryReader>,
@@ -259,10 +255,8 @@ fn handle_command<'a, Server: AsFd, E>(
             Ok(Some(Message::EntryDetails { id, result: run() }))
         }
         ref c @ (Command::Favorite(id) | Command::Unfavorite(id)) => {
-            let (server, addr) = server()?;
             match MoveToFrontRequest::response(
-                server,
-                addr,
+                server()?,
                 id,
                 Some(match c {
                     Command::Favorite(_) => RingKind::Favorites,
@@ -275,8 +269,7 @@ fn handle_command<'a, Server: AsFd, E>(
             }
         }
         Command::Delete(id) => {
-            let (server, addr) = server()?;
-            match RemoveRequest::response(server, addr, id)? {
+            match RemoveRequest::response(server()?, id)? {
                 RemoveResponse { error: Some(e) } => return Err(e.into()),
                 RemoveResponse { error: None } => {}
             }

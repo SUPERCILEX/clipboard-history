@@ -425,34 +425,24 @@ fn run() -> Result<(), CliError> {
     match cmd {
         Cmd::Get(data) => get(data),
         Cmd::Search(data) => search(data),
-        Cmd::Add(data) => add(connect_to_server(&server_addr)?, &server_addr, data),
+        Cmd::Add(data) => add(connect_to_server(&server_addr)?, data),
         Cmd::Favorite(data) => move_to_front(
             connect_to_server(&server_addr)?,
-            &server_addr,
             data,
             Some(RingKind::Favorites),
         ),
-        Cmd::Unfavorite(data) => move_to_front(
-            connect_to_server(&server_addr)?,
-            &server_addr,
-            data,
-            Some(RingKind::Main),
-        ),
-        Cmd::MoveToFront(data) => {
-            move_to_front(connect_to_server(&server_addr)?, &server_addr, data, None)
+        Cmd::Unfavorite(data) => {
+            move_to_front(connect_to_server(&server_addr)?, data, Some(RingKind::Main))
         }
-        Cmd::Swap(data) => swap(connect_to_server(&server_addr)?, &server_addr, data),
-        Cmd::Remove(data) => remove(connect_to_server(&server_addr)?, &server_addr, data),
+        Cmd::MoveToFront(data) => move_to_front(connect_to_server(&server_addr)?, data, None),
+        Cmd::Swap(data) => swap(connect_to_server(&server_addr)?, data),
+        Cmd::Remove(data) => remove(connect_to_server(&server_addr)?, data),
         Cmd::Wipe => wipe(),
-        Cmd::GarbageCollect(data) => {
-            garbage_collect(connect_to_server(&server_addr)?, &server_addr, data)
-        }
-        Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, &server_addr, data),
+        Cmd::GarbageCollect(data) => garbage_collect(connect_to_server(&server_addr)?, data),
+        Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, data),
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump) => dump(),
-        Cmd::Debug(Dev::Generate(data)) => {
-            generate(connect_to_server(&server_addr)?, &server_addr, data)
-        }
+        Cmd::Debug(Dev::Generate(data)) => generate(connect_to_server(&server_addr)?, data),
         Cmd::Debug(Dev::Fuzz(data)) => fuzz(&server_addr, data),
     }
 }
@@ -627,7 +617,6 @@ fn search(
 
 fn add(
     server: OwnedFd,
-    addr: &SocketAddrUnix,
     Add {
         data_file,
         target,
@@ -646,7 +635,6 @@ fn add(
 
         AddRequest::response(
             server,
-            addr,
             target.into(),
             mime_type
                 .or_else(|| {
@@ -666,11 +654,10 @@ fn add(
 
 fn move_to_front(
     server: OwnedFd,
-    addr: &SocketAddrUnix,
     EntryAction { id }: EntryAction,
     to: Option<RingKind>,
 ) -> Result<(), CliError> {
-    match MoveToFrontRequest::response(server, addr, id, to)? {
+    match MoveToFrontRequest::response(server, id, to)? {
         MoveToFrontResponse::Success { id } => {
             println!("Entry moved: {id}");
         }
@@ -682,8 +669,8 @@ fn move_to_front(
     Ok(())
 }
 
-fn swap(server: OwnedFd, addr: &SocketAddrUnix, Swap { id1, id2 }: Swap) -> Result<(), CliError> {
-    let SwapResponse { error1, error2 } = SwapRequest::response(server, addr, id1, id2)?;
+fn swap(server: OwnedFd, Swap { id1, id2 }: Swap) -> Result<(), CliError> {
+    let SwapResponse { error1, error2 } = SwapRequest::response(server, id1, id2)?;
     if let Some(e) = error1 {
         return Err(e.into());
     } else if let Some(e) = error2 {
@@ -694,12 +681,8 @@ fn swap(server: OwnedFd, addr: &SocketAddrUnix, Swap { id1, id2 }: Swap) -> Resu
     Ok(())
 }
 
-fn remove(
-    server: OwnedFd,
-    addr: &SocketAddrUnix,
-    EntryAction { id }: EntryAction,
-) -> Result<(), CliError> {
-    let RemoveResponse { error } = RemoveRequest::response(server, addr, id)?;
+fn remove(server: OwnedFd, EntryAction { id }: EntryAction) -> Result<(), CliError> {
+    let RemoveResponse { error } = RemoveRequest::response(server, id)?;
     if let Some(e) = error {
         return Err(e.into());
     }
@@ -767,7 +750,6 @@ fn wipe() -> Result<(), CliError> {
 
 fn garbage_collect(
     server: OwnedFd,
-    addr: &SocketAddrUnix,
     GarbageCollect { max_wasted_bytes }: GarbageCollect,
 ) -> Result<(), CliError> {
     if max_wasted_bytes == 0 {
@@ -788,7 +770,7 @@ fn garbage_collect(
             if duplicates.add_entry(&entry, &database, &mut reader)? {
                 num_duplicates += 1;
                 pipeline_request(
-                    |flags| RemoveRequest::send(&server, addr, entry.id(), flags),
+                    |flags| RemoveRequest::send(&server, entry.id(), flags),
                     recv,
                     &mut pending_requests,
                 )?;
@@ -800,35 +782,25 @@ fn garbage_collect(
     }
 
     let GarbageCollectResponse { bytes_freed } =
-        GarbageCollectRequest::response(server, addr, max_wasted_bytes)?;
+        GarbageCollectRequest::response(server, max_wasted_bytes)?;
     println!("{bytes_freed} bytes of garbage freed.");
     Ok(())
 }
 
-fn migrate(
-    server: OwnedFd,
-    addr: &SocketAddrUnix,
-    Migrate { from, database }: Migrate,
-) -> Result<(), CliError> {
+fn migrate(server: OwnedFd, Migrate { from, database }: Migrate) -> Result<(), CliError> {
     match from {
-        MigrateFromClipboard::GnomeClipboardHistory => migrate_from_gch(server, addr, database),
+        MigrateFromClipboard::GnomeClipboardHistory => migrate_from_gch(server, database),
         MigrateFromClipboard::ClipboardIndicator => {
-            migrate_from_clipboard_indicator(server, addr, database)
+            migrate_from_clipboard_indicator(server, database)
         }
-        MigrateFromClipboard::GPaste => migrate_from_gpaste(server, addr, database),
-        MigrateFromClipboard::Json => {
-            migrate_from_ringboard_export(server, addr, database.unwrap())
-        }
+        MigrateFromClipboard::GPaste => migrate_from_gpaste(server, database),
+        MigrateFromClipboard::Json => migrate_from_ringboard_export(server, database.unwrap()),
     }?;
     println!("Migration complete.");
     Ok(())
 }
 
-fn migrate_from_gch(
-    server: OwnedFd,
-    addr: &SocketAddrUnix,
-    database: Option<PathBuf>,
-) -> Result<(), CliError> {
+fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), CliError> {
     const OP_TYPE_SAVE_TEXT: u8 = 1;
     const OP_TYPE_DELETE_TEXT: u8 = 2;
     const OP_TYPE_FAVORITE_ITEM: u8 = 3;
@@ -914,7 +886,6 @@ fn migrate_from_gch(
                 unsafe {
                     pipeline_add_request(
                         &server,
-                        addr,
                         data,
                         RingKind::Main,
                         MimeType::new(),
@@ -925,7 +896,7 @@ fn migrate_from_gch(
             }
             OP_TYPE_DELETE_TEXT => {
                 if let RemoveResponse { error: Some(e) } =
-                    RemoveRequest::response(&server, addr, get_translation!())?
+                    RemoveRequest::response(&server, get_translation!())?
                 {
                     api_error!(e);
                 }
@@ -934,7 +905,6 @@ fn migrate_from_gch(
             OP_TYPE_FAVORITE_ITEM | OP_TYPE_UNFAVORITE_ITEM | OP_TYPE_MOVE_ITEM_TO_END => {
                 match MoveToFrontRequest::response(
                     &server,
-                    addr,
                     get_translation!(),
                     match op {
                         OP_TYPE_FAVORITE_ITEM => Some(RingKind::Favorites),
@@ -966,7 +936,6 @@ fn migrate_from_gch(
 
 fn migrate_from_clipboard_indicator(
     server: OwnedFd,
-    addr: &SocketAddrUnix,
     database: Option<PathBuf>,
 ) -> Result<(), CliError> {
     #[derive(Deserialize)]
@@ -1050,7 +1019,6 @@ fn migrate_from_clipboard_indicator(
         unsafe {
             pipeline_add_request(
                 &server,
-                addr,
                 data,
                 if favorite {
                     RingKind::Favorites
@@ -1067,11 +1035,7 @@ fn migrate_from_clipboard_indicator(
     unsafe { drain_add_requests(server, None, &mut pending_adds) }
 }
 
-fn migrate_from_gpaste(
-    server: OwnedFd,
-    addr: &SocketAddrUnix,
-    database: Option<PathBuf>,
-) -> Result<(), CliError> {
+fn migrate_from_gpaste(server: OwnedFd, database: Option<PathBuf>) -> Result<(), CliError> {
     #[derive(Deserialize, Debug)]
     struct History {
         #[serde(rename = "@version")]
@@ -1201,15 +1165,7 @@ fn migrate_from_gpaste(
         };
 
         unsafe {
-            pipeline_add_request(
-                &server,
-                addr,
-                data,
-                RingKind::Main,
-                mime,
-                None,
-                &mut pending_adds,
-            )?;
+            pipeline_add_request(&server, data, RingKind::Main, mime, None, &mut pending_adds)?;
         }
     }
 
@@ -1493,11 +1449,7 @@ fn dump() -> Result<(), CliError> {
     Ok(())
 }
 
-fn migrate_from_ringboard_export(
-    server: OwnedFd,
-    addr: &SocketAddrUnix,
-    dump_file: PathBuf,
-) -> Result<(), CliError> {
+fn migrate_from_ringboard_export(server: OwnedFd, dump_file: PathBuf) -> Result<(), CliError> {
     fn generate_entry_file(data: &[u8]) -> Result<File, CliError> {
         let file = File::from(
             openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
@@ -1523,7 +1475,7 @@ fn migrate_from_ringboard_export(
         })?;
 
         let (to, _) = decompose_id(id).unwrap_or_default();
-        unsafe { pipeline_add_request(&server, addr, data, to, mime_type, None, &mut pending_adds) }
+        unsafe { pipeline_add_request(&server, data, to, mime_type, None, &mut pending_adds) }
     };
 
     if dump_file == Path::new("-") {
@@ -1550,7 +1502,6 @@ fn migrate_from_ringboard_export(
 
 fn generate(
     server: OwnedFd,
-    addr: &SocketAddrUnix,
     Generate {
         num_entries,
         mean_size,
@@ -1577,7 +1528,6 @@ fn generate(
         unsafe {
             pipeline_add_request(
                 &server,
-                addr,
                 data,
                 rng.gen::<GenerateRingKind>().0,
                 MimeType::new(),
@@ -1933,7 +1883,7 @@ fn fuzz(
                                 .map_io_err(|| format!("Failed to mmap file: {file:?}"))?,
                         });
                         pipeline_request!(|flags| AddRequest::send(
-                            server, addr, kind, mime_type, &file, flags
+                            server, kind, mime_type, &file, flags
                         ));
                     }
                     3 => {
@@ -1942,7 +1892,7 @@ fn fuzz(
 
                         pending_ops.push_back(PendingOp::Move { id: move_id });
                         pipeline_request!(|flags| MoveToFrontRequest::send(
-                            server, addr, move_id, kind, flags
+                            server, move_id, kind, flags
                         ));
                     }
                     4 => {
@@ -1950,13 +1900,13 @@ fn fuzz(
                         let id2 = rng.gen_range(0..=sequence_num);
 
                         pending_ops.push_back(PendingOp::Swap { id1, id2 });
-                        pipeline_request!(|flags| SwapRequest::send(server, addr, id1, id2, flags));
+                        pipeline_request!(|flags| SwapRequest::send(server, id1, id2, flags));
                     }
                     5 => {
                         let id = rng.gen_range(0..=sequence_num);
 
                         pending_ops.push_back(PendingOp::Remove { id });
-                        pipeline_request!(|flags| RemoveRequest::send(server, addr, id, flags));
+                        pipeline_request!(|flags| RemoveRequest::send(server, id, flags));
                     }
                     6 => {
                         let max_wasted_bytes = match rng.gen_range(0..4) {
@@ -1967,7 +1917,6 @@ fn fuzz(
                         pending_ops.push_back(PendingOp::Gc);
                         pipeline_request!(|flags| GarbageCollectRequest::send(
                             server,
-                            addr,
                             max_wasted_bytes,
                             flags
                         ));
@@ -2096,7 +2045,6 @@ fn pipelined_add_recv<'a>(
 
 unsafe fn pipeline_add_request(
     server: impl AsFd + Copy,
-    addr: &SocketAddrUnix,
     data: impl AsFd,
     to: RingKind,
     mime_type: MimeType,
@@ -2104,7 +2052,7 @@ unsafe fn pipeline_add_request(
     pending_adds: &mut u32,
 ) -> Result<(), CliError> {
     pipeline_request(
-        |flags| AddRequest::send(server, addr, to, mime_type, &data, flags),
+        |flags| AddRequest::send(server, to, mime_type, &data, flags),
         pipelined_add_recv(server, translation),
         pending_adds,
     )

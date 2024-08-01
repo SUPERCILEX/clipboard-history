@@ -160,12 +160,12 @@ fn run() -> Result<(), CliError> {
         env!("CARGO_PKG_VERSION")
     );
 
-    let server_addr = {
+    let server = {
         let socket_file = socket_file();
-        SocketAddrUnix::new(&socket_file)
-            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
+        let addr = SocketAddrUnix::new(&socket_file)
+            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+        connect_to_server(&addr)?
     };
-    let server = connect_to_server(&server_addr)?;
     debug!("Ringboard connection established.");
 
     let (conn, root) = {
@@ -479,12 +479,7 @@ fn run() -> Result<(), CliError> {
                             {
                                 info!("Promoting duplicate small selection to front.");
                                 if let MoveToFrontResponse::Success { id } =
-                                    MoveToFrontRequest::response(
-                                        &server,
-                                        &server_addr,
-                                        existing,
-                                        None,
-                                    )?
+                                    MoveToFrontRequest::response(&server, existing, None)?
                                 {
                                     deduplicator.remember(data_hash, id);
                                     continue;
@@ -505,7 +500,6 @@ fn run() -> Result<(), CliError> {
 
                             let AddResponse::Success { id } = AddRequest::response_add_unchecked(
                                 &server,
-                                &server_addr,
                                 RingKind::Main,
                                 mime_type,
                                 file,
@@ -551,12 +545,7 @@ fn run() -> Result<(), CliError> {
                             {
                                 info!("Promoting duplicate large selection to front.");
                                 if let MoveToFrontResponse::Success { id } =
-                                    MoveToFrontRequest::response(
-                                        &server,
-                                        &server_addr,
-                                        existing,
-                                        None,
-                                    )?
+                                    MoveToFrontRequest::response(&server, existing, None)?
                                 {
                                     deduplicator.remember(data_hash, id);
                                     continue;
@@ -574,7 +563,6 @@ fn run() -> Result<(), CliError> {
 
                             let AddResponse::Success { id } = AddRequest::response_add_unchecked(
                                 &server,
-                                &server_addr,
                                 RingKind::Main,
                                 mime_type,
                                 file,
