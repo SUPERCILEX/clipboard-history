@@ -1,12 +1,14 @@
 use std::{
     ffi::CStr,
     fmt::{Debug, Formatter},
+    fs,
     fs::File,
-    io::{BorrowedBuf, ErrorKind::UnexpectedEof, Read, Write},
+    io::{BorrowedBuf, ErrorKind, ErrorKind::UnexpectedEof, Read, Write},
     marker::PhantomData,
     mem::{size_of, MaybeUninit},
     ops::Deref,
     os::fd::{AsFd, OwnedFd},
+    path::Path,
     ptr, slice,
     str::FromStr,
 };
@@ -14,6 +16,7 @@ use std::{
 use arrayvec::{ArrayString, ArrayVec};
 use rustix::{
     fs::{copy_file_range, openat, statx, AtFlags, Mode, OFlags, StatxFlags},
+    net::{bind_unix, listen, socket, AddressFamily, SocketAddrUnix, SocketType},
     path::Arg,
     process::Pid,
 };
@@ -175,4 +178,28 @@ pub fn direct_file_name(
 ) -> DirectFileNameToken<()> {
     write!(buf.as_mut_slice(), "{:0>13}\0", composite_id(to, index)).unwrap();
     DirectFileNameToken(buf.as_mut_slice(), PhantomData)
+}
+
+pub fn init_unix_server<P: AsRef<Path>>(socket_file: P) -> Result<OwnedFd> {
+    let socket_file = socket_file.as_ref();
+    let addr = {
+        match fs::remove_file(socket_file) {
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+            r => r,
+        }
+        .map_io_err(|| format!("Failed to remove old socket: {socket_file:?}"))?;
+
+        if let Some(parent) = socket_file.parent() {
+            fs::create_dir_all(parent)
+                .map_io_err(|| format!("Failed to create socket directory: {parent:?}"))?;
+        }
+        SocketAddrUnix::new(socket_file)
+            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
+    };
+
+    let socket = socket(AddressFamily::UNIX, SocketType::SEQPACKET, None)
+        .map_io_err(|| format!("Failed to create socket: {socket_file:?}"))?;
+    bind_unix(&socket, &addr).map_io_err(|| format!("Failed to bind socket: {socket_file:?}"))?;
+    listen(&socket, -1).map_io_err(|| format!("Failed to listen for clients: {socket_file:?}"))?;
+    Ok(socket)
 }

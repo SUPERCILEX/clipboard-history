@@ -1,5 +1,4 @@
 use std::{
-    fs,
     fs::File,
     io,
     io::{ErrorKind, Read as StdRead, Write},
@@ -18,11 +17,8 @@ use io_uring::{
     IoUring,
 };
 use log::{debug, info, trace, warn};
-use ringboard_core::{dirs::socket_file, IoErr};
-use rustix::{
-    io::Errno,
-    net::{bind_unix, listen, socket, AddressFamily, RecvFlags, SocketAddrUnix, SocketType},
-};
+use ringboard_core::{dirs::socket_file, init_unix_server, IoErr};
+use rustix::{io::Errno, net::RecvFlags};
 
 use crate::{
     allocator::Allocator,
@@ -145,31 +141,7 @@ fn setup_uring() -> Result<IoUring, CliError> {
         OwnedFd::from(mem_pressure)
     };
 
-    let socket = {
-        let socket_file = socket_file();
-        let addr = {
-            match fs::remove_file(&socket_file) {
-                Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
-                r => r,
-            }
-            .map_io_err(|| format!("Failed to remove old socket: {socket_file:?}"))?;
-
-            if let Some(parent) = socket_file.parent() {
-                fs::create_dir_all(parent)
-                    .map_io_err(|| format!("Failed to create socket directory: {parent:?}"))?;
-            }
-            SocketAddrUnix::new(&socket_file)
-                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))
-        }?;
-
-        let socket = socket(AddressFamily::UNIX, SocketType::SEQPACKET, None)
-            .map_io_err(|| format!("Failed to create socket: {socket_file:?}"))?;
-        bind_unix(&socket, &addr)
-            .map_io_err(|| format!("Failed to bind socket: {socket_file:?}"))?;
-        listen(&socket, -1)
-            .map_io_err(|| format!("Failed to listen for clients: {socket_file:?}"))?;
-        socket
-    };
+    let socket = init_unix_server(socket_file())?;
 
     let built_ins = [
         socket.as_raw_fd(),
