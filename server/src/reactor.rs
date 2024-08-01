@@ -18,7 +18,10 @@ use io_uring::{
 };
 use log::{debug, info, trace, warn};
 use ringboard_core::{dirs::socket_file, init_unix_server, IoErr};
-use rustix::{io::Errno, net::RecvFlags};
+use rustix::{
+    io::Errno,
+    net::{RecvFlags, SocketType},
+};
 
 use crate::{
     allocator::Allocator,
@@ -141,7 +144,7 @@ fn setup_uring() -> Result<IoUring, CliError> {
         OwnedFd::from(mem_pressure)
     };
 
-    let socket = init_unix_server(socket_file())?;
+    let socket = init_unix_server(socket_file(), SocketType::SEQPACKET)?;
 
     let built_ins = [
         socket.as_raw_fd(),

@@ -180,7 +180,7 @@ pub fn direct_file_name(
     DirectFileNameToken(buf.as_mut_slice(), PhantomData)
 }
 
-pub fn init_unix_server<P: AsRef<Path>>(socket_file: P) -> Result<OwnedFd> {
+pub fn init_unix_server<P: AsRef<Path>>(socket_file: P, kind: SocketType) -> Result<OwnedFd> {
     let socket_file = socket_file.as_ref();
     let addr = {
         match fs::remove_file(socket_file) {
@@ -197,9 +197,12 @@ pub fn init_unix_server<P: AsRef<Path>>(socket_file: P) -> Result<OwnedFd> {
             .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
     };
 
-    let socket = socket(AddressFamily::UNIX, SocketType::SEQPACKET, None)
+    let socket = socket(AddressFamily::UNIX, kind, None)
         .map_io_err(|| format!("Failed to create socket: {socket_file:?}"))?;
     bind_unix(&socket, &addr).map_io_err(|| format!("Failed to bind socket: {socket_file:?}"))?;
-    listen(&socket, -1).map_io_err(|| format!("Failed to listen for clients: {socket_file:?}"))?;
+    if kind != SocketType::DGRAM {
+        listen(&socket, -1)
+            .map_io_err(|| format!("Failed to listen for clients: {socket_file:?}"))?;
+    }
     Ok(socket)
 }

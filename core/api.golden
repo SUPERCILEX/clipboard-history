@@ -888,7 +888,7 @@ pub fn rustix::io::errno::Result<T>::map_io_err<I: core::convert::Into<alloc::bo
 pub const fn clipboard_history_core::bucket_to_length(bucket: usize) -> u16
 pub fn clipboard_history_core::copy_file_range_all<InFd: std::os::fd::owned::AsFd, OutFd: std::os::fd::owned::AsFd>(fd_in: InFd, off_in: core::option::Option<&mut u64>, fd_out: OutFd, off_out: core::option::Option<&mut u64>, len: usize) -> rustix::io::errno::Result<usize>
 pub fn clipboard_history_core::direct_file_name(buf: &mut [u8; 14], to: clipboard_history_core::protocol::RingKind, index: u32) -> clipboard_history_core::DirectFileNameToken<'_, ()>
-pub fn clipboard_history_core::init_unix_server<P: core::convert::AsRef<std::path::Path>>(socket_file: P) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>
+pub fn clipboard_history_core::init_unix_server<P: core::convert::AsRef<std::path::Path>>(socket_file: P, kind: rustix::net::types::SocketType) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>
 pub fn clipboard_history_core::open_buckets<F: core::ops::function::FnMut(&str) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>>(open: F) -> clipboard_history_core::Result<([std::os::fd::owned::OwnedFd; 11], [u64; 11])>
 pub fn clipboard_history_core::read_server_pid<Fd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(dir: Fd, lock_file: P) -> clipboard_history_core::Result<core::option::Option<rustix::pid::Pid>>
 pub fn clipboard_history_core::size_to_bucket(bytes: u16) -> u8
