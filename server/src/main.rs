@@ -31,11 +31,11 @@ static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
 enum CliError {
     #[error("{0}")]
     Core(#[from] Error),
-    #[error("The server is already running: {pid:?}.")]
+    #[error("server already running at {pid:?}")]
     ServerAlreadyRunning { pid: Pid, lock_file: PathBuf },
-    #[error("Multiple errors occurred.")]
+    #[error("multiple errors occurred")]
     Multiple(Vec<CliError>),
-    #[error("Internal error.")]
+    #[error("internal error")]
     Internal { context: Cow<'static, str> },
 }
 

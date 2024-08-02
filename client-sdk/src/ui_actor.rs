@@ -40,9 +40,9 @@ pub enum CommandError {
     Core(#[from] CoreError),
     #[error("{0}")]
     Sdk(#[from] ClientError),
-    #[error("Regex instantiation failed.")]
+    #[error("invalid RegEx")]
     Regex(#[from] regex::Error),
-    #[error("Image loading error.")]
+    #[error("failed to load image")]
     Image(#[from] ImageError),
 }
 

@@ -65,15 +65,15 @@ enum CliError {
     Core(#[from] Error),
     #[error("{0}")]
     Sdk(#[from] ringboard_sdk::ClientError),
-    #[error("Failed to connect to X11 server.")]
+    #[error("failed to connect to X11 server")]
     X11Connect(#[from] ConnectError),
-    #[error("X11 request failed.")]
+    #[error("X11 request failed")]
     X11Connection(#[from] ConnectionError),
-    #[error("X11 reply failed.")]
+    #[error("X11 reply failed")]
     X11Error(X11Error),
-    #[error("Failed to create X11 ID.")]
+    #[error("failed to create X11 ID")]
     X11IdsExhausted,
-    #[error("Unsupported X11: XFixes extension not available.")]
+    #[error("unsupported X11 version: XFixes extension not available")]
     X11NoXfixes,
 }
 

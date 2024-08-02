@@ -18,17 +18,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("An I/O error occurred.")]
+    #[error("an I/O error occurred")]
     Io {
         error: io::Error,
         context: Cow<'static, str>,
     },
-    #[error("Invalid PID.")]
+    #[error("invalid PID")]
     InvalidPidError {
         error: ParseIntError,
         context: Cow<'static, str>,
     },
-    #[error("Id not found.")]
+    #[error("ID not found")]
     IdNotFound(#[from] IdNotFoundError),
 }
 

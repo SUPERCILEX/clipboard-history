@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 pub use ring_reader::{DatabaseReader, Entry, EntryReader, Kind, LoadedEntry, RingReader};
 pub use ringboard_core as core;
-use ringboard_core::{protocol, protocol::IdNotFoundError};
+use ringboard_core::protocol::IdNotFoundError;
 #[cfg(feature = "search")]
 pub use search::search;
 use thiserror::Error;
@@ -20,12 +20,9 @@ pub mod ui_actor;
 pub enum ClientError {
     #[error("{0}")]
     Core(#[from] ringboard_core::Error),
-    #[error(
-        "Protocol version mismatch: expected {} but got {actual}.",
-        protocol::VERSION
-    )]
+    #[error("protocol version mismatch")]
     VersionMismatch { actual: u8 },
-    #[error("The server returned an invalid response.")]
+    #[error("invalid server response")]
     InvalidResponse { context: Cow<'static, str> },
 }
 
@@ -38,6 +35,7 @@ impl From<IdNotFoundError> for ClientError {
 #[cfg(feature = "error-stack")]
 mod error_stack_compat {
     use error_stack::{Context, Report};
+    use ringboard_core::protocol;
 
     use crate::ClientError;
 
@@ -46,7 +44,10 @@ mod error_stack_compat {
             match self {
                 Self::Core(e) => e.into_report(wrapper),
                 Self::InvalidResponse { context } => Report::new(wrapper).attach_printable(context),
-                Self::VersionMismatch { actual: _ } => Report::new(wrapper),
+                Self::VersionMismatch { actual } => Report::new(wrapper).attach_printable(format!(
+                    "Expected v{} but got v{actual}.",
+                    protocol::VERSION
+                )),
             }
         }
     }

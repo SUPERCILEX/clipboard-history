@@ -357,21 +357,19 @@ enum CliError {
     Core(#[from] CoreError),
     #[error("{0}")]
     Sdk(#[from] ClientError),
-    #[error("Failed to delete or copy files.")]
+    #[error("failed to delete or copy files")]
     Fuc(#[from] fuc_engine::Error),
-    #[error(
-        "Database not found. Make sure to run the ringboard server or fix the XDG_DATA_HOME path."
-    )]
+    #[error("database not found")]
     DatabaseNotFound(PathBuf),
-    #[error("JSON (de)serialization failed.")]
+    #[error("JSON (de)serialization failed")]
     SerdeJson(#[from] serde_json::Error),
-    #[error("Quick XML (de)serialization failed.")]
+    #[error("Quick XML (de)serialization failed")]
     QuickXml(#[from] quick_xml::Error),
-    #[error("Serde XML (de)serialization failed.")]
+    #[error("Serde XML (de)serialization failed")]
     QuickXmlDe(#[from] quick_xml::DeError),
-    #[error("Regex instantiation failed.")]
+    #[error("invalid RegEx")]
     Regex(#[from] regex::Error),
-    #[error("An internal error occurred in search.")]
+    #[error("internal search error")]
     InternalSearchError,
 }
 
@@ -393,9 +391,11 @@ fn main() -> error_stack::Result<(), Wrapper> {
                 .attach_printable(context)
                 .change_context(wrapper),
             CliError::Sdk(e) => e.into_report(wrapper),
-            CliError::DatabaseNotFound(db) => {
-                Report::new(wrapper).attach_printable(format!("Path: {:?}", db.display()))
-            }
+            CliError::DatabaseNotFound(db) => Report::new(wrapper)
+                .attach_printable(
+                    "Make sure to run the Ringboard server or fix the XDG_DATA_HOME path.",
+                )
+                .attach_printable(format!("Expected database directory: {:?}", db.display())),
             CliError::Fuc(e) => Report::new(e).change_context(wrapper),
             CliError::SerdeJson(e) => Report::new(e).change_context(wrapper),
             CliError::QuickXml(e) => Report::new(e).change_context(wrapper),
