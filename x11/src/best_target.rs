@@ -10,9 +10,9 @@ struct SeenMime {
 #[derive(Default)]
 struct KnownSeenMimes {
     text: Option<SeenMime>,
+    image: Option<SeenMime>,
     x_special: Option<SeenMime>,
     chromium_custom: Option<SeenMime>,
-    image: Option<SeenMime>,
     other: Option<SeenMime>,
 }
 
@@ -29,9 +29,9 @@ impl BestMimeTypeFinder {
             seen:
                 KnownSeenMimes {
                     text,
+                    image,
                     x_special,
                     chromium_custom,
-                    image,
                     other,
                 },
             best_mime,
@@ -43,12 +43,12 @@ impl BestMimeTypeFinder {
                 return;
             }
             text
+        } else if mime.starts_with("image/") {
+            image
         } else if mime.starts_with("x-special/") {
             x_special
         } else if mime.starts_with("chromium/") {
             chromium_custom
-        } else if mime.starts_with("image/") {
-            image
         } else if mime.chars().next().map_or(true, char::is_lowercase) {
             other
         } else {
@@ -89,15 +89,15 @@ impl KnownSeenMimes {
     fn best(&self) -> Option<Atom> {
         let Self {
             text,
+            image,
             x_special,
             chromium_custom,
-            image,
             other,
         } = *self;
 
-        text.or(x_special)
+        text.or(image)
+            .or(x_special)
             .or(chromium_custom)
-            .or(image)
             .or(other)
             .map(
                 |SeenMime {
