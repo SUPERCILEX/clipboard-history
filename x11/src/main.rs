@@ -360,6 +360,14 @@ fn handle_x11_event(
                 );
                 return Ok(());
             }
+            let property = conn.get_property(
+                true,
+                event.window,
+                event.atom,
+                GetPropertyType::ANY,
+                0,
+                u32::MAX,
+            )?;
             let Some((state, transfer_atom)) = allocator.get(event.window) else {
                 warn!(
                     "Ignoring property notify to unknown requester {}.",
@@ -373,16 +381,7 @@ fn handle_x11_event(
                     selection,
                     allow_plain_text,
                 } => {
-                    let property = conn
-                        .get_property(
-                            true,
-                            event.window,
-                            event.atom,
-                            GetPropertyType::ANY,
-                            0,
-                            u32::MAX,
-                        )?
-                        .reply()?;
+                    let property = property.reply()?;
                     if property.type_ == incr_atom {
                         warn!("Ignoring abusive TARGETS property.");
                         return Ok(());
@@ -456,16 +455,7 @@ fn handle_x11_event(
                         _ => unreachable!(),
                     };
 
-                    let property = conn
-                        .get_property(
-                            true,
-                            event.window,
-                            event.atom,
-                            GetPropertyType::ANY,
-                            0,
-                            u32::MAX,
-                        )?
-                        .reply()?;
+                    let property = property.reply()?;
                     if property.type_ == incr_atom {
                         debug!("Waiting for INCR transfer.");
                         *state = State::PendingIncr {
@@ -541,14 +531,6 @@ fn handle_x11_event(
                     file,
                     written,
                 } => {
-                    let property = conn.get_property(
-                        true,
-                        event.window,
-                        event.atom,
-                        GetPropertyType::ANY,
-                        0,
-                        u32::MAX,
-                    )?;
                     let file = if let Some(file) = file {
                         file
                     } else {
