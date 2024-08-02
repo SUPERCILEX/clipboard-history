@@ -214,8 +214,8 @@ atom_manager! {
         TEXT,
         STRING,
         text_plain: b"text/plain",
-        text_plain_utf8: b"text/plain;charset=UTF-8",
-        text_plain_us_ascii: b"text/plain;charset=US-ASCII",
+        text_plain_utf8: b"text/plain;charset=utf-8",
+        text_plain_us_ascii: b"text/plain;charset=us-ascii",
         text_plain_unicode: b"text/plain;charset=unicode",
     }
 }
