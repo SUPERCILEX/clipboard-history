@@ -2,8 +2,8 @@
 
 use std::{
     borrow::Cow,
-    cmp::{max, min, Ordering, Reverse},
-    collections::{BTreeMap, BinaryHeap, HashMap, VecDeque},
+    cmp::{max, min},
+    collections::{BTreeMap, HashMap, VecDeque},
     fmt::{Debug, Display, Formatter},
     fs,
     fs::File,
@@ -1570,12 +1570,6 @@ fn fuzz(
     }
 
     #[derive(Debug)]
-    struct LinearizableResponse {
-        seq_num: u64,
-        kind: ResponseKind,
-    }
-
-    #[derive(Debug)]
     enum ResponseKind {
         Add {
             data: Mmap,
@@ -1597,34 +1591,25 @@ fn fuzz(
         Gc(GarbageCollectResponse),
     }
 
-    impl PartialEq for LinearizableResponse {
-        fn eq(&self, other: &Self) -> bool {
-            self.seq_num.eq(&other.seq_num)
-        }
-    }
-    impl Eq for LinearizableResponse {}
-
-    impl PartialOrd for LinearizableResponse {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-    impl Ord for LinearizableResponse {
-        fn cmp(&self, other: &Self) -> Ordering {
-            self.seq_num.cmp(&other.seq_num)
-        }
-    }
-
     fn recv(
         mut out: impl Write,
         flags: RecvFlags,
         server: impl AsFd,
         pending: &mut VecDeque<PendingOp>,
         database: &mut HashMap<u64, Mmap, BuildHasherDefault<FxHasher>>,
-        linearizable_responses: &mut BinaryHeap<Reverse<LinearizableResponse>>,
-        sequence_num: &mut u64,
+        linearized_responses: &mut VecDeque<Option<ResponseKind>>,
+        seq_num_head: &mut u64,
         verbose: bool,
     ) -> Result<(), ClientError> {
+        macro_rules! linearize {
+            ($seq:expr, $resp:expr) => {
+                let slot = usize::try_from($seq - *seq_num_head).unwrap();
+                if slot >= linearized_responses.len() {
+                    linearized_responses.resize_with(slot + 1, Default::default);
+                }
+                linearized_responses[slot] = Some($resp);
+            };
+        }
         match pending.front().unwrap() {
             PendingOp::Add { .. } => {
                 let Response {
@@ -1634,10 +1619,7 @@ fn fuzz(
                 let PendingOp::Add { data } = pending.pop_front().unwrap() else {
                     unreachable!()
                 };
-                linearizable_responses.push(Reverse(LinearizableResponse {
-                    seq_num: sequence_number,
-                    kind: ResponseKind::Add { value, data },
-                }));
+                linearize!(sequence_number, ResponseKind::Add { value, data });
             }
             PendingOp::Move { .. } => {
                 let Response {
@@ -1647,10 +1629,7 @@ fn fuzz(
                 let PendingOp::Move { id: move_id } = pending.pop_front().unwrap() else {
                     unreachable!()
                 };
-                linearizable_responses.push(Reverse(LinearizableResponse {
-                    seq_num: sequence_number,
-                    kind: ResponseKind::Move { move_id, value },
-                }));
+                linearize!(sequence_number, ResponseKind::Move { move_id, value });
             }
             PendingOp::Swap { .. } => {
                 let Response {
@@ -1660,10 +1639,7 @@ fn fuzz(
                 let PendingOp::Swap { id1, id2 } = pending.pop_front().unwrap() else {
                     unreachable!()
                 };
-                linearizable_responses.push(Reverse(LinearizableResponse {
-                    seq_num: sequence_number,
-                    kind: ResponseKind::Swap { id1, id2, value },
-                }));
+                linearize!(sequence_number, ResponseKind::Swap { id1, id2, value });
             }
             PendingOp::Remove { .. } => {
                 let Response {
@@ -1673,10 +1649,7 @@ fn fuzz(
                 let PendingOp::Remove { id } = pending.pop_front().unwrap() else {
                     unreachable!()
                 };
-                linearizable_responses.push(Reverse(LinearizableResponse {
-                    seq_num: sequence_number,
-                    kind: ResponseKind::Remove { id, value },
-                }));
+                linearize!(sequence_number, ResponseKind::Remove { id, value });
             }
             PendingOp::Gc => {
                 let Response {
@@ -1686,25 +1659,17 @@ fn fuzz(
                 let PendingOp::Gc = pending.pop_front().unwrap() else {
                     unreachable!()
                 };
-                linearizable_responses.push(Reverse(LinearizableResponse {
-                    seq_num: sequence_number,
-                    kind: ResponseKind::Gc(value),
-                }));
+                linearize!(sequence_number, ResponseKind::Gc(value));
             }
         }
 
-        while linearizable_responses
-            .peek()
-            .is_some_and(|Reverse(r)| r.seq_num == *sequence_num)
-        {
-            let Reverse(LinearizableResponse { seq_num, kind }) =
-                linearizable_responses.pop().unwrap();
-            *sequence_num = sequence_num.wrapping_add(1);
-
+        while linearized_responses.front().is_some_and(Option::is_some) {
+            let kind = linearized_responses.pop_front().unwrap().unwrap();
             if verbose {
-                writeln!(out, "Processing linearized response: {seq_num}@{kind:?}.")
+                writeln!(out, "{seq_num_head}@{kind:?}.")
                     .map_io_err(|| "Failed to write to stdout.")?;
             }
+            *seq_num_head = seq_num_head.wrapping_add(1);
 
             match kind {
                 ResponseKind::Add {
@@ -1774,7 +1739,7 @@ fn fuzz(
     let mut pending_requests = [0; 32];
     let mut data = HashMap::default();
     let mut sequence_num = 1;
-    let mut linearizable_ops = BinaryHeap::new();
+    let mut linearizable_ops = VecDeque::new();
 
     let (mut database, mut reader) = open_db()?;
     let mut out = io::stdout().lock();
