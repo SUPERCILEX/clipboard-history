@@ -8,11 +8,10 @@ use std::{
     ptr,
 };
 
-use arrayvec::ArrayVec;
 use io_uring::{
     cqueue::{buffer_select, more, Entry},
     opcode::{AcceptMulti, Close, PollAdd, RecvMsgMulti, SendMsg},
-    squeue::Flags,
+    squeue::{Flags, PushError},
     types::Fixed,
     IoUring,
 };
@@ -73,6 +72,7 @@ impl Clients {
         debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         self.connections &= !(1 << id);
         self.pending_closes &= !(1 << id);
+        self.pending_recv &= !(1 << id);
     }
 
     fn set_pending_recv(&mut self, id: u8) {
@@ -84,7 +84,7 @@ impl Clients {
         debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
         let r = (self.pending_recv & (1 << id)) != 0;
         self.pending_recv &= !(1 << id);
-        r && self.is_connected(id)
+        r
     }
 }
 
@@ -163,6 +163,14 @@ fn setup_uring() -> Result<IoUring, CliError> {
     Ok(uring)
 }
 
+impl From<PushError> for CliError {
+    fn from(_: PushError) -> Self {
+        Self::Internal {
+            context: "Mismanaged io_uring SQEs.".into(),
+        }
+    }
+}
+
 pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     const REQ_TYPE_ACCEPT: u64 = 0;
     const REQ_TYPE_RECV: u64 = 1;
@@ -236,16 +244,26 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     let mut clients = Clients::default();
     let mut pending_accept = false;
     'outer: loop {
-        match uring.submit_and_wait(1) {
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
-            r => r,
-        }
-        .map_io_err(|| "Failed to wait for io_uring.")?;
-        let mut pending_entries = ArrayVec::<_, { URING_ENTRIES as usize }>::new();
-
-        for entry in
-            unsafe { uring.completion_shared() }.take(usize::try_from(URING_ENTRIES / 2).unwrap())
         {
+            let want = uring.submission().is_empty().into();
+            trace!("Waiting for at least {want} events.");
+            match uring.submit_and_wait(want) {
+                Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                r => r,
+            }
+            .map_io_err(|| "Failed to wait for io_uring.")?;
+        }
+
+        let mut completions = unsafe { uring.completion_shared() };
+        let mut submissions = unsafe { uring.submission_shared() };
+        loop {
+            if submissions.capacity() - submissions.len() < 2 {
+                break;
+            }
+            let Some(entry) = completions.next() else {
+                break;
+            };
+
             let result = u32::try_from(entry.result())
                 .map_err(|_| io::Error::from_raw_os_error(-entry.result()));
             match entry.user_data() & REQ_TYPE_MASK {
@@ -276,10 +294,10 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     );
 
                     if !more(entry.flags()) {
-                        pending_entries.push(accept.clone());
+                        unsafe { submissions.push(&accept) }?;
                     }
-                    pending_entries
-                        .push(recvmsg(client).user_data(REQ_TYPE_RECV | store_fd(client)));
+                    let recv = recvmsg(client).user_data(REQ_TYPE_RECV | store_fd(client));
+                    unsafe { submissions.push(&recv) }?;
                 }
                 REQ_TYPE_RECV => 'recv: {
                     let fd = restore_fd(&entry);
@@ -296,7 +314,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         }
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
                             warn!("Client {fd} reset the connection.");
-                            pending_entries.push(close(fd));
+                            unsafe { submissions.push(&close(fd)) }?;
                             clients.set_disconnected(fd);
                             break 'recv;
                         }
@@ -304,12 +322,12 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     };
 
                     debug_assert!(buffer_select(entry.flags()).is_some());
-                    let mut submissions = client_buffers[usize::from(fd)]
+                    let mut buf_submissions = client_buffers[usize::from(fd)]
                         .as_mut()
                         .unwrap()
                         .submissions();
                     let mut buf = unsafe {
-                        submissions.get(entry.flags(), usize::try_from(entry.result()).unwrap())
+                        buf_submissions.get(entry.flags(), usize::try_from(entry.result()).unwrap())
                     };
                     let msg = RecvMsgOutMut::parse(&mut buf, &receive_hdr).map_err(|()| {
                         CliError::Internal {
@@ -328,17 +346,13 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     if msg.payload_data.is_empty() {
                         debug!("Client {fd} closed the connection.");
                         if !clients.is_closing(fd) {
-                            pending_entries.push(close(fd));
+                            unsafe { submissions.push(&close(fd)) }?;
                             clients.set_disconnected(fd);
                         }
                     } else {
                         if clients.is_closing(fd) {
                             debug!("Dropping spurious message for client {fd}.");
                             break 'recv;
-                        }
-
-                        if !more(entry.flags()) {
-                            pending_entries.push(recvmsg(fd).user_data(entry.user_data()));
                         }
 
                         let response = if clients.is_connected(fd) {
@@ -361,30 +375,34 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             Some(resp)
                         };
                         if let Some((token, msghdr)) = response {
-                            pending_entries.push(
-                                SendMsg::new(Fixed(fd.into()), msghdr)
-                                    .build()
-                                    .flags(if clients.is_connected(fd) {
-                                        Flags::empty()
-                                    } else {
-                                        Flags::IO_LINK
-                                    })
-                                    .user_data(
-                                        REQ_TYPE_SENDMSG
-                                            | (u64::from(token) << REQ_TYPE_SHIFT)
-                                            | (u64::from(buf.into_index())
-                                                << (REQ_TYPE_SHIFT + Token::BITS))
-                                            | store_fd(fd),
-                                    ),
-                            );
+                            let send = SendMsg::new(Fixed(fd.into()), msghdr)
+                                .build()
+                                .flags(if clients.is_connected(fd) {
+                                    Flags::empty()
+                                } else {
+                                    Flags::IO_LINK
+                                })
+                                .user_data(
+                                    REQ_TYPE_SENDMSG
+                                        | (u64::from(token) << REQ_TYPE_SHIFT)
+                                        | (u64::from(buf.into_index())
+                                            << (REQ_TYPE_SHIFT + Token::BITS))
+                                        | store_fd(fd),
+                                );
+                            unsafe { submissions.push(&send) }?;
                         }
 
-                        if !clients.is_connected(fd) {
-                            pending_entries.push(close(fd));
+                        if clients.is_connected(fd) {
+                            if !more(entry.flags()) {
+                                let recv = recvmsg(fd).user_data(entry.user_data());
+                                unsafe { submissions.push(&recv) }?;
+                            }
+                        } else {
+                            unsafe { submissions.push(&close(fd)) }?;
                         }
                     }
                 }
-                REQ_TYPE_SENDMSG => {
+                REQ_TYPE_SENDMSG => 'send: {
                     let fd = restore_fd(&entry);
                     debug!("Handling sendmsg completion for client {fd}.");
 
@@ -413,25 +431,31 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                     "Client {fd} closed the connection before consuming all \
                                      responses."
                                 );
-                                pending_entries.push(close(fd));
+                                unsafe { submissions.push(&close(fd)) }?;
                                 clients.set_disconnected(fd);
                             }
+                            break 'send;
                         }
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
                             if !clients.is_closing(fd) {
                                 warn!("Client {fd} forcefully disconnected.");
-                                pending_entries.push(close(fd));
+                                unsafe { submissions.push(&close(fd)) }?;
                                 clients.set_disconnected(fd);
                             }
+                            break 'send;
                         }
                         r => {
                             r.map_io_err(|| format!("Failed to send response to client {fd}."))?;
                         }
                     };
 
-                    if !clients.is_closing(fd) && clients.take_pending_recv(fd) {
+                    if !clients.is_closing(fd)
+                        && clients.is_connected(fd)
+                        && clients.take_pending_recv(fd)
+                    {
                         info!("Restoring client {fd}'s connection.");
-                        pending_entries.push(recvmsg(fd).user_data(REQ_TYPE_RECV | store_fd(fd)));
+                        let recv = recvmsg(fd).user_data(REQ_TYPE_RECV | store_fd(fd));
+                        unsafe { submissions.push(&recv) }?;
                     }
                 }
                 REQ_TYPE_CLOSE => {
@@ -446,10 +470,9 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             .map_io_err(|| "Failed to unregister buffer ring with io_uring.")?;
                     }
 
-                    // TODO pending closes: https://github.com/axboe/liburing/issues/1193
                     if pending_accept && clients.pending_closes == 0 {
                         info!("Restoring ability to accept new clients.");
-                        pending_entries.push(accept.clone());
+                        unsafe { submissions.push(&accept) }?;
                         pending_accept = false;
                     }
                 }
@@ -469,7 +492,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     let result = result.map_io_err(|| "Failed to poll for low memory events.")?;
 
                     if !more(entry.flags()) {
-                        pending_entries.push(poll_low_mem.clone());
+                        unsafe { submissions.push(&poll_low_mem) }?;
                     }
 
                     if (result & u32::try_from(libc::POLLERR).unwrap()) != 0 {
@@ -485,19 +508,9 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         });
                     }
                 }
-                _ => {
-                    return Err(CliError::Internal {
-                        context: format!("Unknown request: {}", entry.user_data()).into(),
-                    });
-                }
+                _ => unreachable!(),
             }
         }
-
-        trace!("Queueing entries: {pending_entries:?}");
-        let mut submission = uring.submission();
-        unsafe { submission.push_multiple(&pending_entries) }.map_err(|_| CliError::Internal {
-            context: "Didn't allocate enough io_uring slots.".into(),
-        })?;
     }
     Ok(())
 }
