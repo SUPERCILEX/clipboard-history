@@ -639,19 +639,25 @@ impl AppWrapper<'_> {
 
         outer_block.render(entries_area, buf);
 
-        StatefulWidget::render(
-            List::new(active_entries!(entries, ui).iter().map(ui_entry_line))
-                .block(inner_block)
-                .highlight_style(
-                    Style::default()
-                        .add_modifier(Modifier::BOLD)
-                        .add_modifier(Modifier::REVERSED),
-                )
-                .highlight_spacing(HighlightSpacing::Always),
-            inner_area,
-            buf,
-            active_list_state!(entries, ui),
-        );
+        if active_entries!(entries, ui).is_empty() {
+            Line::raw("Nothing to see here…")
+                .italic()
+                .render(inner_area, buf);
+        } else {
+            StatefulWidget::render(
+                List::new(active_entries!(entries, ui).iter().map(ui_entry_line))
+                    .block(inner_block)
+                    .highlight_style(
+                        Style::default()
+                            .add_modifier(Modifier::BOLD)
+                            .add_modifier(Modifier::REVERSED),
+                    )
+                    .highlight_spacing(HighlightSpacing::Always),
+                inner_area,
+                buf,
+                active_list_state!(entries, ui),
+            );
+        }
     }
 
     fn render_selected_entry(&mut self, area: Rect, buf: &mut Buffer) {
