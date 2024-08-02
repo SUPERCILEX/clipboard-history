@@ -152,9 +152,11 @@ enum State {
     },
     PendingSelection {
         mime_atom: Atom,
+        mime_type: MimeType,
     },
     PendingIncr {
         mime_atom: Atom,
+        mime_type: MimeType,
         file: Option<File>,
         written: u64,
     },
@@ -614,6 +616,13 @@ fn handle_x11_event(
                     };
 
                     let mut finder = BestMimeTypeFinder::default();
+                    if !allow_plain_text {
+                        debug!(
+                            "Blocking plain text as it returned a blank or empty result on the \
+                             fast path."
+                        );
+                        finder.block_text();
+                    }
                     loop {
                         let atom = value.next();
                         if pending_atom_cookies.is_full() || atom.is_none() {
@@ -622,12 +631,12 @@ fn handle_x11_event(
                                 let name = reply.name.to_string_lossy();
                                 debug!("Target {name:?} available on atom {atom}.");
 
-                                if name.len() > MimeType::new_const().capacity() {
+                                let Ok(mime) = MimeType::from(&name) else {
                                     warn!("Target {name:?} name too long, ignoring.");
                                     continue;
-                                }
+                                };
 
-                                finder.add_mime(&name, atom);
+                                finder.add_mime(&mime, atom);
                             }
                         }
                         let Some(atom) = atom else {
@@ -636,28 +645,16 @@ fn handle_x11_event(
                         pending_atom_cookies.push((conn.get_atom_name(atom)?, atom));
                     }
 
-                    if !allow_plain_text {
-                        debug!(
-                            "Blocking plain text as it returned a blank or empty result on the \
-                             fast path."
-                        );
-                        finder.kill_text();
-                    }
-                    let target = finder.best();
-                    let Some(target) = target else {
+                    let Some((target, target_mime)) = finder.best() else {
                         warn!("No usable targets returned, dropping selection.");
                         return Ok(());
                     };
-                    if cfg!(debug_assertions) {
-                        info!(
-                            "Choosing target {:?} on atom {target}.",
-                            conn.get_atom_name(target)?.reply()?.name.to_string_lossy()
-                        );
-                    } else {
-                        info!("Choosing atom {:?}.", target);
-                    }
+                    info!("Choosing target {target_mime:?} on atom {target}.",);
 
-                    *state = State::PendingSelection { mime_atom: target };
+                    *state = State::PendingSelection {
+                        mime_atom: target,
+                        mime_type: target_mime,
+                    };
                     conn.convert_selection(
                         event.window,
                         selection,
@@ -668,11 +665,14 @@ fn handle_x11_event(
                     .check()?;
                 }
                 s @ (State::FastPathPendingSelection { .. } | State::PendingSelection { .. }) => {
-                    let (mime_atom, fast_path) = match s {
+                    let (mime_atom, mime_type, fast_path) = match s {
                         State::FastPathPendingSelection { selection } => {
-                            (utf8_string_atom, Some(selection))
+                            (utf8_string_atom, MimeType::new_const(), Some(selection))
                         }
-                        State::PendingSelection { mime_atom } => (mime_atom, None),
+                        State::PendingSelection {
+                            mime_atom,
+                            mime_type,
+                        } => (mime_atom, mime_type, None),
                         _ => unreachable!(),
                     };
 
@@ -681,6 +681,7 @@ fn handle_x11_event(
                         debug!("Waiting for INCR transfer.");
                         *state = State::PendingIncr {
                             mime_atom,
+                            mime_type,
                             file: None,
                             written: 0,
                         };
@@ -727,16 +728,12 @@ fn handle_x11_event(
                             }
                         }
 
-                        let mime_type = conn.get_atom_name(mime_atom)?;
-                        conn.flush()?;
                         let file = File::from(
                             memfd_create(c"ringboard_x11_selection", MemfdFlags::empty())
                                 .map_io_err(|| "Failed to create selection transfer temp file.")?,
                         );
                         file.write_all_at(&property.value, 0)
                             .map_io_err(|| "Failed to write data to temp file.")?;
-                        let mime_type =
-                            MimeType::from(&mime_type.reply()?.name.to_string_lossy()).unwrap();
 
                         let AddResponse::Success { id } = AddRequest::response_add_unchecked(
                             &server,
@@ -750,6 +747,7 @@ fn handle_x11_event(
                 }
                 State::PendingIncr {
                     mime_atom,
+                    mime_type,
                     file,
                     written,
                 } => {
@@ -781,15 +779,6 @@ fn handle_x11_event(
                             }
                         }
 
-                        let mime_type = MimeType::from(
-                            &conn
-                                .get_atom_name(mime_atom)?
-                                .reply()?
-                                .name
-                                .to_string_lossy(),
-                        )
-                        .unwrap();
-
                         let AddResponse::Success { id } = AddRequest::response_add_unchecked(
                             &server,
                             RingKind::Main,
@@ -804,6 +793,7 @@ fn handle_x11_event(
                             .map_io_err(|| "Failed to write data to temp file.")?;
                         *state = State::PendingIncr {
                             mime_atom,
+                            mime_type,
                             file: Some(file),
                             written: written + u64::try_from(property.value.len()).unwrap(),
                         }
