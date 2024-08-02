@@ -474,7 +474,7 @@ fn handle_x11_event(
             };
 
             if target == targets_atom {
-                info!("Responding to paste request with TARGETS.");
+                debug!("Responding to paste request with TARGETS.");
                 conn.change_property32(
                     PropMode::REPLACE,
                     requestor,
@@ -629,7 +629,7 @@ fn handle_x11_event(
                             for (cookie, atom) in pending_atom_cookies.drain(..) {
                                 let reply = cookie.reply()?;
                                 let name = reply.name.to_string_lossy();
-                                debug!("Target {name:?} available on atom {atom}.");
+                                trace!("Target {name:?} available on atom {atom}.");
 
                                 let Ok(mime) = MimeType::from(&name) else {
                                     warn!("Target {name:?} name too long, ignoring.");
