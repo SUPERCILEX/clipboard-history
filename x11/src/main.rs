@@ -218,6 +218,12 @@ atom_manager! {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+struct PasteAtom {
+    atom: Atom,
+    is_text: bool,
+}
+
 fn run() -> Result<(), CliError> {
     info!(
         "Starting Ringboard X11 clipboard listener v{}.",
@@ -378,7 +384,7 @@ fn handle_x11_event(
     server: impl AsFd,
     deduplicator: &mut CopyDeduplication,
     paste_window: Window,
-    last_paste: &mut Option<(Mmap, Atom)>,
+    last_paste: &mut Option<(Mmap, PasteAtom)>,
 ) -> Result<(), CliError> {
     let &Atoms {
         _NET_WM_NAME: window_name_atom,
@@ -425,28 +431,35 @@ fn handle_x11_event(
                 .check()?;
                 Ok(())
             };
-            let Some((ref paste_file, paste_mime)) = *last_paste else {
+
+            if selection != clipboard_atom {
+                debug!("Unsupported selection type.");
+                return reply(x11rb::NONE);
+            }
+            let Some((ref paste_file, PasteAtom { atom, is_text })) = *last_paste else {
                 debug!("Nothing to paste.");
                 return reply(x11rb::NONE);
             };
 
-            let default_atoms_ = [
-                targets_atom,
-                utf8_string_atom,
-                atoms.TEXT,
-                atoms.STRING,
-                atoms.text_plain,
-                atoms.text_plain_utf8,
-                atoms.text_plain_us_ascii,
-                atoms.text_plain_unicode,
-            ];
-            let known_atoms_ = [targets_atom, paste_mime];
-            let supported_atoms = if paste_mime == x11rb::NONE {
-                default_atoms_.as_slice()
-            } else {
-                known_atoms_.as_slice()
-            };
-            if selection != clipboard_atom || !supported_atoms.contains(&target) {
+            let mut supported_atoms = ArrayVec::<_, 9>::new_const();
+            supported_atoms.push(targets_atom);
+            if atom != x11rb::NONE {
+                supported_atoms.push(atom);
+            }
+            if is_text {
+                supported_atoms
+                    .try_extend_from_slice(&[
+                        utf8_string_atom,
+                        atoms.TEXT,
+                        atoms.STRING,
+                        atoms.text_plain,
+                        atoms.text_plain_utf8,
+                        atoms.text_plain_us_ascii,
+                        atoms.text_plain_unicode,
+                    ])
+                    .unwrap();
+            }
+            if !supported_atoms.contains(&target) {
                 debug!("Unsupported target.");
                 return reply(x11rb::NONE);
             }
@@ -465,7 +478,7 @@ fn handle_x11_event(
                     requestor,
                     property,
                     AtomEnum::ATOM,
-                    supported_atoms,
+                    &supported_atoms,
                 )?;
                 reply(property)?;
                 return Ok(());
@@ -821,7 +834,7 @@ fn handle_paste_event(
     paste_window: Window,
     paste_socket: impl AsFd,
     ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
-    last_paste: &mut Option<(Mmap, Atom)>,
+    last_paste: &mut Option<(Mmap, PasteAtom)>,
 ) -> Result<(), CliError> {
     let mut mime = MimeType::new_const();
     let mut ancillary = RecvAncillaryBuffer::new(ancillary_buf);
@@ -859,9 +872,15 @@ fn handle_paste_event(
                     if let Some(a) = mime_atom {
                         a
                     } else if let Some(r) = mime_atom_req.take() {
-                        *mime_atom.insert(r.reply()?.atom)
+                        *mime_atom.insert(PasteAtom {
+                            atom: r.reply()?.atom,
+                            is_text: mime.starts_with("text/"),
+                        })
                     } else {
-                        x11rb::NONE
+                        PasteAtom {
+                            atom: x11rb::NONE,
+                            is_text: true,
+                        }
                     },
                 ));
             }
