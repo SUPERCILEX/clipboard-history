@@ -39,6 +39,7 @@ use x11rb::{
     },
     rust_connection::RustConnection,
     wrapper::ConnectionExt as WrapperConnExt,
+    x11_utils::X11Error,
 };
 
 use crate::{
@@ -60,11 +61,36 @@ enum CliError {
     #[error("X11 request failed.")]
     X11Connection(#[from] ConnectionError),
     #[error("X11 reply failed.")]
-    X11Reply(#[from] ReplyError),
+    X11Error(X11Error),
     #[error("Failed to create X11 ID.")]
-    X11Id(#[from] ReplyOrIdError),
+    X11IdsExhausted,
     #[error("Unsupported X11: XFixes extension not available.")]
     X11NoXfixes,
+}
+
+impl From<X11Error> for CliError {
+    fn from(value: X11Error) -> Self {
+        Self::X11Error(value)
+    }
+}
+
+impl From<ReplyError> for CliError {
+    fn from(value: ReplyError) -> Self {
+        match value {
+            ReplyError::ConnectionError(e) => e.into(),
+            ReplyError::X11Error(e) => e.into(),
+        }
+    }
+}
+
+impl From<ReplyOrIdError> for CliError {
+    fn from(value: ReplyOrIdError) -> Self {
+        match value {
+            ReplyOrIdError::IdsExhausted => Self::X11IdsExhausted,
+            ReplyOrIdError::ConnectionError(e) => e.into(),
+            ReplyOrIdError::X11Error(e) => e.into(),
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -93,9 +119,8 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
         CliError::Sdk(e) => e.into_report(wrapper),
         CliError::X11Connect(e) => Report::new(e).change_context(wrapper),
         CliError::X11Connection(e) => Report::new(e).change_context(wrapper),
-        CliError::X11Reply(e) => Report::new(e).change_context(wrapper),
-        CliError::X11Id(e) => Report::new(e).change_context(wrapper),
-        CliError::X11NoXfixes => Report::new(wrapper),
+        CliError::X11Error(e) => Report::new(wrapper).attach_printable(format!("{e:?}")),
+        CliError::X11IdsExhausted | CliError::X11NoXfixes => Report::new(wrapper),
     }
 }
 
@@ -216,16 +241,14 @@ fn run() -> Result<(), CliError> {
             WindowClass::INPUT_ONLY,
             x11rb::COPY_FROM_PARENT,
             &aux,
-        )?
-        .check()?;
+        )?;
         conn.change_property8(
             PropMode::REPLACE,
             window,
             window_name_atom,
             utf8_string_atom,
             title,
-        )?
-        .check()?;
+        )?;
         Ok(window)
     };
     let mut transfer_windows = ArrayVec::<_, MAX_CONCURRENT_TRANSFERS>::new_const();
@@ -247,8 +270,7 @@ fn run() -> Result<(), CliError> {
         root,
         clipboard_atom,
         SelectionEventMask::SET_SELECTION_OWNER,
-    )?
-    .check()?;
+    )?;
     debug!("Selection owner listener registered.");
 
     let mut allocator = TransferAtomAllocator {
@@ -260,6 +282,7 @@ fn run() -> Result<(), CliError> {
     let mut deduplicator = CopyDeduplication::new()?;
 
     info!("Starting event loop.");
+    conn.flush()?;
     loop {
         trace!("Waiting for event.");
         handle_x11_event(
@@ -353,6 +376,10 @@ fn handle_x11_event(
             }
         }
         Event::PropertyNotify(event) => {
+            if event.atom == window_name_atom {
+                trace!("Ignoring window name property change.");
+                return Ok(());
+            }
             if event.state != Property::NEW_VALUE {
                 trace!(
                     "Ignoring uninteresting property state change: {:?}.",
@@ -368,6 +395,7 @@ fn handle_x11_event(
                 0,
                 u32::MAX,
             )?;
+            conn.flush()?;
             let Some((state, transfer_atom)) = allocator.get(event.window) else {
                 warn!(
                     "Ignoring property notify to unknown requester {}.",
@@ -507,6 +535,7 @@ fn handle_x11_event(
                         }
 
                         let mime_type = conn.get_atom_name(mime_atom)?;
+                        conn.flush()?;
                         let file = File::from(
                             memfd_create(c"ringboard_x11_selection", MemfdFlags::empty())
                                 .map_io_err(|| "Failed to create selection transfer temp file.")?,
@@ -588,21 +617,17 @@ fn handle_x11_event(
                     }
                 }
                 State::Free => {
-                    if event.atom != window_name_atom {
-                        error!(
-                            "Received property notification for free atom {}.",
-                            conn.get_atom_name(event.atom)?
-                                .reply()?
-                                .name
-                                .to_string_lossy()
-                        );
-                    }
+                    error!(
+                        "Received property notification for free atom {}.",
+                        conn.get_atom_name(event.atom)?
+                            .reply()?
+                            .name
+                            .to_string_lossy()
+                    );
                 }
             }
         }
-        Event::Error(e) => {
-            error!("Unexpected X11 event error: {e:?}");
-        }
+        Event::Error(e) => return Err(e.into()),
         event => {
             debug!("Ignoring unknown X11 event: {event:?}");
         }
