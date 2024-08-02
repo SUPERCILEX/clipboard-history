@@ -87,6 +87,8 @@ struct UiEntries {
 
 #[derive(Default)]
 struct UiState {
+    last_error: Option<CommandError>,
+
     details_requested: Option<u64>,
     detailed_entry: Option<Result<DetailedEntry, CoreError>>,
     detail_scroll: u16,
@@ -159,7 +161,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
     })
 }
 
-fn run() -> Result<(), CommandError> {
+fn run() -> Result<(), CoreError> {
     let stdout = ManuallyDrop::new(unsafe { File::from_raw_fd(raw_stdout()) });
     let mut stdout = BufWriter::new(&*stdout);
 
@@ -169,16 +171,15 @@ fn run() -> Result<(), CommandError> {
     r
 }
 
-fn init_terminal(mut stdout: impl io::Write) -> Result<Terminal<impl Backend>, CommandError> {
+fn init_terminal(mut stdout: impl io::Write) -> Result<Terminal<impl Backend>, CoreError> {
     enable_raw_mode().map_io_err(|| "Failed to enable raw mode.")?;
     stdout
         .execute(EnterAlternateScreen)
         .map_io_err(|| "Failed to enter alternate screen.")?;
-    Ok(Terminal::new(CrosstermBackend::new(stdout))
-        .map_io_err(|| "Failed to initialize terminal.")?)
+    Terminal::new(CrosstermBackend::new(stdout)).map_io_err(|| "Failed to initialize terminal.")
 }
 
-fn restore_terminal(mut stdout: impl io::Write) -> Result<(), CommandError> {
+fn restore_terminal(mut stdout: impl io::Write) -> Result<(), CoreError> {
     disable_raw_mode().map_io_err(|| "Failed to disable raw mode.")?;
     stdout
         .execute(LeaveAlternateScreen)
@@ -214,7 +215,7 @@ impl App {
 }
 
 impl App {
-    fn run(mut self, mut terminal: Terminal<impl Backend>) -> Result<(), CommandError> {
+    fn run(mut self, mut terminal: Terminal<impl Backend>) -> Result<(), CoreError> {
         let Self {
             requests,
             responses,
@@ -262,7 +263,7 @@ fn handle_message(
     pending_favorite_change: &mut Option<u64>,
     picker: &mut Picker,
     requests: &Sender<Command>,
-) -> Result<bool, CommandError> {
+) -> Result<bool, CoreError> {
     let UiEntries {
         loaded_entries,
         search_results,
@@ -273,11 +274,14 @@ fn handle_message(
         details_requested,
         detailed_entry,
         pending_search_token,
+        last_error,
         ..
     } = ui;
+
+    last_error.take();
     match message {
         Message::FatalDbOpen(e) => return Err(e)?,
-        Message::Error(e) => return Err(e),
+        Message::Error(e) => *last_error = Some(e),
         Message::LoadedFirstPage {
             entries: new_entries,
             default_focused_id,
@@ -564,15 +568,18 @@ impl AppWrapper<'_> {
 
 impl Widget for &mut AppWrapper<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let State { entries: _, ui } = &self.state;
+        let has_error = ui.last_error.is_some();
+
         let [header_area, main_area, footer_area] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Min(0),
-            Constraint::Length(if self.state.ui.show_help { 3 } else { 0 }),
+            Constraint::Length(if ui.show_help { 3 } else { 0 }),
         ])
         .areas(area);
 
         let [entry_list_area, _padding, selected_entry_area] =
-            if self.state.ui.details_requested.is_none() {
+            if ui.details_requested.is_none() && !has_error {
                 Layout::vertical([
                     Constraint::Min(0),
                     Constraint::Length(0),
@@ -595,8 +602,12 @@ impl Widget for &mut AppWrapper<'_> {
 
         AppWrapper::render_title(header_area, buf);
         self.render_entries(entry_list_area, buf);
-        self.render_selected_entry(selected_entry_area, buf);
-        self.render_footer(footer_area, buf);
+        if has_error {
+            self.render_error(selected_entry_area, buf);
+        } else {
+            self.render_selected_entry(selected_entry_area, buf);
+        }
+        AppWrapper::render_footer(footer_area, buf);
     }
 }
 
@@ -673,7 +684,7 @@ impl AppWrapper<'_> {
             state: State { entries, ui },
             requests,
         } = self;
-        if ui.details_requested.is_none() {
+        if area.is_empty() {
             return;
         }
         let Some(UiEntry { entry, cache }) = selected_entry!(entries, ui) else {
@@ -758,8 +769,32 @@ impl AppWrapper<'_> {
             .render(area, buf);
     }
 
-    fn render_footer(&self, area: Rect, buf: &mut Buffer) {
-        if !self.state.ui.show_help {
+    fn render_error(&self, area: Rect, buf: &mut Buffer) {
+        if area.is_empty() {
+            return;
+        }
+        let Some(error) = &self.state.ui.last_error else {
+            return;
+        };
+
+        let outer_block = Block::new()
+            .borders(Borders::TOP)
+            .border_style(Style::new().bold())
+            .title_alignment(Alignment::Center)
+            .title(format!("Error: {error}"));
+        let inner_block = Block::new().borders(Borders::NONE);
+        let inner_area = outer_block.inner(area);
+
+        outer_block.render(area, buf);
+
+        Paragraph::new(format!("{error:#?}"))
+            .wrap(Wrap { trim: false })
+            .block(inner_block)
+            .render(inner_area, buf);
+    }
+
+    fn render_footer(area: Rect, buf: &mut Buffer) {
+        if area.is_empty() {
             return;
         }
 

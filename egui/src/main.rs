@@ -224,6 +224,7 @@ fn handle_message(
     }: &mut State,
     ctx: &egui::Context,
 ) {
+    last_error.take();
     match message {
         Message::FatalDbOpen(e) => *fatal_error = Some(e.into()),
         Message::Error(e) => *last_error = Some(e),
