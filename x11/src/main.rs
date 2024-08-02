@@ -2,8 +2,10 @@
 
 use std::{
     fs::File,
+    io::IoSliceMut,
     mem,
     os::{fd::AsFd, unix::fs::FileExt},
+    slice,
 };
 
 use arrayvec::ArrayVec;
@@ -12,14 +14,20 @@ use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
     api::{connect_to_server, AddRequest, MoveToFrontRequest},
     core::{
-        dirs::socket_file,
-        protocol::{AddResponse, MimeType, MoveToFrontResponse, RingKind},
+        dirs::{paste_socket_file, socket_file},
+        init_unix_server,
+        protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
+        ring::Mmap,
         Error, IoErr,
     },
 };
 use rustix::{
+    event::epoll,
     fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
-    net::SocketAddrUnix,
+    net::{
+        recvmsg, RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, SocketAddrUnix,
+        SocketType,
+    },
     path::Arg,
 };
 use thiserror::Error;
@@ -33,7 +41,8 @@ use x11rb::{
         xfixes::{select_selection_input, SelectionEventMask},
         xproto::{
             Atom, AtomEnum, ConnectionExt, CreateWindowAux, EventMask, GetAtomNameReply,
-            GetPropertyType, PropMode, Property, Window, WindowClass,
+            GetPropertyType, PropMode, Property, SelectionNotifyEvent, SelectionRequestEvent,
+            Window, WindowClass, SELECTION_NOTIFY_EVENT,
         },
         Event,
     },
@@ -90,6 +99,12 @@ impl From<ReplyOrIdError> for CliError {
             ReplyOrIdError::ConnectionError(e) => e.into(),
             ReplyOrIdError::X11Error(e) => e.into(),
         }
+    }
+}
+
+impl From<IdNotFoundError> for CliError {
+    fn from(value: IdNotFoundError) -> Self {
+        ringboard_sdk::ClientError::from(value).into()
     }
 }
 
@@ -193,6 +208,13 @@ atom_manager! {
         CLIPBOARD,
         TARGETS,
         INCR,
+
+        TEXT,
+        STRING,
+        text_plain: b"text/plain",
+        text_plain_utf8: b"text/plain;charset=UTF-8",
+        text_plain_us_ascii: b"text/plain;charset=US-ASCII",
+        text_plain_unicode: b"text/plain;charset=unicode",
     }
 }
 
@@ -227,7 +249,7 @@ fn run() -> Result<(), CliError> {
     } = Atoms::new(&conn)?.reply()?;
     debug!("Atom internment complete.");
 
-    let create_window = |title: &[u8], aux| -> Result<_, CliError> {
+    let create_window = |title: &[u8], aux, kind| -> Result<_, CliError> {
         let window = conn.generate_id()?;
         conn.create_window(
             x11rb::COPY_DEPTH_FROM_PARENT,
@@ -238,7 +260,7 @@ fn run() -> Result<(), CliError> {
             1,
             1,
             0,
-            WindowClass::INPUT_ONLY,
+            kind,
             x11rb::COPY_FROM_PARENT,
             &aux,
         )?;
@@ -256,8 +278,14 @@ fn run() -> Result<(), CliError> {
         transfer_windows.push(create_window(
             format!("Ringboard data transfer {}", i + 1).as_bytes(),
             CreateWindowAux::default().event_mask(EventMask::PROPERTY_CHANGE),
+            WindowClass::INPUT_ONLY,
         )?);
     }
+    let paste_window = create_window(
+        b"Ringboard paste",
+        CreateWindowAux::default(),
+        WindowClass::INPUT_OUTPUT,
+    )?;
     debug!("Created utility windows.");
 
     conn.extension_information(xfixes::X11_EXTENSION_NAME)?
@@ -273,6 +301,30 @@ fn run() -> Result<(), CliError> {
     )?;
     debug!("Selection owner listener registered.");
 
+    let paste_socket = init_unix_server(paste_socket_file(), SocketType::DGRAM)?;
+    debug!("Initialized paste server");
+
+    let mut ancillary_buf = [0; rustix::cmsg_space!(ScmRights(1))];
+    let mut last_paste = None;
+
+    let epoll =
+        epoll::create(epoll::CreateFlags::empty()).map_io_err(|| "Failed to create epoll.")?;
+    epoll::add(
+        &epoll,
+        conn.stream(),
+        epoll::EventData::new_u64(0),
+        epoll::EventFlags::IN,
+    )
+    .map_io_err(|| "Failed to register X11 server with epoll.")?;
+    epoll::add(
+        &epoll,
+        &paste_socket,
+        epoll::EventData::new_u64(1),
+        epoll::EventFlags::IN,
+    )
+    .map_io_err(|| "Failed to register paste server with epoll.")?;
+    let mut epoll_events = epoll::EventVec::with_capacity(2);
+
     let mut allocator = TransferAtomAllocator {
         windows: transfer_windows.into_inner().unwrap(),
         states: [const { State::Free }; MAX_CONCURRENT_TRANSFERS],
@@ -284,15 +336,37 @@ fn run() -> Result<(), CliError> {
     info!("Starting event loop.");
     conn.flush()?;
     loop {
+        while let Some(event) = conn.poll_for_event()? {
+            handle_x11_event(
+                event,
+                &conn,
+                &atoms,
+                &mut allocator,
+                &server,
+                &mut deduplicator,
+                paste_window,
+                &mut last_paste,
+            )?;
+        }
+
         trace!("Waiting for event.");
-        handle_x11_event(
-            conn.wait_for_event()?,
-            &conn,
-            &atoms,
-            &mut allocator,
-            &server,
-            &mut deduplicator,
-        )?;
+        epoll::wait(&epoll, &mut epoll_events, -1)
+            .map_io_err(|| "Failed to wait for epoll events.")?;
+
+        for epoll::Event { flags: _, data } in &epoll_events {
+            match data.u64() {
+                0 => continue,
+                1 => handle_paste_event(
+                    &conn,
+                    clipboard_atom,
+                    paste_window,
+                    &paste_socket,
+                    &mut ancillary_buf,
+                    &mut last_paste,
+                )?,
+                _ => unreachable!(),
+            }
+        }
     }
 }
 
@@ -303,10 +377,13 @@ fn handle_x11_event(
     allocator: &mut TransferAtomAllocator,
     server: impl AsFd,
     deduplicator: &mut CopyDeduplication,
+    paste_window: Window,
+    last_paste: &mut Option<(Mmap, Atom)>,
 ) -> Result<(), CliError> {
     let &Atoms {
         _NET_WM_NAME: window_name_atom,
         UTF8_STRING: utf8_string_atom,
+        CLIPBOARD: clipboard_atom,
         TARGETS: targets_atom,
         INCR: incr_atom,
         ..
@@ -314,7 +391,110 @@ fn handle_x11_event(
     let mut pending_atom_cookies = ArrayVec::<(Cookie<_, GetAtomNameReply>, _), 8>::new_const();
 
     match event {
+        Event::SelectionRequest(SelectionRequestEvent {
+            response_type: _,
+            sequence,
+            time,
+            owner: _,
+            requestor,
+            selection,
+            target,
+            property,
+        }) => {
+            if cfg!(debug_assertions) {
+                debug!(
+                    "Paste request received for target {}",
+                    conn.get_atom_name(target)?.reply()?.name.to_string_lossy()
+                );
+            }
+            let reply = |property| {
+                conn.send_event(
+                    false,
+                    requestor,
+                    EventMask::NO_EVENT,
+                    SelectionNotifyEvent {
+                        response_type: SELECTION_NOTIFY_EVENT,
+                        sequence,
+                        time,
+                        requestor,
+                        selection,
+                        target,
+                        property,
+                    },
+                )?
+                .check()?;
+                Ok(())
+            };
+            let Some((ref paste_file, paste_mime)) = *last_paste else {
+                debug!("Nothing to paste.");
+                return reply(x11rb::NONE);
+            };
+
+            let default_atoms_ = [
+                targets_atom,
+                utf8_string_atom,
+                atoms.TEXT,
+                atoms.STRING,
+                atoms.text_plain,
+                atoms.text_plain_utf8,
+                atoms.text_plain_us_ascii,
+                atoms.text_plain_unicode,
+            ];
+            let known_atoms_ = [targets_atom, paste_mime];
+            let supported_atoms = if paste_mime == x11rb::NONE {
+                default_atoms_.as_slice()
+            } else {
+                known_atoms_.as_slice()
+            };
+            if selection != clipboard_atom || !supported_atoms.contains(&target) {
+                debug!("Unsupported target.");
+                return reply(x11rb::NONE);
+            }
+
+            let property = if property == x11rb::NONE {
+                debug!("Obsolete client detected.");
+                target
+            } else {
+                property
+            };
+
+            if target == targets_atom {
+                info!("Responding to paste request with TARGETS.");
+                conn.change_property32(
+                    PropMode::REPLACE,
+                    requestor,
+                    property,
+                    AtomEnum::ATOM,
+                    supported_atoms,
+                )?;
+                reply(property)?;
+                return Ok(());
+            }
+
+            if paste_file.len() > (1 << 20) {
+                debug!("Starting paste request INCR transfer.");
+                // TODO
+            } else {
+                conn.change_property8(PropMode::REPLACE, requestor, property, target, paste_file)?;
+                reply(property)?;
+                info!("Responded to paste request with small selection.");
+            }
+        }
+        Event::SelectionNotify(event) if event.requestor == paste_window => {
+            error!("Trying to paste into ourselves!");
+        }
+        Event::SelectionClear(event) => {
+            if event.owner != paste_window && last_paste.take().is_some() {
+                info!("Lost selection ownership.");
+            }
+        }
+
         Event::XfixesSelectionNotify(event) => {
+            if event.owner == paste_window {
+                debug!("Ignoring selection notification from ourselves.");
+                return Ok(());
+            }
+
             info!("Selection notification received.");
             let (state, transfer_window, transfer_atom) = allocator.alloc();
             *state = State::FastPathPendingSelection {
@@ -632,5 +812,64 @@ fn handle_x11_event(
             debug!("Ignoring unknown X11 event: {event:?}");
         }
     }
+    Ok(())
+}
+
+fn handle_paste_event(
+    conn: &RustConnection,
+    clipboard_atom: Atom,
+    paste_window: Window,
+    paste_socket: impl AsFd,
+    ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
+    last_paste: &mut Option<(Mmap, Atom)>,
+) -> Result<(), CliError> {
+    let mut mime = MimeType::new_const();
+    let mut ancillary = RecvAncillaryBuffer::new(ancillary_buf);
+    let msg = recvmsg(
+        &paste_socket,
+        &mut [IoSliceMut::new(unsafe {
+            slice::from_raw_parts_mut(mime.as_mut_ptr(), mime.capacity())
+        })],
+        &mut ancillary,
+        RecvFlags::TRUNC,
+    )
+    .map_io_err(|| "Failed to recv client msg.")?;
+    debug_assert!(!msg.flags.contains(RecvFlags::TRUNC));
+    debug_assert!(msg.bytes <= mime.capacity());
+    unsafe {
+        mime.set_len(msg.bytes.min(mime.capacity()));
+    }
+
+    let mut mime_atom_req = if mime.is_empty() {
+        None
+    } else {
+        let cookie = conn.intern_atom(false, mime.as_bytes())?;
+        conn.flush()?;
+        Some(cookie)
+    };
+    let mut mime_atom = None;
+
+    for msg in ancillary.drain() {
+        if let ScmRights(received_fds) = msg {
+            for fd in received_fds {
+                let data = Mmap::from(fd).map_io_err(|| "Failed to mmap paste file.")?;
+                info!("Received paste buffer of length {}.", data.len());
+                *last_paste = Some((
+                    data,
+                    if let Some(a) = mime_atom {
+                        a
+                    } else if let Some(r) = mime_atom_req.take() {
+                        *mime_atom.insert(r.reply()?.atom)
+                    } else {
+                        x11rb::NONE
+                    },
+                ));
+            }
+        }
+    }
+
+    debug!("Claiming selection ownership.");
+    conn.set_selection_owner(paste_window, clipboard_atom, x11rb::CURRENT_TIME)?
+        .check()?;
     Ok(())
 }
