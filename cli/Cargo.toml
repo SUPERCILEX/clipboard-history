@@ -14,7 +14,7 @@ arrayvec = { version = "0.7.4", features = ["serde"] }
 ask = { package = "ask-cli", version = "0.3.0" }
 base64 = "0.22.1"
 base64-serde = "0.7.0"
-clap = { version = "4.5.11", features = ["derive", "wrap_help"] }
+clap = { version = "4.5.13", features = ["derive", "wrap_help"] }
 clap-num = "1.1.1"
 dirs = "5.0.1"
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
@@ -29,11 +29,11 @@ ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path 
 rustc-hash = "2.0.0"
 rustix = { version = "0.38.34", features = ["stdio", "event"] }
 serde = { version = "1.0.204", features = ["derive"] }
-serde_json = "1.0.120"
+serde_json = "1.0.122"
 thiserror = "1.0.63"
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.7", default-features = false, features = ["clap"] }
+supercilex-tests = { version = "0.4.8", default-features = false, features = ["clap"] }
 
 [[bin]]
 name = "ringboard"

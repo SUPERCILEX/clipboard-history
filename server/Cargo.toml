@@ -22,7 +22,7 @@ ringboard-core = { package = "clipboard-history-core", version = "0", path = "..
 rustix = { version = "0.38.34", features = ["fs", "process", "net", "io_uring"] }
 sd-notify = { version = "0.4.2", optional = true }
 thiserror = "1.0.63"
-tracy-client = { version = "0.17.0", optional = true }
+tracy-client = { version = "0.17.1", optional = true }
 
 [features]
 default = ["human-logs"]
