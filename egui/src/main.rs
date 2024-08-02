@@ -222,6 +222,7 @@ fn handle_message(
                 skipped_first_focus: _,
             },
     }: &mut State,
+    ctx: &egui::Context,
 ) {
     match message {
         Message::FatalDbOpen(e) => *fatal_error = Some(e.into()),
@@ -249,13 +250,14 @@ fn handle_message(
         Message::FavoriteChange(_) => {}
         Message::LoadedImage { .. } => unreachable!(),
         Message::PendingSearch(token) => *pending_search_token = Some(token),
+        Message::Pasted => ctx.send_viewport_cmd(ViewportCommand::Close),
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         for message in self.responses.try_iter() {
-            handle_message(message, &mut self.state);
+            handle_message(message, &mut self.state, ctx);
         }
 
         TopBottomPanel::top("search_bar").show(ctx, |ui| {
@@ -417,6 +419,37 @@ fn main_ui(
             );
         });
     }
+    if ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter))
+        && let Some(id) = *active_highlighted_id!(state)
+    {
+        let _ = requests.send(Command::Paste(id));
+    }
+    if let Some(UiEntry { entry, cache: _ }) = ui
+        .input_mut(|input| {
+            (0..10).find(|i| {
+                input.consume_key(
+                    Modifiers::CTRL,
+                    match i {
+                        0 => Key::Num0,
+                        1 => Key::Num1,
+                        2 => Key::Num2,
+                        3 => Key::Num3,
+                        4 => Key::Num4,
+                        5 => Key::Num5,
+                        6 => Key::Num6,
+                        7 => Key::Num7,
+                        8 => Key::Num8,
+                        9 => Key::Num9,
+                        _ => unreachable!(),
+                    },
+                )
+            })
+        })
+        .and_then(|idx| active_entries(entries, state).get(idx))
+    {
+        let _ = requests.send(Command::Paste(entry.id()));
+    }
+
     if active_entries(entries, state).is_empty() {
         ui.centered_and_justified(|ui| {
             ui.label(RichText::new("Nothing to see here…").heading());
@@ -426,7 +459,6 @@ fn main_ui(
     let try_popup =
         ui.input(|input| input.key_pressed(Key::Space)) && ui.memory(|mem| mem.focused().is_none());
 
-    // TODO implement paste (by pressing enter or ctrl+N)
     ScrollArea::vertical().show(ui, |ui| {
         let mut prev_was_favorites = false;
         for entry in active_entries(entries, state) {
@@ -523,7 +555,7 @@ fn entry_ui(
         }
     };
     if response.clicked() {
-        // TODO
+        let _ = requests.send(Command::Paste(entry.entry.id()));
     }
 }
 

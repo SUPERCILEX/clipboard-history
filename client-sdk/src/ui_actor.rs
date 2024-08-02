@@ -3,7 +3,7 @@ use std::{
     cmp::min,
     collections::{BinaryHeap, HashMap},
     hash::BuildHasherDefault,
-    io::BufReader,
+    io::{BufReader, IoSlice},
     iter::once,
     mem,
     os::fd::{AsFd, OwnedFd},
@@ -13,8 +13,12 @@ use std::{
 
 use image::{DynamicImage, ImageError, ImageReader};
 use regex::bytes::Regex;
+use ringboard_core::dirs::paste_socket_file;
 use rustc_hash::FxHasher;
-use rustix::net::SocketAddrUnix;
+use rustix::net::{
+    sendmsg_unix, socket_with, AddressFamily, SendAncillaryBuffer, SendAncillaryMessage, SendFlags,
+    SocketAddrUnix, SocketFlags, SocketType,
+};
 use thiserror::Error;
 
 use crate::{
@@ -75,6 +79,7 @@ pub enum Command {
     Delete(u64),
     Search { query: Box<str>, regex: bool },
     LoadImage(u64),
+    Paste(u64),
 }
 
 #[derive(Debug)]
@@ -96,6 +101,7 @@ pub enum Message {
         id: u64,
         image: DynamicImage,
     },
+    Pasted,
 }
 
 #[derive(Debug)]
@@ -137,7 +143,33 @@ pub fn controller<E>(
         Ok(cache.insert(server))
     }
 
+    fn maybe_init_paste_server(
+        cache: &mut Option<(OwnedFd, SocketAddrUnix)>,
+    ) -> Result<(impl AsFd + '_, &SocketAddrUnix), ClientError> {
+        if cache.is_some() {
+            let (sock, addr) = cache.as_ref().unwrap();
+            return Ok((sock, addr));
+        }
+
+        let addr = {
+            let socket_file = paste_socket_file();
+            SocketAddrUnix::new(&socket_file)
+                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
+        };
+        let sock = socket_with(
+            AddressFamily::UNIX,
+            SocketType::DGRAM,
+            SocketFlags::empty(),
+            None,
+        )
+        .map_io_err(|| format!("Failed to create socket: {addr:?}"))?;
+
+        let (sock, addr) = cache.insert((sock, addr));
+        Ok((sock, addr))
+    }
+
     let mut server = None;
+    let mut paste_server = None;
     let (mut database, reader) = {
         let run = || {
             let mut dir = data_dir();
@@ -163,6 +195,7 @@ pub fn controller<E>(
         let result = handle_command(
             command,
             || maybe_init_server(&mut server),
+            || maybe_init_paste_server(&mut paste_server),
             &mut send,
             &mut database,
             &mut reader,
@@ -179,9 +212,10 @@ pub fn controller<E>(
     }
 }
 
-fn handle_command<Server: AsFd, E>(
+fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
     command: Command,
     server: impl FnOnce() -> Result<Server, ClientError>,
+    paste_server: impl FnOnce() -> Result<(PasteServer, &'a SocketAddrUnix), ClientError>,
     send: impl FnMut(Message) -> Result<(), E>,
     database: &mut DatabaseReader,
     reader_: &mut Option<EntryReader>,
@@ -300,6 +334,12 @@ fn handle_command<Server: AsFd, E>(
                     .map_io_err(|| "Failed to guess image format for entry {id}.")?
                     .decode()?,
             }))
+        }
+        Command::Paste(id) => {
+            let entry = unsafe { database.get(id)? };
+            let (paste_server, addr) = paste_server()?;
+            send_paste_buffer(paste_server, addr, entry, reader)?;
+            Ok(Some(Message::Pasted))
         }
     }
 }
@@ -471,4 +511,31 @@ fn do_search<E>(
         .collect();
     *search_result_buf = results;
     entries
+}
+
+fn send_paste_buffer(
+    server: impl AsFd,
+    addr: &SocketAddrUnix,
+    entry: Entry,
+    reader: &mut EntryReader,
+) -> ringboard_core::Result<()> {
+    let file = entry.to_file(reader)?;
+    let mime = file.mime_type()?;
+
+    let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
+    let mut ancillary = SendAncillaryBuffer::new(&mut space);
+    let fds = [file.as_fd()];
+    {
+        let success = ancillary.push(SendAncillaryMessage::ScmRights(&fds));
+        debug_assert!(success);
+    }
+    sendmsg_unix(
+        server,
+        addr,
+        &[IoSlice::new(mime.as_bytes())],
+        &mut ancillary,
+        SendFlags::empty(),
+    )
+    .map_io_err(|| "Failed to send paste entry to paste server.")?;
+    Ok(())
 }

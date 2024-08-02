@@ -232,19 +232,17 @@ impl App {
 
         let mut local_state = Option::default();
         for action in responses {
-            match action {
+            if match action {
                 Action::Controller(message) => {
-                    handle_message(message, state, &mut local_state, &mut picker, &requests)?;
+                    handle_message(message, state, &mut local_state, &mut picker, &requests)?
                 }
-                Action::User(event) => {
-                    if handle_event(
-                        event.map_io_err(|| "Failed to read terminal.")?,
-                        state,
-                        &requests,
-                    ) {
-                        break;
-                    }
-                }
+                Action::User(event) => handle_event(
+                    event.map_io_err(|| "Failed to read terminal.")?,
+                    state,
+                    &requests,
+                ),
+            } {
+                break;
             }
 
             AppWrapper {
@@ -264,7 +262,7 @@ fn handle_message(
     pending_favorite_change: &mut Option<u64>,
     picker: &mut Picker,
     requests: &Sender<Command>,
-) -> Result<(), CommandError> {
+) -> Result<bool, CommandError> {
     let UiEntries {
         loaded_entries,
         search_results,
@@ -326,11 +324,12 @@ fn handle_message(
             }
         }
         Message::PendingSearch(token) => *pending_search_token = Some(token),
+        Message::Pasted => return Ok(true),
     }
     if ui.details_requested.is_some() {
         maybe_get_details(entries, ui, requests);
     }
-    Ok(())
+    Ok(false)
 }
 
 fn maybe_get_details(entries: &UiEntries, ui: &mut UiState, requests: &Sender<Command>) {
@@ -397,8 +396,10 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                             && *focused
                         {
                             *focused = false;
-                        } else {
-                            // TODO paste
+                        } else if let Some(&UiEntry { entry, cache: _ }) =
+                            selected_entry!(entries, ui)
+                        {
+                            let _ = requests.send(Command::Paste(entry.id()));
                         }
                     }
                     _ => {}
@@ -446,6 +447,13 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                     match code {
                         Char('q') => return true,
                         Char('c') if modifiers == KeyModifiers::CONTROL => return true,
+                        Char(c @ '0'..='9') => {
+                            if let Some(UiEntry { entry, cache: _ }) = active_entries!(entries, ui)
+                                .get(usize::try_from(u32::from(c) - u32::from('0')).unwrap())
+                            {
+                                let _ = requests.send(Command::Paste(entry.id()));
+                            }
+                        }
                         Char('h') | Left => unselect(ui),
                         Char('j') | Down => {
                             let state = active_list_state!(entries, ui);
