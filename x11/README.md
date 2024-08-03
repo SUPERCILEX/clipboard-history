@@ -6,6 +6,9 @@ This binary provides an X11 clipboard watching service for the Ringboard databas
 the X11 and Ringboard servers and uses the X11 XFixes extension to monitor the clipboard for new
 clipboard selections to send to the Ringboard server.
 
+Additionally, it offers a paste server capable of becoming the X11 selection owner for clients to
+call.
+
 ## Implementation notes
 
 - Primary selections are not supported.
