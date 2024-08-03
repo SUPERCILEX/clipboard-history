@@ -1,8 +1,8 @@
 use std::{mem, mem::MaybeUninit, ptr};
 
-use arrayvec::ArrayVec;
 use bitvec::{array::BitArray, BitArr};
 use log::trace;
+use smallvec::SmallVec;
 
 use crate::reactor::{MAX_NUM_BUFS_PER_CLIENT, MAX_NUM_CLIENTS};
 
@@ -11,7 +11,7 @@ const CAP: usize = MAX_NUM_CLIENTS as usize * MAX_NUM_BUFS_PER_CLIENT as usize;
 pub struct SendMsgBufs {
     allocated_mask: BitArr!(for CAP),
     bufs: [MaybeUninit<(*mut u8, usize)>; CAP],
-    pool: ArrayVec<(*mut u8, usize), CAP>,
+    pool: SmallVec<(*mut u8, usize), 4>,
 }
 
 pub type Token = u8;
@@ -25,7 +25,7 @@ impl SendMsgBufs {
         Self {
             allocated_mask: BitArray::ZERO,
             bufs: [const { MaybeUninit::uninit() }; CAP],
-            pool: ArrayVec::new_const(),
+            pool: SmallVec::new(),
         }
     }
 
@@ -122,7 +122,7 @@ impl SendMsgBufs {
     }
 
     pub fn trim(&mut self) {
-        self.pool.clear();
+        self.pool = SmallVec::new();
     }
 }
 

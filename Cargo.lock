@@ -741,6 +741,7 @@ dependencies = [
  "log",
  "rustix",
  "sd-notify",
+ "smallvec 2.0.0-alpha.7",
  "thiserror",
  "tracy-client",
 ]
