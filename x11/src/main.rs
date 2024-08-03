@@ -230,6 +230,11 @@ struct PasteAtom {
     is_text: bool,
 }
 
+enum PasteFile {
+    Small(Mmap),
+    Large(Rc<Mmap>),
+}
+
 fn run() -> Result<(), CliError> {
     info!(
         "Starting Ringboard X11 clipboard listener v{}.",
@@ -393,7 +398,7 @@ fn handle_x11_event(
     deduplicator: &mut CopyDeduplication,
 
     paste_window: Window,
-    last_paste: &mut Option<(Rc<Mmap>, PasteAtom)>,
+    last_paste: &mut Option<(PasteFile, PasteAtom)>,
     (paste_alloc_next, paste_allocations): &mut (
         u8,
         [(Window, Option<(Atom, Rc<Mmap>, usize)>); MAX_CONCURRENT_TRANSFERS],
@@ -495,36 +500,39 @@ fn handle_x11_event(
                 return reply(property);
             }
 
-            if paste_file.len() > MAX_TRANSFER_SIZE {
-                debug!(
-                    "Starting paste request INCR transfer for {} bytes.",
-                    paste_file.len()
-                );
-                conn.change_window_attributes(
-                    requestor,
-                    &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
-                )?;
-                conn.change_property32(
-                    PropMode::REPLACE,
-                    requestor,
-                    property,
-                    incr_atom,
-                    &[u32::try_from(paste_file.len()).unwrap_or(u32::MAX)],
-                )?;
-
-                if mem::replace(
-                    &mut paste_allocations[usize::from(*paste_alloc_next)],
-                    (requestor, Some((target, paste_file.clone(), 0))),
-                )
-                .0 != x11rb::NONE
-                {
-                    warn!("Too many ongoing paste transfers, dropping oldest paste transfer.");
+            match paste_file {
+                PasteFile::Small(data) => {
+                    info!("Responded to paste request with small selection.");
+                    conn.change_property8(PropMode::REPLACE, requestor, property, target, data)?;
                 }
-                *paste_alloc_next = (paste_alloc_next.wrapping_add(1))
-                    & u8::try_from(paste_allocations.len() - 1).unwrap();
-            } else {
-                info!("Responded to paste request with small selection.");
-                conn.change_property8(PropMode::REPLACE, requestor, property, target, paste_file)?;
+                PasteFile::Large(data) => {
+                    debug!(
+                        "Starting paste request INCR transfer for {} bytes.",
+                        data.len()
+                    );
+                    conn.change_window_attributes(
+                        requestor,
+                        &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
+                    )?;
+                    conn.change_property32(
+                        PropMode::REPLACE,
+                        requestor,
+                        property,
+                        incr_atom,
+                        &[u32::try_from(data.len()).unwrap_or(u32::MAX)],
+                    )?;
+
+                    if mem::replace(
+                        &mut paste_allocations[usize::from(*paste_alloc_next)],
+                        (requestor, Some((target, data.clone(), 0))),
+                    )
+                    .0 != x11rb::NONE
+                    {
+                        warn!("Too many ongoing paste transfers, dropping oldest paste transfer.");
+                    }
+                    *paste_alloc_next = (paste_alloc_next.wrapping_add(1))
+                        & u8::try_from(paste_allocations.len() - 1).unwrap();
+                }
             }
             reply(property)?;
         }
@@ -896,7 +904,7 @@ fn handle_paste_event(
     paste_window: Window,
     paste_socket: impl AsFd,
     ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
-    last_paste: &mut Option<(Rc<Mmap>, PasteAtom)>,
+    last_paste: &mut Option<(PasteFile, PasteAtom)>,
 ) -> Result<(), CliError> {
     let mut mime = MimeType::new_const();
     let mut ancillary = RecvAncillaryBuffer::new(ancillary_buf);
@@ -930,7 +938,11 @@ fn handle_paste_event(
                 let data = Mmap::from(fd).map_io_err(|| "Failed to mmap paste file.")?;
                 info!("Received paste buffer of length {}.", data.len());
                 *last_paste = Some((
-                    Rc::new(data),
+                    if data.len() > MAX_TRANSFER_SIZE {
+                        PasteFile::Large(Rc::new(data))
+                    } else {
+                        PasteFile::Small(data)
+                    },
                     if let Some(a) = mime_atom {
                         a
                     } else if let Some(r) = mime_atom_req.take() {
