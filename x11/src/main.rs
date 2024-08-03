@@ -498,7 +498,7 @@ fn handle_x11_event(
             error!("Trying to paste into ourselves!");
         }
         Event::SelectionClear(event) => {
-            if event.owner != paste_window && last_paste.take().is_some() {
+            if event.owner == paste_window && last_paste.take().is_some() {
                 info!("Lost selection ownership.");
             }
         }
