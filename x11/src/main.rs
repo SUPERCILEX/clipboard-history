@@ -1,10 +1,12 @@
 #![feature(let_chains)]
+#![feature(if_let_guard)]
 
 use std::{
     fs::File,
     io::IoSliceMut,
     mem,
     os::{fd::AsFd, unix::fs::FileExt},
+    rc::Rc,
     slice,
 };
 
@@ -40,9 +42,9 @@ use x11rb::{
         xfixes,
         xfixes::{select_selection_input, SelectionEventMask},
         xproto::{
-            Atom, AtomEnum, ConnectionExt, CreateWindowAux, EventMask, GetAtomNameReply,
-            GetPropertyType, PropMode, Property, SelectionNotifyEvent, SelectionRequestEvent,
-            Window, WindowClass, SELECTION_NOTIFY_EVENT,
+            Atom, AtomEnum, ChangeWindowAttributesAux, ConnectionExt, CreateWindowAux, EventMask,
+            GetAtomNameReply, GetPropertyType, PropMode, Property, SelectionNotifyEvent,
+            SelectionRequestEvent, Window, WindowClass, SELECTION_NOTIFY_EVENT,
         },
         Event,
     },
@@ -165,6 +167,8 @@ enum State {
 const MAX_CONCURRENT_TRANSFERS: usize = 4;
 const BASE_TRANSFER_ATOM: AtomEnum = AtomEnum::CUT_BUFFE_R0;
 
+const MAX_TRANSFER_SIZE: usize = 1 << 20;
+
 #[derive(Default)]
 struct TransferAtomAllocator {
     windows: [Window; MAX_CONCURRENT_TRANSFERS],
@@ -185,7 +189,7 @@ impl TransferAtomAllocator {
         let transfer_window = self.windows[next];
         let transfer_atom = Self::transfer_atom(next);
 
-        self.next = u8::try_from((next + 1) & (MAX_CONCURRENT_TRANSFERS - 1)).unwrap();
+        self.next = u8::try_from(next.wrapping_add(1) & (MAX_CONCURRENT_TRANSFERS - 1)).unwrap();
         (state, transfer_window, transfer_atom)
     }
 
@@ -338,6 +342,7 @@ fn run() -> Result<(), CliError> {
         states: [const { State::Free }; MAX_CONCURRENT_TRANSFERS],
         next: 0,
     };
+    let mut paste_allocator = Default::default();
 
     let mut deduplicator = CopyDeduplication::new()?;
 
@@ -353,6 +358,7 @@ fn run() -> Result<(), CliError> {
                 &mut deduplicator,
                 paste_window,
                 &mut last_paste,
+                &mut paste_allocator,
             )?;
         }
         conn.flush()?;
@@ -385,8 +391,13 @@ fn handle_x11_event(
     allocator: &mut TransferAtomAllocator,
     server: impl AsFd,
     deduplicator: &mut CopyDeduplication,
+
     paste_window: Window,
-    last_paste: &mut Option<(Mmap, PasteAtom)>,
+    last_paste: &mut Option<(Rc<Mmap>, PasteAtom)>,
+    (paste_alloc_next, paste_allocations): &mut (
+        u8,
+        [(Window, Option<(Atom, Rc<Mmap>, usize)>); MAX_CONCURRENT_TRANSFERS],
+    ),
 ) -> Result<(), CliError> {
     let &Atoms {
         _NET_WM_NAME: window_name_atom,
@@ -411,7 +422,7 @@ fn handle_x11_event(
         }) => {
             if cfg!(debug_assertions) {
                 debug!(
-                    "Paste request received for target {}",
+                    "Paste request received for target {}.",
                     conn.get_atom_name(target)?.reply()?.name.to_string_lossy()
                 );
             }
@@ -481,18 +492,41 @@ fn handle_x11_event(
                     AtomEnum::ATOM,
                     &supported_atoms,
                 )?;
-                reply(property)?;
-                return Ok(());
+                return reply(property);
             }
 
-            if paste_file.len() > (1 << 20) {
-                debug!("Starting paste request INCR transfer.");
-                // TODO
+            if paste_file.len() > MAX_TRANSFER_SIZE {
+                debug!(
+                    "Starting paste request INCR transfer for {} bytes.",
+                    paste_file.len()
+                );
+                conn.change_window_attributes(
+                    requestor,
+                    &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
+                )?;
+                conn.change_property32(
+                    PropMode::REPLACE,
+                    requestor,
+                    property,
+                    incr_atom,
+                    &[u32::try_from(paste_file.len()).unwrap_or(u32::MAX)],
+                )?;
+
+                if mem::replace(
+                    &mut paste_allocations[usize::from(*paste_alloc_next)],
+                    (requestor, Some((target, paste_file.clone(), 0))),
+                )
+                .0 != x11rb::NONE
+                {
+                    warn!("Too many ongoing paste transfers, dropping oldest paste transfer.");
+                }
+                *paste_alloc_next = (paste_alloc_next.wrapping_add(1))
+                    & u8::try_from(paste_allocations.len() - 1).unwrap();
             } else {
-                conn.change_property8(PropMode::REPLACE, requestor, property, target, paste_file)?;
-                reply(property)?;
                 info!("Responded to paste request with small selection.");
+                conn.change_property8(PropMode::REPLACE, requestor, property, target, paste_file)?;
             }
+            reply(property)?;
         }
         Event::SelectionNotify(event) if event.requestor == paste_window => {
             error!("Trying to paste into ourselves!");
@@ -500,6 +534,49 @@ fn handle_x11_event(
         Event::SelectionClear(event) => {
             if event.owner == paste_window && last_paste.take().is_some() {
                 info!("Lost selection ownership.");
+            }
+        }
+        Event::PropertyNotify(event)
+            if let Some((requestor, paste_transfer)) = paste_allocations
+                .iter_mut()
+                .find(|&&mut (requestor, _)| requestor == event.window) =>
+        {
+            if event.state != Property::DELETE {
+                trace!(
+                    "Ignoring irrelevant property state change: {:?}.",
+                    event.state
+                );
+                return Ok(());
+            }
+            let Some((target, data, start)) = paste_transfer else {
+                error!("Received property notification after INCR transfer completed.");
+                return Ok(());
+            };
+
+            let end = start.saturating_add(MAX_TRANSFER_SIZE).min(data.len());
+            if *start == end {
+                conn.change_window_attributes(
+                    event.window,
+                    &ChangeWindowAttributesAux::new().event_mask(EventMask::NO_EVENT),
+                )?;
+            }
+            conn.change_property8(
+                PropMode::REPLACE,
+                event.window,
+                event.atom,
+                *target,
+                &data[*start..end],
+            )?;
+            if *start == end {
+                info!("Responded to paste request with large selection.");
+                *requestor = x11rb::NONE;
+                *paste_transfer = None;
+            } else {
+                debug!(
+                    "Continuing INCR transfer with {} bytes remaining.",
+                    data.len() - end
+                );
+                *start = end;
             }
         }
 
@@ -574,7 +651,7 @@ fn handle_x11_event(
             }
             if event.state != Property::NEW_VALUE {
                 trace!(
-                    "Ignoring uninteresting property state change: {:?}.",
+                    "Ignoring irrelevant property state change: {:?}.",
                     event.state
                 );
                 return Ok(());
@@ -819,7 +896,7 @@ fn handle_paste_event(
     paste_window: Window,
     paste_socket: impl AsFd,
     ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
-    last_paste: &mut Option<(Mmap, PasteAtom)>,
+    last_paste: &mut Option<(Rc<Mmap>, PasteAtom)>,
 ) -> Result<(), CliError> {
     let mut mime = MimeType::new_const();
     let mut ancillary = RecvAncillaryBuffer::new(ancillary_buf);
@@ -853,7 +930,7 @@ fn handle_paste_event(
                 let data = Mmap::from(fd).map_io_err(|| "Failed to mmap paste file.")?;
                 info!("Received paste buffer of length {}.", data.len());
                 *last_paste = Some((
-                    data,
+                    Rc::new(data),
                     if let Some(a) = mime_atom {
                         a
                     } else if let Some(r) = mime_atom_req.take() {
