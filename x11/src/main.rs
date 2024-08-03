@@ -342,7 +342,6 @@ fn run() -> Result<(), CliError> {
     let mut deduplicator = CopyDeduplication::new()?;
 
     info!("Starting event loop.");
-    conn.flush()?;
     loop {
         while let Some(event) = conn.poll_for_event()? {
             handle_x11_event(
@@ -356,6 +355,7 @@ fn run() -> Result<(), CliError> {
                 &mut last_paste,
             )?;
         }
+        conn.flush()?;
 
         trace!("Waiting for event.");
         epoll::wait(&epoll, &mut epoll_events, -1)
@@ -429,8 +429,7 @@ fn handle_x11_event(
                         target,
                         property,
                     },
-                )?
-                .check()?;
+                )?;
                 Ok(())
             };
 
@@ -522,8 +521,7 @@ fn handle_x11_event(
                 utf8_string_atom,
                 transfer_atom,
                 x11rb::CURRENT_TIME,
-            )?
-            .check()?;
+            )?;
         }
         Event::SelectionNotify(event) => {
             let Some((state, transfer_atom)) = allocator.get(event.requestor) else {
@@ -549,8 +547,7 @@ fn handle_x11_event(
                             targets_atom,
                             transfer_atom,
                             x11rb::CURRENT_TIME,
-                        )?
-                        .check()?;
+                        )?;
                     }
                 }
                 State::TargetsRequest { .. } => {
@@ -661,8 +658,7 @@ fn handle_x11_event(
                         target,
                         transfer_atom,
                         x11rb::CURRENT_TIME,
-                    )?
-                    .check()?;
+                    )?;
                 }
                 s @ (State::FastPathPendingSelection { .. } | State::PendingSelection { .. }) => {
                     let (mime_atom, mime_type, fast_path) = match s {
@@ -704,8 +700,7 @@ fn handle_x11_event(
                                     targets_atom,
                                     transfer_atom,
                                     x11rb::CURRENT_TIME,
-                                )?
-                                .check()?;
+                                )?;
                             } else {
                                 warn!("Dropping empty or blank selection.");
                             }
@@ -878,7 +873,6 @@ fn handle_paste_event(
     }
 
     debug!("Claiming selection ownership.");
-    conn.set_selection_owner(paste_window, clipboard_atom, x11rb::CURRENT_TIME)?
-        .check()?;
+    conn.set_selection_owner(paste_window, clipboard_atom, x11rb::CURRENT_TIME)?;
     Ok(())
 }
