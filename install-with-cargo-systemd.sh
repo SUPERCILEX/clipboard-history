@@ -11,7 +11,8 @@ curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/$X
 systemctl --user daemon-reload
 systemctl --user enable ringboard-$XDG_SESSION_TYPE --now
 
-cargo +nightly install clipboard-history clipboard-history-egui
+cargo +nightly install clipboard-history
+cargo +nightly install clipboard-history-egui --no-default-features --features $XDG_SESSION_TYPE
 
 echo
 echo "--- DONE ---"

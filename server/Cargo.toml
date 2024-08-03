@@ -25,11 +25,10 @@ thiserror = "1.0.63"
 tracy-client = { version = "0.17.1", optional = true }
 
 [features]
-default = ["human-logs"]
+default = ["systemd", "human-logs"]
 systemd = ["dep:sd-notify"]
 human-logs = ["env_logger/default"]
 trace = ["dep:tracy-client"]
-
 
 [[bin]]
 name = "ringboard-server"
