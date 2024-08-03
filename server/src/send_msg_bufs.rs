@@ -1,4 +1,8 @@
-use std::{mem, mem::MaybeUninit, ptr};
+use std::{
+    mem,
+    mem::{ManuallyDrop, MaybeUninit},
+    ptr,
+};
 
 use bitvec::{array::BitArray, BitArr};
 use log::trace;
@@ -10,8 +14,8 @@ const CAP: usize = MAX_NUM_CLIENTS as usize * MAX_NUM_BUFS_PER_CLIENT as usize;
 
 pub struct SendMsgBufs {
     allocated_mask: BitArr!(for CAP),
-    bufs: [MaybeUninit<(*mut u8, usize)>; CAP],
-    pool: SmallVec<(*mut u8, usize), 4>,
+    bufs: [MaybeUninit<LengthlessVec>; CAP],
+    pool: SmallVec<LengthlessVec, 4>,
 }
 
 pub type Token = u8;
@@ -42,7 +46,7 @@ impl SendMsgBufs {
         let mut buf = self
             .pool
             .pop()
-            .map(|(ptr, cap)| unsafe { Vec::from_raw_parts(ptr, 0, cap) })
+            .map(LengthlessVec::into_vec)
             .unwrap_or_default();
 
         control(&mut buf);
@@ -103,10 +107,7 @@ impl SendMsgBufs {
 
         debug_assert!(!self.allocated_mask[token]);
         self.allocated_mask.set(token, true);
-        {
-            let (ptr, _len, cap) = buf.into_raw_parts();
-            self.bufs[token].write((ptr, cap));
-        }
+        self.bufs[token].write(buf.into());
         Ok((u8::try_from(token).unwrap(), ptr.cast()))
     }
 
@@ -133,6 +134,36 @@ impl Drop for SendMsgBufs {
                 self.bufs[i].assume_init_drop();
             }
         }
+    }
+}
+
+struct LengthlessVec {
+    ptr: *mut u8,
+    cap: usize,
+}
+
+impl LengthlessVec {
+    fn into_vec(self) -> Vec<u8> {
+        let me = ManuallyDrop::new(self);
+        unsafe { me.as_vec_() }
+    }
+
+    unsafe fn as_vec_(&self) -> Vec<u8> {
+        let Self { ptr, cap } = *self;
+        unsafe { Vec::from_raw_parts(ptr, 0, cap) }
+    }
+}
+
+impl From<Vec<u8>> for LengthlessVec {
+    fn from(value: Vec<u8>) -> Self {
+        let (ptr, _len, cap) = value.into_raw_parts();
+        Self { ptr, cap }
+    }
+}
+
+impl Drop for LengthlessVec {
+    fn drop(&mut self) {
+        unsafe { self.as_vec_() };
     }
 }
 
@@ -206,8 +237,8 @@ mod tests {
                 }
 
                 unsafe { bufs.free(token.into()) };
-                bufs.trim();
             }
+            bufs.trim();
         }
     }
 }
