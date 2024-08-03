@@ -88,6 +88,7 @@ struct UiEntries {
 #[derive(Default)]
 struct UiState {
     last_error: Option<CommandError>,
+    outstanding_request: Option<u64>,
 
     details_requested: Option<u64>,
     detailed_entry: Option<Result<DetailedEntry, CoreError>>,
@@ -275,6 +276,7 @@ fn handle_message(
         detailed_entry,
         pending_search_token,
         last_error,
+        outstanding_request,
         ..
     } = ui;
 
@@ -319,7 +321,13 @@ fn handle_message(
                 }
             }
         }
-        Message::FavoriteChange(id) => *pending_favorite_change = Some(id),
+        Message::FavoriteChange(id) => {
+            *pending_favorite_change = Some(id);
+            outstanding_request.take_if(|&mut req_id| req_id == id);
+        }
+        Message::Deleted(id) => {
+            outstanding_request.take_if(|&mut req_id| req_id == id);
+        }
         Message::LoadedImage { id, image } => {
             if let Some(ImageState::Requested(requested_id)) = ui.detail_image_state
                 && requested_id == id
@@ -509,7 +517,9 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                         }
                         Char('f') => {
                             if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
+                                && ui.outstanding_request != Some(entry.id())
                             {
+                                ui.outstanding_request = Some(entry.id());
                                 match entry.ring() {
                                     RingKind::Favorites => {
                                         let _ = requests.send(Command::Unfavorite(entry.id()));
@@ -523,7 +533,9 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                         }
                         Char('d') => {
                             if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
+                                && ui.outstanding_request != Some(entry.id())
                             {
+                                ui.outstanding_request = Some(entry.id());
                                 let _ = requests.send(Command::Delete(entry.id()));
                                 refresh(ui);
                             }

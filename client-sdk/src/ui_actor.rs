@@ -97,6 +97,7 @@ pub enum Message {
     PendingSearch(CancellationToken),
     SearchResults(Box<[UiEntry]>),
     FavoriteChange(u64),
+    Deleted(u64),
     LoadedImage {
         id: u64,
         image: DynamicImage,
@@ -302,13 +303,10 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
                 MoveToFrontResponse::Error(e) => Err(e.into()),
             }
         }
-        Command::Delete(id) => {
-            match RemoveRequest::response(server()?, id)? {
-                RemoveResponse { error: Some(e) } => return Err(e.into()),
-                RemoveResponse { error: None } => {}
-            }
-            Ok(None)
-        }
+        Command::Delete(id) => match RemoveRequest::response(server()?, id)? {
+            RemoveResponse { error: None } => Ok(Some(Message::Deleted(id))),
+            RemoveResponse { error: Some(e) } => Err(e.into()),
+        },
         Command::Search { mut query, regex } => {
             let query = if regex {
                 Query::Regex(Regex::new(&query)?)

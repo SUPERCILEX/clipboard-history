@@ -248,7 +248,7 @@ fn handle_message(
                 *search_results = entries;
             }
         }
-        Message::FavoriteChange(_) => {}
+        Message::FavoriteChange(_) | Message::Deleted(_) => {}
         Message::LoadedImage { .. } => unreachable!(),
         Message::PendingSearch(token) => *pending_search_token = Some(token),
         Message::Pasted => ctx.send_viewport_cmd(ViewportCommand::Close),

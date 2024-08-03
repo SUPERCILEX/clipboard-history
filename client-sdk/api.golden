@@ -560,6 +560,7 @@ pub unsafe fn clipboard_history_client_sdk::ui_actor::CommandError::drop(ptr: us
 pub unsafe fn clipboard_history_client_sdk::ui_actor::CommandError::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::ui_actor::CommandError
 pub enum clipboard_history_client_sdk::ui_actor::Message
+pub clipboard_history_client_sdk::ui_actor::Message::Deleted(u64)
 pub clipboard_history_client_sdk::ui_actor::Message::EntryDetails
 pub clipboard_history_client_sdk::ui_actor::Message::EntryDetails::id: u64
 pub clipboard_history_client_sdk::ui_actor::Message::EntryDetails::result: core::result::Result<clipboard_history_client_sdk::ui_actor::DetailedEntry, clipboard_history_core::Error>
