@@ -99,33 +99,33 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/${{ matrix.target }}/release/ringboard-server
-          asset_name: ringboard-server-${{ matrix.target }}
+          asset_name: ${{ matrix.target }}-ringboard-server
           tag: ${{ github.ref }}
       - name: Upload binary
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/${{ matrix.target }}/release/ringboard
-          asset_name: ringboard-${{ matrix.target }}
+          asset_name: ${{ matrix.target }}-ringboard
           tag: ${{ github.ref }}
       - name: Upload binary
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/${{ matrix.target }}/release/ringboard-x11
-          asset_name: ringboard-x11-${{ matrix.target }}
+          asset_name: ${{ matrix.target }}-ringboard-x11
           tag: ${{ github.ref }}
       - name: Upload binary
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/${{ matrix.target }}/release/ringboard-egui
-          asset_name: ringboard-egui-${{ matrix.target }}
+          asset_name: ${{ matrix.target }}-ringboard-egui
           tag: ${{ github.ref }}
       - name: Upload binary
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/${{ matrix.target }}/release/ringboard-tui
-          asset_name: ringboard-tui-${{ matrix.target }}
+          asset_name: ${{ matrix.target }}-ringboard-tui
           tag: ${{ github.ref }}
