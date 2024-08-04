@@ -686,7 +686,7 @@ impl AppWrapper<'_> {
                         }
                     }),
             );
-            ui.query.widget().render(search_area, buf);
+            ui.query.render(search_area, buf);
         }
 
         let outer_block = Block::new()
