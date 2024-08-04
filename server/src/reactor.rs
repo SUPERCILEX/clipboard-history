@@ -364,7 +364,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             )?
                         } else {
                             let (version_valid, resp) =
-                                requests::connect(msg.payload_data, &mut send_bufs)?;
+                                requests::connect(msg.payload_data, &mut send_bufs);
                             if version_valid {
                                 info!("Client {fd} connected.");
                                 clients.set_connected(fd);
@@ -373,7 +373,11 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             }
                             Some(resp)
                         };
-                        if let Some((token, msghdr)) = response {
+                        if let Some(resp) = response {
+                            let (token, msghdr) =
+                                send_bufs.alloc(resp).map_err(|()| CliError::Internal {
+                                    context: "Didn't allocate enough send buffers.".into(),
+                                })?;
                             let send = SendMsg::new(Fixed(fd.into()), msghdr)
                                 .build()
                                 .flags(if clients.is_connected(fd) {

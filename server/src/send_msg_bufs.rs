@@ -20,6 +20,7 @@ pub struct SendMsgBufs {
 
 pub type Token = u8;
 const _: () = assert!(CAP <= (1 << Token::BITS));
+pub type PendingBufAllocation = (Vec<u8>, *const libc::msghdr);
 pub type SendBufAllocation = (Token, *const libc::msghdr);
 
 impl SendMsgBufs {
@@ -33,16 +34,11 @@ impl SendMsgBufs {
         }
     }
 
-    pub fn alloc<Control: FnOnce(&mut Vec<u8>), Data: FnOnce(&mut Vec<u8>)>(
+    pub fn init_buf<Control: FnOnce(&mut Vec<u8>), Data: FnOnce(&mut Vec<u8>)>(
         &mut self,
         control: Control,
         data: Data,
-    ) -> Result<SendBufAllocation, ()> {
-        let token = self.allocated_mask.leading_ones();
-        trace!("Allocating send buffer {token}.");
-        if token == CAP {
-            return Err(());
-        }
+    ) -> PendingBufAllocation {
         let mut buf = self
             .pool
             .pop()
@@ -104,6 +100,16 @@ impl SendMsgBufs {
 
             ptr
         };
+
+        (buf, ptr.cast())
+    }
+
+    pub fn alloc(&mut self, (buf, ptr): PendingBufAllocation) -> Result<SendBufAllocation, ()> {
+        let token = self.allocated_mask.leading_ones();
+        trace!("Allocating send buffer {token}.");
+        if token == CAP {
+            return Err(());
+        }
 
         debug_assert!(!self.allocated_mask[token]);
         self.allocated_mask.set(token, true);
@@ -175,20 +181,18 @@ mod tests {
     fn fill() {
         let mut bufs = SendMsgBufs::new();
         for _ in 0..CAP {
-            bufs.alloc(
+            let pending = bufs.init_buf(
                 |control| control.extend(1..=69),
                 |data| data.extend((0..420).map(|_| 0xDE)),
-            )
-            .unwrap();
+            );
+            bufs.alloc(pending).unwrap();
         }
 
-        assert!(
-            bufs.alloc(
-                |control| control.extend(1..=69),
-                |data| data.extend((0..420).map(|_| 0xDE)),
-            )
-            .is_err()
+        let pending = bufs.init_buf(
+            |control| control.extend(1..=69),
+            |data| data.extend((0..420).map(|_| 0xDE)),
         );
+        assert!(bufs.alloc(pending).is_err());
     }
 
     #[test]
@@ -197,11 +201,11 @@ mod tests {
 
         let tokens = (0..3)
             .map(|_| {
-                bufs.alloc(
+                let pending = bufs.init_buf(
                     |control| control.extend(1..=69),
                     |data| data.extend((0..420).map(|_| 0xDE)),
-                )
-                .unwrap()
+                );
+                bufs.alloc(pending).unwrap()
             })
             .collect::<Vec<_>>();
 
@@ -217,12 +221,11 @@ mod tests {
             for data_len in 0..50 {
                 let control_data = 0..control_len;
                 let data = 0..data_len;
-                let (token, hdr) = bufs
-                    .alloc(
-                        |buf| buf.extend(control_data.clone()),
-                        |buf| buf.extend(data.clone()),
-                    )
-                    .unwrap();
+                let pending = bufs.init_buf(
+                    |buf| buf.extend(control_data.clone()),
+                    |buf| buf.extend(data.clone()),
+                );
+                let (token, hdr) = bufs.alloc(pending).unwrap();
 
                 let hdr = unsafe { &*hdr };
                 assert_eq!(hdr.msg_controllen, usize::from(control_len));

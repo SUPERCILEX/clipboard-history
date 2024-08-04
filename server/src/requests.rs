@@ -11,14 +11,11 @@ use rustix::net::{AncillaryDrain, RecvAncillaryMessage};
 
 use crate::{
     allocator::Allocator,
-    send_msg_bufs::{SendBufAllocation, SendMsgBufs},
+    send_msg_bufs::{PendingBufAllocation, SendMsgBufs},
     CliError,
 };
 
-pub fn connect(
-    payload: &[u8],
-    send_bufs: &mut SendMsgBufs,
-) -> Result<(bool, SendBufAllocation), CliError> {
+pub fn connect(payload: &[u8], send_bufs: &mut SendMsgBufs) -> (bool, PendingBufAllocation) {
     debug!("Establishing client/server protocol connection.");
     let version = payload[0];
     let valid = version == protocol::VERSION;
@@ -29,18 +26,14 @@ pub fn connect(
         );
     }
 
-    let response = send_bufs
-        .alloc(
-            |_| (),
-            |buf| {
-                buf.push(protocol::VERSION);
-            },
-        )
-        .map_err(|()| CliError::Internal {
-            context: "Didn't allocate enough send buffers.".into(),
-        })?;
+    let response = send_bufs.init_buf(
+        |_| (),
+        |buf| {
+            buf.push(protocol::VERSION);
+        },
+    );
 
-    Ok((valid, response))
+    (valid, response)
 }
 
 pub fn handle(
@@ -49,7 +42,7 @@ pub fn handle(
     send_bufs: &mut SendMsgBufs,
     allocator: &mut Allocator,
     sequence_number: &mut u64,
-) -> Result<Option<SendBufAllocation>, CliError> {
+) -> Result<Option<PendingBufAllocation>, CliError> {
     if request_data.len() < size_of::<Request>() {
         warn!("Dropping invalid request (too short).");
         return Ok(None);
@@ -57,7 +50,7 @@ pub fn handle(
     let request = unsafe { &request_data.as_ptr().cast::<Request>().read_unaligned() };
 
     macro_rules! reply {
-        ($response:expr) => {{ reply(send_bufs, *sequence_number, $response).map(Some) }};
+        ($response:expr) => {{ Ok(Some(reply(send_bufs, *sequence_number, $response))) }};
     }
 
     info!("Processing request: {request:?}");
@@ -81,23 +74,19 @@ fn reply<R: AsBytes + Debug>(
     send_bufs: &mut SendMsgBufs,
     sequence_number: u64,
     responses: impl IntoIterator<Item = R, IntoIter: ExactSizeIterator<Item = R>>,
-) -> Result<SendBufAllocation, CliError> {
-    send_bufs
-        .alloc(
-            |_| (),
-            |buf| {
-                let responses = responses.into_iter();
-                debug_assert_eq!(responses.len(), 1);
-                for response in responses {
-                    info!("Replying: {sequence_number}@{response:?}");
-                    buf.extend_from_slice(&sequence_number.to_ne_bytes());
-                    buf.extend_from_slice(response.as_bytes());
-                }
-            },
-        )
-        .map_err(|()| CliError::Internal {
-            context: "Didn't allocate enough send buffers.".into(),
-        })
+) -> PendingBufAllocation {
+    send_bufs.init_buf(
+        |_| (),
+        |buf| {
+            let responses = responses.into_iter();
+            debug_assert_eq!(responses.len(), 1);
+            for response in responses {
+                info!("Replying: {sequence_number}@{response:?}");
+                buf.extend_from_slice(&sequence_number.to_ne_bytes());
+                buf.extend_from_slice(response.as_bytes());
+            }
+        },
+    )
 }
 
 fn add(
