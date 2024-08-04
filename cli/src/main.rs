@@ -1329,7 +1329,7 @@ fn stats() -> Result<(), CliError> {
         *num_slots = u32::try_from(mem.len() / usize::from(bucket_to_length(i))).unwrap();
     }
 
-    for ring_reader in [database.main(), database.favorites()] {
+    for ring_reader in [database.favorites(), database.main()] {
         let mut ring_stats = RingStats::default();
         let RingStats {
             capacity,
