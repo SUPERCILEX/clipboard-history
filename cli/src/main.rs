@@ -47,7 +47,7 @@ use ringboard_sdk::{
             decompose_id, AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType,
             MoveToFrontResponse, RemoveResponse, Response, RingKind, SwapResponse,
         },
-        read_server_pid,
+        read_lock_file_pid,
         ring::Mmap,
         size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS,
     },
@@ -716,7 +716,7 @@ fn wipe() -> Result<(), CliError> {
     .map_io_err(|| format!("Failed to rename dir: {data_dir:?} -> {tmp_data_dir:?}"))?;
 
     tmp_data_dir.push("server.lock");
-    let running_server = read_server_pid(CWD, &tmp_data_dir).ok().flatten();
+    let running_server = read_lock_file_pid(CWD, &tmp_data_dir).ok().flatten();
     tmp_data_dir.pop();
 
     'shutdown: {

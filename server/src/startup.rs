@@ -7,7 +7,7 @@ use std::{
     process,
 };
 
-use ringboard_core::{link_tmp_file, read_server_pid, IoErr};
+use ringboard_core::{link_tmp_file, read_lock_file_pid, IoErr};
 use rustix::{
     fs::{openat, unlinkat, AtFlags, Mode, OFlags, CWD},
     io::Errno,
@@ -38,7 +38,7 @@ pub fn claim_server_ownership() -> Result<Option<OwnedServer>, CliError> {
 
     match link_tmp_file(lock_file, CWD, c"server.lock") {
         Err(e) if e.kind() == AlreadyExists => {
-            let pid = read_server_pid(CWD, c"server.lock")?;
+            let pid = read_lock_file_pid(CWD, c"server.lock")?;
             let Some(pid) = pid else {
                 return Ok(None);
             };
