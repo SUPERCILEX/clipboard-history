@@ -30,11 +30,11 @@ use crate::{
     CliError,
 };
 
-pub const MAX_NUM_CLIENTS: u32 = 1 << MAX_NUM_CLIENTS_SHIFT;
-pub const MAX_NUM_BUFS_PER_CLIENT: u16 = 8;
+pub const MAX_NUM_CLIENTS: u8 = 1 << MAX_NUM_CLIENTS_SHIFT;
+pub const MAX_NUM_BUFS_PER_CLIENT: u8 = 8;
 
 const MAX_NUM_CLIENTS_SHIFT: u32 = 5;
-const URING_ENTRIES: u32 = MAX_NUM_CLIENTS * 3;
+const URING_ENTRIES: u8 = MAX_NUM_CLIENTS * 3;
 
 #[derive(Default, Debug)]
 struct Clients {
@@ -43,45 +43,44 @@ struct Clients {
     pending_recv: u32,
 }
 
-const _: () = assert!(u8::MAX as u32 >= MAX_NUM_CLIENTS);
 impl Clients {
     fn is_connected(&self, id: u8) -> bool {
-        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
+        debug_assert!(id < MAX_NUM_CLIENTS);
         (self.connections & (1 << id)) != 0
     }
 
     fn is_closing(&self, id: u8) -> bool {
-        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
+        debug_assert!(id < MAX_NUM_CLIENTS);
         (self.pending_closes & (1 << id)) != 0
     }
 
     fn set_connected(&mut self, id: u8) {
-        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
+        debug_assert!(id < MAX_NUM_CLIENTS);
         self.connections |= 1 << id;
         self.pending_closes &= !(1 << id);
         self.pending_recv &= !(1 << id);
     }
 
     fn set_disconnected(&mut self, id: u8) {
-        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
+        debug_assert!(id < MAX_NUM_CLIENTS);
         self.connections &= !(1 << id);
         self.pending_closes |= 1 << id;
     }
 
     fn set_closed(&mut self, id: u8) {
-        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
+        debug_assert!(id < MAX_NUM_CLIENTS);
         self.connections &= !(1 << id);
         self.pending_closes &= !(1 << id);
         self.pending_recv &= !(1 << id);
     }
 
     fn set_pending_recv(&mut self, id: u8) {
-        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
+        debug_assert!(id < MAX_NUM_CLIENTS);
         self.pending_recv |= 1 << id;
     }
 
     fn take_pending_recv(&mut self, id: u8) -> bool {
-        debug_assert!(u32::from(id) < MAX_NUM_CLIENTS);
+        debug_assert!(id < MAX_NUM_CLIENTS);
         let r = (self.pending_recv & (1 << id)) != 0;
         self.pending_recv &= !(1 << id);
         r
@@ -93,7 +92,7 @@ fn setup_uring() -> Result<IoUring, CliError> {
         .setup_coop_taskrun()
         .setup_single_issuer()
         .setup_defer_taskrun()
-        .build(URING_ENTRIES)
+        .build(URING_ENTRIES.into())
         .map_io_err(|| "Failed to create io_uring.")?;
 
     let signal_handler = unsafe {
@@ -153,11 +152,11 @@ fn setup_uring() -> Result<IoUring, CliError> {
     ];
     uring
         .submitter()
-        .register_files_sparse(MAX_NUM_CLIENTS + u32::try_from(built_ins.len()).unwrap())
+        .register_files_sparse(u32::from(MAX_NUM_CLIENTS) + u32::try_from(built_ins.len()).unwrap())
         .map_io_err(|| "Failed to set up io_uring fixed file table.")?;
     uring
         .submitter()
-        .register_files_update(MAX_NUM_CLIENTS, &built_ins)
+        .register_files_update(MAX_NUM_CLIENTS.into(), &built_ins)
         .map_io_err(|| "Failed to register socket FD with io_uring.")?;
 
     Ok(uring)
@@ -181,12 +180,12 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     const REQ_TYPE_MASK: u64 = 0b111;
     const REQ_TYPE_SHIFT: u32 = REQ_TYPE_MASK.count_ones();
 
-    let accept = AcceptMulti::new(Fixed(MAX_NUM_CLIENTS))
+    let accept = AcceptMulti::new(Fixed(MAX_NUM_CLIENTS.into()))
         .allocate_file_index(true)
         .build()
         .user_data(REQ_TYPE_ACCEPT);
     let poll_low_mem = PollAdd::new(
-        Fixed(MAX_NUM_CLIENTS + 2),
+        Fixed(u32::from(MAX_NUM_CLIENTS) + 2),
         u32::try_from(libc::POLLPRI).unwrap(),
     )
     .multi(true)
@@ -222,7 +221,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
 
     {
         let read_signals = PollAdd::new(
-            Fixed(MAX_NUM_CLIENTS + 1),
+            Fixed(u32::from(MAX_NUM_CLIENTS) + 1),
             u32::try_from(libc::POLLIN).unwrap(),
         )
         .build()
@@ -277,7 +276,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         }
                         r => r.map_io_err(|| "Failed to accept socket connection.")?,
                     };
-                    debug_assert!(client < MAX_NUM_CLIENTS);
+                    debug_assert!(client < u32::from(MAX_NUM_CLIENTS));
                     #[allow(clippy::cast_possible_truncation)]
                     let client = client as u8;
                     debug!("Accepting client {client}.");
@@ -286,7 +285,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     client_buffers[usize::from(client)] = Some(
                         register_buf_ring(
                             &uring.submitter(),
-                            MAX_NUM_BUFS_PER_CLIENT,
+                            MAX_NUM_BUFS_PER_CLIENT.into(),
                             client.into(),
                             256,
                         )
