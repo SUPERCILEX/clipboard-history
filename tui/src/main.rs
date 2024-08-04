@@ -294,7 +294,10 @@ fn handle_message(
     last_error.take();
     match message {
         Message::FatalDbOpen(e) => return Err(e)?,
-        Message::Error(e) => *last_error = Some(e),
+        Message::Error(e) => {
+            *last_error = Some(e);
+            *queued_searches = queued_searches.saturating_sub(1);
+        }
         Message::LoadedFirstPage {
             entries: new_entries,
             default_focused_id,
@@ -348,7 +351,7 @@ fn handle_message(
             }
         }
         Message::PendingSearch(token) => {
-            if *queued_searches != 1 {
+            if *queued_searches > 1 {
                 token.cancel();
             }
             *pending_search_token = Some(token);
