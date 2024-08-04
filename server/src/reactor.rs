@@ -8,6 +8,7 @@ use std::{
     ptr,
 };
 
+use arrayvec::ArrayVec;
 use io_uring::{
     cqueue::{buffer_select, more, Entry},
     opcode::{AcceptMulti, Close, PollAdd, RecvMsgMulti, SendMsg},
@@ -34,13 +35,13 @@ pub const MAX_NUM_CLIENTS: u8 = 1 << MAX_NUM_CLIENTS_SHIFT;
 pub const MAX_NUM_BUFS_PER_CLIENT: u8 = 8;
 
 const MAX_NUM_CLIENTS_SHIFT: u32 = 5;
-const URING_ENTRIES: u8 = MAX_NUM_CLIENTS * 3;
 
 #[derive(Default, Debug)]
 struct Clients {
     connections: u32,
     pending_closes: u32,
     pending_recv: u32,
+    pending_sends: u32,
 }
 
 impl Clients {
@@ -59,6 +60,16 @@ impl Clients {
         self.connections |= 1 << id;
         self.pending_closes &= !(1 << id);
         self.pending_recv &= !(1 << id);
+    }
+
+    fn set_send_buffered(&mut self, id: u8, value: bool) -> bool {
+        let r = (self.pending_sends & (1 << id)) != 0;
+        if value {
+            self.pending_sends |= 1 << id;
+        } else {
+            self.pending_sends &= !(1 << id);
+        }
+        r
     }
 
     fn set_disconnecting(&mut self, id: u8) {
@@ -97,7 +108,7 @@ fn setup_uring() -> Result<IoUring, CliError> {
         .setup_coop_taskrun()
         .setup_single_issuer()
         .setup_defer_taskrun()
-        .build(URING_ENTRIES.into())
+        .build((MAX_NUM_CLIENTS * 2).into())
         .map_io_err(|| "Failed to create io_uring.")?;
 
     let signal_handler = unsafe {
@@ -212,6 +223,30 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         u8::try_from(entry.user_data() >> (u64::BITS - MAX_NUM_CLIENTS_SHIFT)).unwrap()
     };
 
+    let drain_send_bufs = |client: u8,
+                           bufs: &mut SendMsgBufs,
+                           remaining_submission_slots: usize,
+                           submissions: &mut SubmissionQueue|
+     -> Result<_, PushError> {
+        {
+            let mut iter = bufs.drain_pending_sends(client, remaining_submission_slots);
+            while let Some((token, msghdr)) = iter.next() {
+                trace!("Submitting sendmsg for client {client} at index {token}.");
+                let send = SendMsg::new(Fixed(client.into()), msghdr)
+                    .build()
+                    .flags(if iter.len() > 0 {
+                        Flags::IO_LINK
+                    } else {
+                        Flags::empty()
+                    })
+                    .user_data(
+                        REQ_TYPE_SENDMSG | (u64::from(token) << REQ_TYPE_SHIFT) | store_fd(client),
+                    );
+                unsafe { submissions.push(&send) }?;
+            }
+        }
+        Ok(bufs.has_pending_sends(client))
+    };
     let try_close = |client: u8,
                      clients: &mut Clients,
                      bufs: &mut SendMsgBufs,
@@ -260,6 +295,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     let mut send_bufs = SendMsgBufs::new();
     let mut clients = Clients::default();
     let mut pending_accept = false;
+    let mut clients_with_pending_sends = ArrayVec::<u8, { MAX_NUM_CLIENTS as usize }>::new_const();
     'outer: loop {
         {
             let want = uring.submission().is_empty().into();
@@ -370,6 +406,9 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             break 'recv;
                         }
 
+                        if !clients.set_send_buffered(fd, true) {
+                            clients_with_pending_sends.push(fd);
+                        }
                         let response = if clients.is_connected(fd) {
                             requests::handle(
                                 msg.payload_data,
@@ -390,19 +429,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             Some(resp)
                         };
                         if let Some(resp) = response {
-                            let token = buf.into_index().into();
-                            let msghdr = send_bufs.alloc(fd, token, resp);
-                            let send = SendMsg::new(Fixed(fd.into()), msghdr)
-                                .build()
-                                .flags(if clients.is_connected(fd) {
-                                    Flags::empty()
-                                } else {
-                                    Flags::IO_LINK
-                                })
-                                .user_data(
-                                    REQ_TYPE_SENDMSG | (token << REQ_TYPE_SHIFT) | store_fd(fd),
-                                );
-                            unsafe { submissions.push(&send) }?;
+                            send_bufs.alloc(fd, buf.into_index().into(), resp);
                         }
 
                         if clients.is_connected(fd) {
@@ -450,6 +477,9 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                 warn!("Client {fd} forcefully disconnected.");
                                 clients.set_disconnecting(fd);
                             }
+                        }
+                        Err(e) if e.raw_os_error() == Some(Errno::CANCELED.raw_os_error()) => {
+                            debug_assert!(clients.is_closing(fd));
                         }
                         r => {
                             r.map_io_err(|| format!("Failed to send response to client {fd}."))?;
@@ -520,6 +550,30 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                 _ => unreachable!(),
             }
         }
+
+        let mut remaining_sends = ArrayVec::<u8, { MAX_NUM_CLIENTS as usize }>::new_const();
+        for (i, &client) in clients_with_pending_sends.iter().enumerate() {
+            if !send_bufs.has_ready_block(client) {
+                remaining_sends.push(client);
+                continue;
+            }
+
+            let has_pending = drain_send_bufs(
+                client,
+                &mut send_bufs,
+                submissions.capacity() - submissions.len(),
+                &mut submissions,
+            )?;
+            if has_pending {
+                remaining_sends
+                    .try_extend_from_slice(&clients_with_pending_sends[i..])
+                    .unwrap();
+                break;
+            }
+
+            clients.set_send_buffered(client, false);
+        }
+        clients_with_pending_sends = remaining_sends;
     }
     Ok(())
 }

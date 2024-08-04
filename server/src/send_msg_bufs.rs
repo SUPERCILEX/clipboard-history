@@ -1,5 +1,6 @@
 use std::{mem, mem::ManuallyDrop, ptr, ptr::NonNull};
 
+use arrayvec::ArrayVec;
 use log::trace;
 use smallvec::SmallVec;
 
@@ -8,10 +9,13 @@ use crate::reactor::{MAX_NUM_BUFS_PER_CLIENT, MAX_NUM_CLIENTS};
 pub struct SendMsgBufs {
     bufs: [[Option<LengthlessVec>; MAX_NUM_BUFS_PER_CLIENT as usize]; MAX_NUM_CLIENTS as usize],
     alloc_counts: [u8; MAX_NUM_CLIENTS as usize],
+    pending_bufs: [ArrayVec<SendBufAllocation, { MAX_NUM_BUFS_PER_CLIENT as usize }>;
+        MAX_NUM_CLIENTS as usize],
     pool: SmallVec<LengthlessVec, 4>,
 }
 
 pub type PendingBufAllocation = (Vec<u8>, *const libc::msghdr);
+pub type SendBufAllocation = (u8, *const libc::msghdr);
 
 impl SendMsgBufs {
     const TOKEN_MASK: u8 = MAX_NUM_BUFS_PER_CLIENT - 1;
@@ -21,8 +25,27 @@ impl SendMsgBufs {
             bufs: [const { [const { None }; MAX_NUM_BUFS_PER_CLIENT as usize] };
                 MAX_NUM_CLIENTS as usize],
             alloc_counts: [0; MAX_NUM_CLIENTS as usize],
+            pending_bufs: [const { ArrayVec::new_const() }; MAX_NUM_CLIENTS as usize],
             pool: SmallVec::new(),
         }
+    }
+
+    pub fn drain_pending_sends(
+        &mut self,
+        client: u8,
+        max: usize,
+    ) -> impl ExactSizeIterator<Item = SendBufAllocation> + '_ {
+        let pending = &mut self.pending_bufs[usize::from(client)];
+        pending.drain(..max.min(pending.len()))
+    }
+
+    pub fn has_pending_sends(&self, client: u8) -> bool {
+        !self.pending_bufs[usize::from(client)].is_empty()
+    }
+
+    pub fn has_ready_block(&self, client: u8) -> bool {
+        let client = usize::from(client);
+        self.pending_bufs[client].len() == self.alloc_counts[client].into()
     }
 
     pub fn has_outstanding_sends(&self, client: u8) -> bool {
@@ -99,12 +122,7 @@ impl SendMsgBufs {
         (buf, ptr.cast())
     }
 
-    pub fn alloc(
-        &mut self,
-        client: u8,
-        token: u64,
-        (buf, ptr): PendingBufAllocation,
-    ) -> *const libc::msghdr {
+    pub fn alloc(&mut self, client: u8, token: u64, (buf, ptr): PendingBufAllocation) {
         let client = usize::from(client);
         let token = usize::try_from(token & u64::from(Self::TOKEN_MASK)).unwrap();
         trace!("Allocating send buffer {token} for client {client}.");
@@ -112,7 +130,7 @@ impl SendMsgBufs {
         debug_assert!(self.bufs[client][token].is_none());
         self.bufs[client][token] = Some(buf.into());
         self.alloc_counts[client] += 1;
-        ptr
+        self.pending_bufs[client].push((u8::try_from(token).unwrap(), ptr));
     }
 
     pub unsafe fn free(&mut self, client: u8, token: u64) {
@@ -197,8 +215,9 @@ mod tests {
             bufs.alloc(0, i, pending);
         }
 
+        let token = bufs.drain_pending_sends(0, usize::MAX).nth(1).unwrap();
         unsafe {
-            bufs.free(0, 1);
+            bufs.free(0, token.0.into());
         }
     }
 
@@ -213,7 +232,8 @@ mod tests {
                     |buf| buf.extend(control_data.clone()),
                     |buf| buf.extend(data.clone()),
                 );
-                let hdr = bufs.alloc(0, 0, pending);
+                bufs.alloc(0, data_len.into(), pending);
+                let (token, hdr) = bufs.drain_pending_sends(0, usize::MAX).next().unwrap();
 
                 let hdr = unsafe { &*hdr };
                 assert_eq!(hdr.msg_controllen, usize::from(control_len));
@@ -227,7 +247,7 @@ mod tests {
                     assert_eq!(unsafe { *iov.iov_base.add(i).cast::<u8>() }, data);
                 }
 
-                unsafe { bufs.free(0, 0) };
+                unsafe { bufs.free(0, token.into()) };
             }
             bufs.trim();
         }
