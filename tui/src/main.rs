@@ -67,6 +67,7 @@ impl From<io::Result<Event>> for Action {
 struct App {
     requests: Sender<Command>,
     responses: Receiver<Action>,
+    picker: Picker,
     state: State,
 }
 
@@ -166,8 +167,8 @@ fn run() -> Result<(), CoreError> {
     let stdout = ManuallyDrop::new(unsafe { File::from_raw_fd(raw_stdout()) });
     let mut stdout = BufWriter::new(&*stdout);
 
-    let terminal = init_terminal(&mut stdout)?;
-    let r = App::new().run(terminal);
+    let mut terminal = init_terminal(&mut stdout)?;
+    let r = App::init(&mut terminal).and_then(|app| app.run(terminal));
     restore_terminal(&mut stdout)?;
     r
 }
@@ -189,9 +190,21 @@ fn restore_terminal(mut stdout: impl io::Write) -> Result<(), CoreError> {
 }
 
 impl App {
-    fn new() -> Self {
+    fn init(terminal: &mut Terminal<impl Backend>) -> Result<Self, CoreError> {
         let (command_sender, command_receiver) = mpsc::channel();
         let (response_sender, response_receiver) = mpsc::sync_channel(8);
+        let mut state = State::default();
+
+        AppWrapper {
+            state: &mut state,
+            requests: &command_sender,
+        }
+        .draw(terminal)
+        .map_io_err(|| "Failed to write to terminal.")?;
+
+        let mut picker = Picker::from_termios().unwrap_or_else(|_| Picker::new((2, 4)));
+        picker.guess_protocol();
+
         thread::spawn({
             let sender = response_sender.clone();
             move || controller(&command_receiver, |m| sender.send(m.into()))
@@ -206,12 +219,13 @@ impl App {
             }
         });
 
-        Self {
+        Ok(Self {
             requests: command_sender,
             responses: response_receiver,
+            picker,
 
-            state: State::default(),
-        }
+            state,
+        })
     }
 }
 
@@ -220,23 +234,15 @@ impl App {
         let Self {
             requests,
             responses,
+            ref mut picker,
             ref mut state,
         } = self;
-        let mut picker = Picker::from_termios().unwrap_or_else(|_| Picker::new((2, 4)));
-        picker.guess_protocol();
-
-        AppWrapper {
-            state,
-            requests: &requests,
-        }
-        .draw(&mut terminal)
-        .map_io_err(|| "Failed to write to terminal.")?;
 
         let mut local_state = Option::default();
         for action in responses {
             if match action {
                 Action::Controller(message) => {
-                    handle_message(message, state, &mut local_state, &mut picker, &requests)?
+                    handle_message(message, state, &mut local_state, picker, &requests)?
                 }
                 Action::User(event) => handle_event(
                     event.map_io_err(|| "Failed to read terminal.")?,
