@@ -34,7 +34,7 @@ impl RingKind {
     #[must_use]
     pub const fn default_max_entries(&self) -> u32 {
         match self {
-            Self::Main => 262_142,
+            Self::Main => 131_070,
             Self::Favorites => 1022,
         }
     }
