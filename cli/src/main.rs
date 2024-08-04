@@ -1508,6 +1508,27 @@ fn generate(
         cv_size,
     }: Generate,
 ) -> Result<(), CliError> {
+    fn generate_random_entry_file(
+        rng: &mut (impl RngCore + 'static),
+        len_distr: LogNormal<f64>,
+    ) -> Result<(File, u64), CliError> {
+        let mut file = File::from(
+            memfd_create(c"ringboard_gen", MemfdFlags::empty())
+                .map_io_err(|| "Failed to create data entry file.")?,
+        );
+
+        #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+        let len = len_distr.sample(rng).round().max(1.) as u64;
+        // TODO use adapter when it's available
+        let result = io::copy(&mut (rng as &mut dyn RngCore).take(len), &mut file)
+            .map_io_err(|| "Failed to write bytes to entry file.")?;
+        debug_assert_eq!(len, result);
+        file.seek(SeekFrom::Start(0))
+            .map_io_err(|| "Failed to reset entry file offset.")?;
+
+        Ok((file, len))
+    }
+
     struct GenerateRingKind(RingKind);
 
     impl Distribution<GenerateRingKind> for Standard {
@@ -1549,6 +1570,18 @@ fn fuzz(
         verbose,
     }: Fuzz,
 ) -> Result<(), CliError> {
+    fn generate_entry_file(data: &[u8]) -> Result<File, CliError> {
+        let file = File::from(
+            memfd_create(c"ringboard_fuzz", MemfdFlags::empty())
+                .map_io_err(|| "Failed to create data entry file.")?,
+        );
+
+        file.write_all_at(data, 0)
+            .map_io_err(|| "Failed to copy data to entry file.")?;
+
+        Ok(file)
+    }
+
     struct FuzzRingKind(RingKind);
 
     impl Distribution<FuzzRingKind> for Standard {
@@ -1560,9 +1593,17 @@ fn fuzz(
         }
     }
 
+    struct NoDebug<T>(T);
+
+    impl<T> Debug for NoDebug<T> {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("skipped").finish()
+        }
+    }
+
     #[derive(Debug)]
     enum PendingOp {
-        Add { data: Mmap },
+        Add { data: NoDebug<Vec<u8>> },
         Move { id: u64 },
         Swap { id1: u64, id2: u64 },
         Remove { id: u64 },
@@ -1572,7 +1613,7 @@ fn fuzz(
     #[derive(Debug)]
     enum ResponseKind {
         Add {
-            data: Mmap,
+            data: NoDebug<Vec<u8>>,
             value: AddResponse,
         },
         Move {
@@ -1596,7 +1637,7 @@ fn fuzz(
         flags: RecvFlags,
         server: impl AsFd,
         pending: &mut VecDeque<PendingOp>,
-        database: &mut HashMap<u64, Mmap, BuildHasherDefault<FxHasher>>,
+        database: &mut HashMap<u64, Vec<u8>, BuildHasherDefault<FxHasher>>,
         linearized_responses: &mut VecDeque<Option<ResponseKind>>,
         seq_num_head: &mut u64,
         verbose: bool,
@@ -1673,7 +1714,7 @@ fn fuzz(
 
             match kind {
                 ResponseKind::Add {
-                    data,
+                    data: NoDebug(data),
                     value: AddResponse::Success { id },
                 } => {
                     database.insert(id, data);
@@ -1841,11 +1882,15 @@ fn fuzz(
                             MimeType::new()
                         };
 
-                        let (file, file_len) =
-                            generate_random_entry_file(&mut rng, entry_size_distr)?;
+                        #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+                        let len = entry_size_distr.sample(&mut rng).round().max(1.) as usize;
+                        let data = Alphanumeric
+                            .sample_iter(&mut rng)
+                            .take(len)
+                            .collect::<Vec<_>>();
+                        let file = generate_entry_file(&data)?;
                         pending_ops.push_back(PendingOp::Add {
-                            data: Mmap::new(&file, usize::try_from(file_len).unwrap())
-                                .map_io_err(|| format!("Failed to mmap file: {file:?}"))?,
+                            data: NoDebug(data),
                         });
                         pipeline_request!(|flags| AddRequest::send(
                             server, kind, mime_type, &file, flags
@@ -2029,27 +2074,6 @@ unsafe fn drain_add_requests(
     pending_adds: &mut u32,
 ) -> Result<(), CliError> {
     drain_requests(pipelined_add_recv(server, translation), 0, pending_adds)
-}
-
-fn generate_random_entry_file(
-    rng: &mut (impl RngCore + 'static),
-    len_distr: LogNormal<f64>,
-) -> Result<(File, u64), CliError> {
-    let mut file = File::from(
-        memfd_create(c"ringboard_gen", MemfdFlags::empty())
-            .map_io_err(|| "Failed to create data entry file.")?,
-    );
-
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    let len = len_distr.sample(rng).round().max(1.) as u64;
-    // TODO use adapter when it's available
-    let result = io::copy(&mut (rng as &mut dyn RngCore).take(len), &mut file)
-        .map_io_err(|| "Failed to write bytes to entry file.")?;
-    debug_assert_eq!(len, result);
-    file.seek(SeekFrom::Start(0))
-        .map_io_err(|| "Failed to reset entry file offset.")?;
-
-    Ok((file, len))
 }
 
 #[cfg(test)]
