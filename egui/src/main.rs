@@ -179,6 +179,7 @@ struct UiState {
     search_highlighted_id: Option<u64>,
     search_with_regex: bool,
     pending_search_token: Option<CancellationToken>,
+    queued_searches: u32,
 
     was_focused: bool,
     skipped_first_focus: bool,
@@ -218,6 +219,7 @@ fn handle_message(
                 search_highlighted_id,
                 search_with_regex: _,
                 pending_search_token,
+                queued_searches,
                 was_focused: _,
                 skipped_first_focus: _,
             },
@@ -250,7 +252,13 @@ fn handle_message(
         }
         Message::FavoriteChange(_) | Message::Deleted(_) => {}
         Message::LoadedImage { .. } => unreachable!(),
-        Message::PendingSearch(token) => *pending_search_token = Some(token),
+        Message::PendingSearch(token) => {
+            if *queued_searches != 1 {
+                token.cancel();
+            }
+            *queued_searches = queued_searches.saturating_sub(1);
+            *pending_search_token = Some(token);
+        }
         Message::Pasted => ctx.send_viewport_cmd(ViewportCommand::Close),
     }
 }
@@ -283,6 +291,7 @@ fn search_ui(
                 search_with_regex,
                 search_highlighted_id,
                 pending_search_token,
+                queued_searches,
                 ref was_focused,
                 ..
             },
@@ -346,6 +355,7 @@ fn search_ui(
         query: query.clone().into(),
         regex: *search_with_regex,
     });
+    *queued_searches += 1;
 }
 
 macro_rules! active_highlighted_id {
@@ -380,6 +390,7 @@ fn main_ui(
                 query: state.query.clone().into(),
                 regex: state.search_with_regex,
             });
+            state.queued_searches += 1;
         }
     };
 

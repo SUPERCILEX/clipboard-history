@@ -99,6 +99,7 @@ struct UiState {
     query: TextArea<'static>,
     search_state: Option<SearchState>,
     pending_search_token: Option<CancellationToken>,
+    queued_searches: u32,
 
     show_help: bool,
 
@@ -281,6 +282,7 @@ fn handle_message(
         details_requested,
         detailed_entry,
         pending_search_token,
+        queued_searches,
         last_error,
         outstanding_request,
         ..
@@ -341,7 +343,13 @@ fn handle_message(
                 ui.detail_image_state = Some(ImageState::Loaded(picker.new_resize_protocol(image)));
             }
         }
-        Message::PendingSearch(token) => *pending_search_token = Some(token),
+        Message::PendingSearch(token) => {
+            if *queued_searches != 1 {
+                token.cancel();
+            }
+            *queued_searches = queued_searches.saturating_sub(1);
+            *pending_search_token = Some(token);
+        }
         Message::Pasted => return Ok(true),
     }
     if ui.details_requested.is_some() {
@@ -382,6 +390,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                 query: ui.query.lines().first().unwrap().to_string().into(),
                 regex,
             });
+            ui.queued_searches += 1;
         }
     };
 
@@ -458,6 +467,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                             query: ui.query.lines().first().unwrap().to_string().into(),
                             regex,
                         });
+                        ui.queued_searches += 1;
                     } else if code == Up || code == Down {
                         *focused = false;
                     }
