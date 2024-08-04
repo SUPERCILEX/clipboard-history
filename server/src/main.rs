@@ -20,7 +20,6 @@ mod reactor;
 mod requests;
 mod send_msg_bufs;
 mod startup;
-mod utils;
 
 #[cfg(feature = "trace")]
 #[global_allocator]

@@ -7,14 +7,14 @@ use std::{
     process,
 };
 
-use ringboard_core::{read_server_pid, IoErr};
+use ringboard_core::{link_tmp_file, read_server_pid, IoErr};
 use rustix::{
     fs::{openat, unlinkat, AtFlags, Mode, OFlags, CWD},
     io::Errno,
     process::test_kill_process,
 };
 
-use crate::{utils::link_tmp_file, CliError};
+use crate::CliError;
 
 #[must_use]
 pub struct OwnedServer(PhantomData<()>);

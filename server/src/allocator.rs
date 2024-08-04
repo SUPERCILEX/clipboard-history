@@ -18,7 +18,7 @@ use bitcode::{Decode, Encode};
 use bitvec::{order::Lsb0, vec::BitVec};
 use log::{debug, error, info, trace, warn};
 use ringboard_core::{
-    bucket_to_length, copy_file_range_all, direct_file_name, open_buckets,
+    bucket_to_length, copy_file_range_all, direct_file_name, link_tmp_file, open_buckets,
     protocol::{
         composite_id, decompose_id, AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType,
         MoveToFrontResponse, RemoveResponse, RingKind, SwapResponse,
@@ -35,7 +35,7 @@ use rustix::{
     path::Arg,
 };
 
-use crate::{utils::link_tmp_file, CliError};
+use crate::CliError;
 
 #[derive(Debug)]
 struct RingWriter {

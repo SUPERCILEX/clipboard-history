@@ -7,7 +7,7 @@ use std::{
     marker::PhantomData,
     mem::{size_of, MaybeUninit},
     ops::Deref,
-    os::fd::{AsFd, OwnedFd},
+    os::fd::{AsFd, AsRawFd, OwnedFd, RawFd},
     path::Path,
     ptr, slice,
     str::FromStr,
@@ -15,7 +15,7 @@ use std::{
 
 use arrayvec::{ArrayString, ArrayVec};
 use rustix::{
-    fs::{copy_file_range, openat, statx, AtFlags, Mode, OFlags, StatxFlags},
+    fs::{copy_file_range, linkat, openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
     net::{bind_unix, listen, socket, AddressFamily, SocketAddrUnix, SocketType},
     path::Arg,
     process::Pid,
@@ -71,6 +71,29 @@ pub fn read_server_pid<Fd: AsFd, P: Arg + Copy + Debug>(
         })?;
         Ok(Pid::from_raw(pid))
     }
+}
+
+pub fn link_tmp_file<Fd: AsFd, DirFd: AsFd, P: Arg>(
+    tmp_file: Fd,
+    dirfd: DirFd,
+    path: P,
+) -> rustix::io::Result<()> {
+    const _: () = assert!(RawFd::BITS <= i32::BITS);
+    let mut buf = [0u8; "/proc/self/fd/".len() + "-2147483648".len() + 1];
+    write!(
+        buf.as_mut_slice(),
+        "/proc/self/fd/{}",
+        tmp_file.as_fd().as_raw_fd()
+    )
+    .unwrap();
+
+    linkat(
+        CWD,
+        unsafe { CStr::from_ptr(buf.as_ptr().cast()) },
+        dirfd,
+        path,
+        AtFlags::SYMLINK_FOLLOW,
+    )
 }
 
 pub trait AsBytes: Sized {
