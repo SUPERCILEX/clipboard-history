@@ -36,7 +36,10 @@ use ratatui_image::{picker::Picker, protocol::StatefulProtocol, StatefulImage};
 use ringboard_sdk::{
     core::{protocol::RingKind, Error as CoreError, IoErr},
     search::CancellationToken,
-    ui_actor::{controller, Command, CommandError, DetailedEntry, Message, UiEntry, UiEntryCache},
+    ui_actor::{
+        controller, Command, CommandError, DetailedEntry, Message, SearchKind, UiEntry,
+        UiEntryCache,
+    },
 };
 use rustix::stdio::raw_stdout;
 use thiserror::Error;
@@ -108,7 +111,7 @@ struct UiState {
 
 struct SearchState {
     focused: bool,
-    regex: bool,
+    kind: SearchKind,
 }
 
 enum ImageState {
@@ -382,13 +385,13 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
     };
     let refresh = |ui: &mut UiState| {
         let _ = requests.send(Command::LoadFirstPage);
-        if let &Some(SearchState { focused: _, regex }) = &ui.search_state {
+        if let &Some(SearchState { focused: _, kind }) = &ui.search_state {
             if let Some(token) = &ui.pending_search_token {
                 token.cancel();
             }
             let _ = requests.send(Command::Search {
                 query: ui.query.lines().first().unwrap().to_string().into(),
-                regex,
+                kind,
             });
             ui.queued_searches += 1;
         }
@@ -405,7 +408,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                 use ratatui::crossterm::event::KeyCode::{Char, Down, Enter, Esc, Left, Right, Up};
                 match code {
                     Esc => {
-                        if let Some(SearchState { focused, regex: _ }) = &mut ui.search_state
+                        if let Some(SearchState { focused, .. }) = &mut ui.search_state
                             && *focused
                         {
                             *focused = false;
@@ -419,7 +422,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                         }
                     }
                     Enter => {
-                        if let Some(SearchState { focused, regex: _ }) = &mut ui.search_state
+                        if let Some(SearchState { focused, .. }) = &mut ui.search_state
                             && *focused
                         {
                             *focused = false;
@@ -434,7 +437,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
 
                 if let &mut Some(SearchState {
                     ref mut focused,
-                    regex,
+                    kind,
                 }) = &mut ui.search_state
                     && *focused
                 {
@@ -465,7 +468,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                         }
                         let _ = requests.send(Command::Search {
                             query: ui.query.lines().first().unwrap().to_string().into(),
-                            regex,
+                            kind,
                         });
                         ui.queued_searches += 1;
                     } else if code == Up || code == Down {
@@ -500,7 +503,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                             let previous = state.selected().map_or(usize::MAX, |i| {
                                 if i == 0 { len.wrapping_sub(1) } else { i - 1 }
                             });
-                            if let Some(SearchState { focused, regex: _ }) = &mut ui.search_state
+                            if let Some(SearchState { focused, .. }) = &mut ui.search_state
                                 && Some(previous) > state.selected()
                             {
                                 *focused = true;
@@ -519,10 +522,14 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                                 maybe_get_details(entries, ui, requests);
                             }
                         }
-                        Char(c @ ('/' | 's' | 'x')) => {
+                        Char(c @ ('/' | 's' | 'x' | 'm')) => {
                             ui.search_state = Some(SearchState {
                                 focused: true,
-                                regex: c == 'x',
+                                kind: match c {
+                                    'x' => SearchKind::Regex,
+                                    'm' => SearchKind::Mime,
+                                    _ => SearchKind::Plain,
+                                },
                             });
                         }
                         Char('f') => {
@@ -657,7 +664,7 @@ impl AppWrapper<'_> {
         ])
         .areas(area);
 
-        if let &Some(SearchState { focused, regex }) = &ui.search_state {
+        if let &Some(SearchState { focused, kind }) = &ui.search_state {
             ui.query.set_block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -668,10 +675,12 @@ impl AppWrapper<'_> {
                     })
                     .title(if ui.queued_searches > 0 {
                         "Searching…"
-                    } else if regex {
-                        "RegEx search"
                     } else {
-                        "Search"
+                        match kind {
+                            SearchKind::Plain => "Search",
+                            SearchKind::Regex => "RegEx search",
+                            SearchKind::Mime => "Mime type search",
+                        }
                     }),
             );
             ui.query.widget().render(search_area, buf);
@@ -836,8 +845,8 @@ impl AppWrapper<'_> {
         outer_block.render(area, buf);
 
         Paragraph::new(
-            "Use ↓↑ to move, ←→ to (un)select, / to search, x to search with RegEx, r to reload, \
-             f to (un)favorite, d to delete, J/K to scroll entry details.",
+            "Use ↓↑ to move, ←→ to (un)select, / to search, x to search with RegEx, m to search \
+             mime types, r to reload, f to (un)favorite, d to delete, J/K to scroll entry details.",
         )
         .wrap(Wrap { trim: true })
         .block(inner_block)

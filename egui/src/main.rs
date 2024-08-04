@@ -23,7 +23,10 @@ use eframe::{
 use ringboard_sdk::{
     core::{protocol::RingKind, Error as CoreError},
     search::CancellationToken,
-    ui_actor::{controller, Command, CommandError, DetailedEntry, Message, UiEntry, UiEntryCache},
+    ui_actor::{
+        controller, Command, CommandError, DetailedEntry, Message, SearchKind, UiEntry,
+        UiEntryCache,
+    },
     ClientError,
 };
 
@@ -177,7 +180,7 @@ struct UiState {
 
     query: String,
     search_highlighted_id: Option<u64>,
-    search_with_regex: bool,
+    search_kind: SearchKind,
     pending_search_token: Option<CancellationToken>,
     queued_searches: u32,
 
@@ -217,7 +220,7 @@ fn handle_message(
                 detailed_entry,
                 query: _,
                 search_highlighted_id,
-                search_with_regex: _,
+                search_kind: _,
                 pending_search_token,
                 queued_searches,
                 was_focused: _,
@@ -288,7 +291,7 @@ fn search_ui(
         ui:
             UiState {
                 query,
-                search_with_regex,
+                search_kind,
                 search_highlighted_id,
                 pending_search_token,
                 queued_searches,
@@ -299,21 +302,30 @@ fn search_ui(
     requests: &Sender<Command>,
 ) {
     if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::X)) {
-        *search_with_regex ^= true;
+        *search_kind = match search_kind {
+            SearchKind::Regex => SearchKind::Plain,
+            SearchKind::Plain | SearchKind::Mime => SearchKind::Regex,
+        };
+        ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))));
+    }
+    if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::M)) {
+        *search_kind = match search_kind {
+            SearchKind::Mime => SearchKind::Plain,
+            SearchKind::Plain | SearchKind::Regex => SearchKind::Mime,
+        };
         ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))));
     }
 
     let response = ui.add(
         TextEdit::singleline(query)
-            .hint_text(if *search_with_regex {
-                "Search with RegEx"
-            } else {
-                "Search"
+            .hint_text(match search_kind {
+                SearchKind::Plain => "Search",
+                SearchKind::Regex => "RegEx search",
+                SearchKind::Mime => "Mime type search",
             })
-            .font(if *search_with_regex {
-                TextStyle::Monospace.into()
-            } else {
-                FontSelection::default()
+            .font(match search_kind {
+                SearchKind::Plain => FontSelection::default(),
+                SearchKind::Regex | SearchKind::Mime => TextStyle::Monospace.into(),
             })
             .desired_width(f32::INFINITY)
             .cursor_at_end(true)
@@ -353,7 +365,7 @@ fn search_ui(
     }
     let _ = requests.send(Command::Search {
         query: query.clone().into(),
-        regex: *search_with_regex,
+        kind: *search_kind,
     });
     *queued_searches += 1;
 }
@@ -388,7 +400,7 @@ fn main_ui(
             }
             let _ = requests.send(Command::Search {
                 query: state.query.clone().into(),
-                regex: state.search_with_regex,
+                kind: state.search_kind,
             });
             state.queued_searches += 1;
         }

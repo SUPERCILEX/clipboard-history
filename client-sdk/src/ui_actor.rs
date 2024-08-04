@@ -77,9 +77,17 @@ pub enum Command {
     Favorite(u64),
     Unfavorite(u64),
     Delete(u64),
-    Search { query: Box<str>, regex: bool },
+    Search { query: Box<str>, kind: SearchKind },
     LoadImage(u64),
     Paste(u64),
+}
+
+#[derive(Default, Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum SearchKind {
+    #[default]
+    Plain,
+    Regex,
+    Mime,
 }
 
 #[derive(Debug)]
@@ -307,17 +315,21 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
             RemoveResponse { error: None } => Ok(Some(Message::Deleted(id))),
             RemoveResponse { error: Some(e) } => Err(e.into()),
         },
-        Command::Search { mut query, regex } => {
-            let query = if regex {
-                Query::Regex(Regex::new(&query)?)
-            } else if query
-                .chars()
-                .all(|c| !char::is_alphabetic(c) || char::is_lowercase(c))
-            {
-                query.make_ascii_lowercase();
-                Query::PlainIgnoreCase(query.trim().as_bytes())
-            } else {
-                Query::Plain(query.trim().as_bytes())
+        Command::Search { mut query, kind } => {
+            let query = match kind {
+                SearchKind::Plain => {
+                    if query
+                        .chars()
+                        .all(|c| !char::is_alphabetic(c) || char::is_lowercase(c))
+                    {
+                        query.make_ascii_lowercase();
+                        Query::PlainIgnoreCase(query.trim().as_bytes())
+                    } else {
+                        Query::Plain(query.trim().as_bytes())
+                    }
+                }
+                SearchKind::Regex => Query::Regex(Regex::new(&query)?),
+                SearchKind::Mime => Query::Mimes(Regex::new(&query)?),
             };
             Ok(Some(Message::SearchResults(
                 do_search(query, reader_, database, send, cache).into(),
