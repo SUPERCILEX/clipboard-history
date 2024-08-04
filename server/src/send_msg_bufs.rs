@@ -1,35 +1,24 @@
-use std::{
-    mem,
-    mem::{ManuallyDrop, MaybeUninit},
-    ptr,
-};
+use std::{mem, mem::ManuallyDrop, ptr, ptr::NonNull};
 
-use bitvec::{array::BitArray, BitArr};
 use log::trace;
 use smallvec::SmallVec;
 
 use crate::reactor::{MAX_NUM_BUFS_PER_CLIENT, MAX_NUM_CLIENTS};
 
-const CAP: usize = MAX_NUM_CLIENTS as usize * MAX_NUM_BUFS_PER_CLIENT as usize;
-
 pub struct SendMsgBufs {
-    allocated_mask: BitArr!(for CAP),
-    bufs: [MaybeUninit<LengthlessVec>; CAP],
+    bufs: [[Option<LengthlessVec>; MAX_NUM_BUFS_PER_CLIENT as usize]; MAX_NUM_CLIENTS as usize],
     pool: SmallVec<LengthlessVec, 4>,
 }
 
-pub type Token = u8;
-const _: () = assert!(CAP <= (1 << Token::BITS));
 pub type PendingBufAllocation = (Vec<u8>, *const libc::msghdr);
-pub type SendBufAllocation = (Token, *const libc::msghdr);
 
 impl SendMsgBufs {
-    const TOKEN_MASK: u64 = CAP as u64 - 1;
+    const TOKEN_MASK: u8 = MAX_NUM_BUFS_PER_CLIENT - 1;
 
     pub const fn new() -> Self {
         Self {
-            allocated_mask: BitArray::ZERO,
-            bufs: [const { MaybeUninit::uninit() }; CAP],
+            bufs: [const { [const { None }; MAX_NUM_BUFS_PER_CLIENT as usize] };
+                MAX_NUM_CLIENTS as usize],
             pool: SmallVec::new(),
         }
     }
@@ -104,27 +93,27 @@ impl SendMsgBufs {
         (buf, ptr.cast())
     }
 
-    pub fn alloc(&mut self, (buf, ptr): PendingBufAllocation) -> Result<SendBufAllocation, ()> {
-        let token = self.allocated_mask.leading_ones();
-        trace!("Allocating send buffer {token}.");
-        if token == CAP {
-            return Err(());
-        }
+    pub fn alloc(
+        &mut self,
+        client: u8,
+        token: u64,
+        (buf, ptr): PendingBufAllocation,
+    ) -> *const libc::msghdr {
+        let client = usize::from(client);
+        let token = usize::try_from(token & u64::from(Self::TOKEN_MASK)).unwrap();
+        trace!("Allocating send buffer {token} for client {client}.");
 
-        debug_assert!(!self.allocated_mask[token]);
-        self.allocated_mask.set(token, true);
-        self.bufs[token].write(buf.into());
-        Ok((u8::try_from(token).unwrap(), ptr.cast()))
+        debug_assert!(self.bufs[client][token].is_none());
+        self.bufs[client][token] = Some(buf.into());
+        ptr
     }
 
-    pub unsafe fn free(&mut self, token: u64) {
-        let token = usize::try_from(token & Self::TOKEN_MASK).unwrap();
-        trace!("Freeing send buffer {token}.");
+    pub unsafe fn free(&mut self, client: u8, token: u64) {
+        let client = usize::from(client);
+        let token = usize::try_from(token & u64::from(Self::TOKEN_MASK)).unwrap();
+        trace!("Freeing send buffer {token} for client {client}.");
 
-        debug_assert!(self.allocated_mask[token]);
-        self.allocated_mask.set(token, false);
-
-        let v = unsafe { self.bufs[token].assume_init_read() };
+        let v = self.bufs[client][token].take().unwrap();
         self.pool.push(v);
     }
 
@@ -133,18 +122,8 @@ impl SendMsgBufs {
     }
 }
 
-impl Drop for SendMsgBufs {
-    fn drop(&mut self) {
-        for i in self.allocated_mask.iter_ones() {
-            unsafe {
-                self.bufs[i].assume_init_drop();
-            }
-        }
-    }
-}
-
 struct LengthlessVec {
-    ptr: *mut u8,
+    ptr: NonNull<u8>,
     cap: usize,
 }
 
@@ -156,14 +135,18 @@ impl LengthlessVec {
 
     unsafe fn as_vec_(&self) -> Vec<u8> {
         let Self { ptr, cap } = *self;
-        unsafe { Vec::from_raw_parts(ptr, 0, cap) }
+        unsafe { Vec::from_raw_parts(ptr.as_ptr(), 0, cap) }
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<Vec<u8>> for LengthlessVec {
     fn from(value: Vec<u8>) -> Self {
         let (ptr, _len, cap) = value.into_raw_parts();
-        Self { ptr, cap }
+        Self {
+            ptr: NonNull::new(ptr).unwrap(),
+            cap,
+        }
     }
 }
 
@@ -175,42 +158,39 @@ impl Drop for LengthlessVec {
 
 #[cfg(test)]
 mod tests {
-    use crate::send_msg_bufs::{SendMsgBufs, CAP};
+    use crate::{
+        reactor::{MAX_NUM_BUFS_PER_CLIENT, MAX_NUM_CLIENTS},
+        send_msg_bufs::SendMsgBufs,
+    };
 
     #[test]
     fn fill() {
         let mut bufs = SendMsgBufs::new();
-        for _ in 0..CAP {
-            let pending = bufs.init_buf(
-                |control| control.extend(1..=69),
-                |data| data.extend((0..420).map(|_| 0xDE)),
-            );
-            bufs.alloc(pending).unwrap();
+        for client in 0..MAX_NUM_CLIENTS {
+            for i in 0..MAX_NUM_BUFS_PER_CLIENT {
+                let pending = bufs.init_buf(
+                    |control| control.extend(1..=69),
+                    |data| data.extend((0..420).map(|_| 0xDE)),
+                );
+                bufs.alloc(client, i.into(), pending);
+            }
         }
-
-        let pending = bufs.init_buf(
-            |control| control.extend(1..=69),
-            |data| data.extend((0..420).map(|_| 0xDE)),
-        );
-        assert!(bufs.alloc(pending).is_err());
     }
 
     #[test]
     fn free_random() {
         let mut bufs = SendMsgBufs::new();
 
-        let tokens = (0..3)
-            .map(|_| {
-                let pending = bufs.init_buf(
-                    |control| control.extend(1..=69),
-                    |data| data.extend((0..420).map(|_| 0xDE)),
-                );
-                bufs.alloc(pending).unwrap()
-            })
-            .collect::<Vec<_>>();
+        for i in 0..3 {
+            let pending = bufs.init_buf(
+                |control| control.extend(1..=69),
+                |data| data.extend((0..420).map(|_| 0xDE)),
+            );
+            bufs.alloc(0, i, pending);
+        }
 
         unsafe {
-            bufs.free(tokens[1].0.into());
+            bufs.free(0, 1);
         }
     }
 
@@ -225,7 +205,7 @@ mod tests {
                     |buf| buf.extend(control_data.clone()),
                     |buf| buf.extend(data.clone()),
                 );
-                let (token, hdr) = bufs.alloc(pending).unwrap();
+                let hdr = bufs.alloc(0, 0, pending);
 
                 let hdr = unsafe { &*hdr };
                 assert_eq!(hdr.msg_controllen, usize::from(control_len));
@@ -239,7 +219,7 @@ mod tests {
                     assert_eq!(unsafe { *iov.iov_base.add(i).cast::<u8>() }, data);
                 }
 
-                unsafe { bufs.free(token.into()) };
+                unsafe { bufs.free(0, 0) };
             }
             bufs.trim();
         }

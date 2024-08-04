@@ -26,7 +26,7 @@ use crate::{
     allocator::Allocator,
     io_uring::{buf_ring::BufRing, register_buf_ring, types::RecvMsgOutMut},
     requests,
-    send_msg_bufs::{SendMsgBufs, Token},
+    send_msg_bufs::SendMsgBufs,
     CliError,
 };
 
@@ -374,10 +374,8 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                             Some(resp)
                         };
                         if let Some(resp) = response {
-                            let (token, msghdr) =
-                                send_bufs.alloc(resp).map_err(|()| CliError::Internal {
-                                    context: "Didn't allocate enough send buffers.".into(),
-                                })?;
+                            let token = buf.into_index().into();
+                            let msghdr = send_bufs.alloc(fd, token, resp);
                             let send = SendMsg::new(Fixed(fd.into()), msghdr)
                                 .build()
                                 .flags(if clients.is_connected(fd) {
@@ -386,11 +384,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                     Flags::IO_LINK
                                 })
                                 .user_data(
-                                    REQ_TYPE_SENDMSG
-                                        | (u64::from(token) << REQ_TYPE_SHIFT)
-                                        | (u64::from(buf.into_index())
-                                            << (REQ_TYPE_SHIFT + Token::BITS))
-                                        | store_fd(fd),
+                                    REQ_TYPE_SENDMSG | (token << REQ_TYPE_SHIFT) | store_fd(fd),
                                 );
                             unsafe { submissions.push(&send) }?;
                         }
@@ -412,12 +406,10 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     {
                         let token = entry.user_data() >> REQ_TYPE_SHIFT;
                         unsafe {
-                            send_bufs.free(token);
+                            send_bufs.free(fd, token);
                         }
-                    }
-                    {
-                        let index = entry.user_data() >> (REQ_TYPE_SHIFT + u8::BITS);
-                        let index = u16::try_from(index & u64::from(u16::MAX)).unwrap();
+
+                        let index = u16::try_from(token & u64::from(u16::MAX)).unwrap();
                         let mut submissions = client_buffers[usize::from(fd)]
                             .as_mut()
                             .unwrap()
