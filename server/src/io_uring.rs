@@ -295,10 +295,6 @@ pub mod buf_ring {
             }
         }
 
-        pub unsafe fn recycle(&mut self, flags: u32) {
-            self.recycle_by_index(Self::flags_to_index(flags));
-        }
-
         pub unsafe fn recycle_by_index(&mut self, index: u16) {
             self._recycle_by_index(index);
         }
