@@ -475,33 +475,27 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                         Char('h') | Left => unselect(ui),
                         Char('j') | Down => {
                             let state = active_list_state!(entries, ui);
-                            let next = state.selected().map_or(0, |i| {
-                                if i + 1 == active_entries!(entries, ui).len() {
-                                    0
-                                } else {
-                                    i + 1
-                                }
-                            });
-                            state.select(Some(next));
+                            let len = active_entries!(entries, ui).len();
+                            let next = state
+                                .selected()
+                                .map_or(0, |i| if i + 1 == len { 0 } else { i + 1 });
+                            state.select(Some(next.min(len)));
                         }
                         Char('J') => {
                             ui.detail_scroll = ui.detail_scroll.saturating_add(1);
                         }
                         Char('k') | Up => {
                             let state = active_list_state!(entries, ui);
+                            let len = active_entries!(entries, ui).len();
                             let previous = state.selected().map_or(usize::MAX, |i| {
-                                if i == 0 {
-                                    active_entries!(entries, ui).len() - 1
-                                } else {
-                                    i - 1
-                                }
+                                if i == 0 { len.wrapping_sub(1) } else { i - 1 }
                             });
                             if let Some(SearchState { focused, regex: _ }) = &mut ui.search_state
                                 && Some(previous) > state.selected()
                             {
                                 *focused = true;
                             } else {
-                                state.select(Some(previous));
+                                state.select(Some(previous.min(len)));
                             }
                         }
                         Char('K') => {
