@@ -4,12 +4,9 @@
 use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 
 use error_stack::Report;
-use log::{info, warn};
+use log::info;
 use ringboard_core::{dirs::data_dir, Error, IoErr};
-use rustix::{
-    fs::unlink,
-    process::{chdir, Pid},
-};
+use rustix::process::{chdir, Pid};
 use thiserror::Error;
 
 use crate::{allocator::Allocator, startup::claim_server_ownership};
@@ -104,16 +101,7 @@ fn run() -> Result<(), CliError> {
         chdir(&data_dir)
             .map_io_err(|| format!("Failed to change working directory: {data_dir:?}"))?;
     }
-    let server_guard = {
-        loop {
-            if let Some(g) = claim_server_ownership()? {
-                break g;
-            }
-            warn!("Unclean shutdown detected, forcibly claiming server lock.");
-
-            unlink(c"server.lock").map_io_err(|| "Failed to delete server lock.")?;
-        }
-    };
+    let server_guard = claim_server_ownership()?;
     info!("Acquired server lock.");
 
     let mut allocator = Allocator::open()?;

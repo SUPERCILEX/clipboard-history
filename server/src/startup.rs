@@ -7,9 +7,10 @@ use std::{
     process,
 };
 
+use log::warn;
 use ringboard_core::{link_tmp_file, read_lock_file_pid, IoErr};
 use rustix::{
-    fs::{openat, unlinkat, AtFlags, Mode, OFlags, CWD},
+    fs::{openat, unlink, unlinkat, AtFlags, Mode, OFlags, CWD},
     io::Errno,
     process::test_kill_process,
 };
@@ -28,7 +29,7 @@ impl OwnedServer {
     }
 }
 
-pub fn claim_server_ownership() -> Result<Option<OwnedServer>, CliError> {
+pub fn claim_server_ownership() -> Result<OwnedServer, CliError> {
     let mut lock_file = File::from(
         openat(CWD, c".", OFlags::WRONLY | OFlags::TMPFILE, Mode::RUSR)
             .map_io_err(|| "Failed to create server lock temp file.")?,
@@ -36,33 +37,42 @@ pub fn claim_server_ownership() -> Result<Option<OwnedServer>, CliError> {
 
     write!(lock_file, "{}", process::id()).map_io_err(|| "Failed to write to server lock file.")?;
 
-    match link_tmp_file(lock_file, CWD, c"server.lock") {
-        Err(e) if e.kind() == AlreadyExists => {
-            let pid = read_lock_file_pid(CWD, c"server.lock")?;
-            let Some(pid) = pid else {
-                return Ok(None);
-            };
+    loop {
+        match link_tmp_file(&lock_file, CWD, c"server.lock") {
+            Err(e) if e.kind() == AlreadyExists => 'link: {
+                let pid = read_lock_file_pid(CWD, c"server.lock")?;
+                let Some(pid) = pid else {
+                    break 'link;
+                };
 
-            match test_kill_process(pid) {
-                Err(Errno::SRCH) => {
-                    return Ok(None);
+                match test_kill_process(pid) {
+                    Err(Errno::SRCH) => {
+                        break 'link;
+                    }
+                    r => r.map_io_err(|| format!("Failed to check server status: {pid:?}."))?,
                 }
-                r => r.map_io_err(|| format!("Failed to check server status: {pid:?}."))?,
+
+                return Err(CliError::ServerAlreadyRunning {
+                    pid,
+                    lock_file: fs::canonicalize("server.lock")
+                        .unwrap_or_else(|_| PathBuf::from("server.lock")),
+                });
             }
+            r => {
+                r.map_io_err(|| {
+                    format!(
+                        "Failed to acquire server lock: {:?}",
+                        fs::canonicalize("server.lock")
+                            .unwrap_or_else(|_| PathBuf::from("server.lock"))
+                    )
+                })?;
+                break;
+            }
+        };
 
-            return Err(CliError::ServerAlreadyRunning {
-                pid,
-                lock_file: fs::canonicalize("server.lock")
-                    .unwrap_or_else(|_| PathBuf::from("server.lock")),
-            });
-        }
-        r => r.map_io_err(|| {
-            format!(
-                "Failed to acquire server lock: {:?}",
-                fs::canonicalize("server.lock").unwrap_or_else(|_| PathBuf::from("server.lock"))
-            )
-        })?,
-    };
+        warn!("Unclean shutdown detected, forcibly claiming server lock.");
+        unlink(c"server.lock").map_io_err(|| "Failed to delete server lock.")?;
+    }
 
-    Ok(Some(OwnedServer(PhantomData)))
+    Ok(OwnedServer(PhantomData))
 }
