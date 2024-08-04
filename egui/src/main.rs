@@ -245,6 +245,7 @@ fn handle_message(
             }
         }
         Message::SearchResults(entries) => {
+            *queued_searches = queued_searches.saturating_sub(1);
             if pending_search_token.take().is_some() {
                 *search_highlighted_id = entries.first().map(|e| e.entry.id());
                 *search_results = entries;
@@ -256,7 +257,6 @@ fn handle_message(
             if *queued_searches != 1 {
                 token.cancel();
             }
-            *queued_searches = queued_searches.saturating_sub(1);
             *pending_search_token = Some(token);
         }
         Message::Pasted => ctx.send_viewport_cmd(ViewportCommand::Close),
@@ -464,7 +464,14 @@ fn main_ui(
 
     if active_entries(entries, state).is_empty() {
         ui.centered_and_justified(|ui| {
-            ui.label(RichText::new("Nothing to see here…").heading());
+            ui.label(
+                RichText::new(if state.queued_searches > 0 {
+                    "Loading…"
+                } else {
+                    "Nothing to see here…"
+                })
+                .heading(),
+            );
         });
     }
 

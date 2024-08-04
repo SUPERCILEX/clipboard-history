@@ -322,6 +322,7 @@ fn handle_message(
             }
         }
         Message::SearchResults(entries) => {
+            *queued_searches = queued_searches.saturating_sub(1);
             if pending_search_token.take().is_some() {
                 *search_results = entries;
                 if search_state.selected().is_none() {
@@ -347,7 +348,6 @@ fn handle_message(
             if *queued_searches != 1 {
                 token.cancel();
             }
-            *queued_searches = queued_searches.saturating_sub(1);
             *pending_search_token = Some(token);
         }
         Message::Pasted => return Ok(true),
@@ -666,7 +666,13 @@ impl AppWrapper<'_> {
                     } else {
                         Style::default()
                     })
-                    .title(if regex { "RegEx search" } else { "Search" }),
+                    .title(if ui.queued_searches > 0 {
+                        "Searching…"
+                    } else if regex {
+                        "RegEx search"
+                    } else {
+                        "Search"
+                    }),
             );
             ui.query.widget().render(search_area, buf);
         }
