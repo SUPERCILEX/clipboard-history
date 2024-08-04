@@ -7,6 +7,7 @@ use crate::reactor::{MAX_NUM_BUFS_PER_CLIENT, MAX_NUM_CLIENTS};
 
 pub struct SendMsgBufs {
     bufs: [[Option<LengthlessVec>; MAX_NUM_BUFS_PER_CLIENT as usize]; MAX_NUM_CLIENTS as usize],
+    alloc_counts: [u8; MAX_NUM_CLIENTS as usize],
     pool: SmallVec<LengthlessVec, 4>,
 }
 
@@ -19,8 +20,13 @@ impl SendMsgBufs {
         Self {
             bufs: [const { [const { None }; MAX_NUM_BUFS_PER_CLIENT as usize] };
                 MAX_NUM_CLIENTS as usize],
+            alloc_counts: [0; MAX_NUM_CLIENTS as usize],
             pool: SmallVec::new(),
         }
+    }
+
+    pub fn has_outstanding_sends(&self, client: u8) -> bool {
+        self.alloc_counts[usize::from(client)] > 0
     }
 
     pub fn init_buf<Control: FnOnce(&mut Vec<u8>), Data: FnOnce(&mut Vec<u8>)>(
@@ -105,6 +111,7 @@ impl SendMsgBufs {
 
         debug_assert!(self.bufs[client][token].is_none());
         self.bufs[client][token] = Some(buf.into());
+        self.alloc_counts[client] += 1;
         ptr
     }
 
@@ -113,6 +120,7 @@ impl SendMsgBufs {
         let token = usize::try_from(token & u64::from(Self::TOKEN_MASK)).unwrap();
         trace!("Freeing send buffer {token} for client {client}.");
 
+        self.alloc_counts[client] -= 1;
         let v = self.bufs[client][token].take().unwrap();
         self.pool.push(v);
     }

@@ -13,7 +13,7 @@ use io_uring::{
     opcode::{AcceptMulti, Close, PollAdd, RecvMsgMulti, SendMsg},
     squeue::{Flags, PushError},
     types::Fixed,
-    IoUring,
+    IoUring, SubmissionQueue,
 };
 use log::{debug, info, trace, warn};
 use ringboard_core::{dirs::socket_file, init_unix_server, IoErr};
@@ -59,6 +59,11 @@ impl Clients {
         self.connections |= 1 << id;
         self.pending_closes &= !(1 << id);
         self.pending_recv &= !(1 << id);
+    }
+
+    fn set_disconnecting(&mut self, id: u8) {
+        debug_assert!(id < MAX_NUM_CLIENTS);
+        self.pending_closes |= 1 << id;
     }
 
     fn set_disconnected(&mut self, id: u8) {
@@ -207,10 +212,23 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         u8::try_from(entry.user_data() >> (u64::BITS - MAX_NUM_CLIENTS_SHIFT)).unwrap()
     };
 
-    let close = |fd| {
-        Close::new(Fixed(u32::from(fd)))
+    let try_close = |client: u8,
+                     clients: &mut Clients,
+                     bufs: &mut SendMsgBufs,
+                     submissions: &mut SubmissionQueue|
+     -> Result<_, PushError> {
+        if bufs.has_outstanding_sends(client) {
+            clients.set_disconnecting(client);
+            return Ok(());
+        }
+
+        let close = Close::new(Fixed(u32::from(client)))
             .build()
-            .user_data(REQ_TYPE_CLOSE | store_fd(fd))
+            .user_data(REQ_TYPE_CLOSE | store_fd(client));
+        unsafe { submissions.push(&close) }?;
+        clients.set_disconnected(client);
+
+        Ok(())
     };
 
     let mut uring = setup_uring()?;
@@ -313,8 +331,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         }
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
                             warn!("Client {fd} reset the connection.");
-                            unsafe { submissions.push(&close(fd)) }?;
-                            clients.set_disconnected(fd);
+                            try_close(fd, &mut clients, &mut send_bufs, &mut submissions)?;
                             break 'recv;
                         }
                         r => r.map_io_err(|| format!("Failed to recv from client {fd}."))?,
@@ -345,8 +362,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                     if msg.payload_data.is_empty() {
                         debug!("Client {fd} closed the connection.");
                         if !clients.is_closing(fd) {
-                            unsafe { submissions.push(&close(fd)) }?;
-                            clients.set_disconnected(fd);
+                            try_close(fd, &mut clients, &mut send_bufs, &mut submissions)?;
                         }
                     } else {
                         if clients.is_closing(fd) {
@@ -395,11 +411,11 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                 unsafe { submissions.push(&recv) }?;
                             }
                         } else {
-                            unsafe { submissions.push(&close(fd)) }?;
+                            try_close(fd, &mut clients, &mut send_bufs, &mut submissions)?;
                         }
                     }
                 }
-                REQ_TYPE_SENDMSG => 'send: {
+                REQ_TYPE_SENDMSG => {
                     let fd = restore_fd(&entry);
                     debug!("Handling sendmsg completion for client {fd}.");
 
@@ -426,25 +442,23 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                                     "Client {fd} closed the connection before consuming all \
                                      responses."
                                 );
-                                unsafe { submissions.push(&close(fd)) }?;
-                                clients.set_disconnected(fd);
+                                clients.set_disconnecting(fd);
                             }
-                            break 'send;
                         }
                         Err(e) if e.kind() == ErrorKind::ConnectionReset => {
                             if !clients.is_closing(fd) {
                                 warn!("Client {fd} forcefully disconnected.");
-                                unsafe { submissions.push(&close(fd)) }?;
-                                clients.set_disconnected(fd);
+                                clients.set_disconnecting(fd);
                             }
-                            break 'send;
                         }
                         r => {
                             r.map_io_err(|| format!("Failed to send response to client {fd}."))?;
                         }
                     };
 
-                    if !clients.is_closing(fd)
+                    if clients.is_closing(fd) && clients.is_connected(fd) {
+                        try_close(fd, &mut clients, &mut send_bufs, &mut submissions)?;
+                    } else if !clients.is_closing(fd)
                         && clients.is_connected(fd)
                         && clients.take_pending_recv(fd)
                     {
