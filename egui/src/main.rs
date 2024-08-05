@@ -320,6 +320,11 @@ impl eframe::App for App {
         CentralPanel::default().show(ctx, |ui| {
             main_ui(ui, &self.row_font, &mut self.state, &self.requests);
         });
+
+        if ctx.input(|i| i.viewport().close_requested()) {
+            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+            ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+        }
     }
 }
 
