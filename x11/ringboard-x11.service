@@ -2,13 +2,14 @@
 Description=X11 Ringboard clipboard listener
 Documentation=https://github.com/SUPERCILEX/clipboard-history
 Requires=ringboard-server.service
-After=ringboard-server.service graphical.target
-ConditionEnvironment=DISPLAY
+After=ringboard-server.service
+BindsTo=graphical-session.target
+After=graphical-session.target
 
 [Service]
 Type=exec
 Environment=RUST_LOG=trace
-ExecStart=/bin/bash -c 'PATH=~/.cargo/bin:$PATH ringboard-x11'
+ExecStart=/bin/sh -c 'PATH=~/.cargo/bin:$PATH exec ringboard-x11'
 Restart=on-failure
 
 [Install]

@@ -5,6 +5,6 @@ Terminal=false
 Type=Application
 Name=Ringboard
 GenericName=Clipboard Manager
-Exec=/bin/bash -c "PATH=~/.cargo/bin:\\$PATH ringboard-egui"
+Exec=/bin/sh -c "PATH=~/.cargo/bin:\\$PATH exec ringboard-egui"
 Icon=ringboard
 StartupWMClass=ringboard-egui
