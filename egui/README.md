@@ -13,7 +13,7 @@ launches:
 
 ```shell
 # Run this command to generate the command that goes in the shortcut
-bash -c 'echo sh -c \"[ -e /tmp/.ringboard/$USERNAME.egui-sleep ] \&\& exec rm -f /tmp/.ringboard/$USERNAME.egui-sleep \|\| exec $(which ringboard-egui)\"'
+bash -c 'echo sh -c \"ps -p \`cat /tmp/.ringboard/$USERNAME.egui-sleep 2\> /dev/null\` \> /dev/null 2\>\&1 \&\& exec rm -f /tmp/.ringboard/$USERNAME.egui-sleep \|\| exec $(which ringboard-egui)\"'
 ```
 
 ## Usage instructions
