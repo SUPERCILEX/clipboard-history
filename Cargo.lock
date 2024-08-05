@@ -723,6 +723,7 @@ dependencies = [
  "eframe",
  "image",
  "rustc-hash 2.0.0",
+ "rustix",
  "tracy-client",
 ]
 

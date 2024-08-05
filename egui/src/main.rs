@@ -1,11 +1,12 @@
 #![feature(let_chains)]
+#![allow(clippy::significant_drop_tightening)]
 
 use std::{
     error::Error,
     sync::{
         mpsc,
         mpsc::{Receiver, Sender},
-        Arc,
+        Arc, Condvar, Mutex, PoisonError,
     },
     thread,
 };
@@ -30,7 +31,9 @@ use ringboard_sdk::{
     ClientError,
 };
 
-use crate::loader::RingboardLoader;
+use crate::{loader::RingboardLoader, startup::maintain_single_instance};
+
+mod startup;
 
 #[cfg(feature = "trace")]
 #[global_allocator]
@@ -58,6 +61,7 @@ fn main() -> Result<(), eframe::Error> {
                 let ctx = cc.egui_ctx.clone();
                 let entry_font = entry_font.clone();
                 let command_sender = command_sender.clone();
+                let response_sender = response_sender.clone();
                 move || {
                     {
                         let mut fonts = egui::FontDefinitions::default();
@@ -130,20 +134,37 @@ fn main() -> Result<(), eframe::Error> {
                     });
                 }
             });
+
+            let wakeup = Arc::new((Mutex::new(false), Condvar::new()));
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
+                let wakeup = wakeup.clone();
                 move || {
                     ctx.send_viewport_cmd(ViewportCommand::Icon(Some(
                         eframe::icon_data::from_png_bytes(include_bytes!("../logo.jpeg"))
                             .unwrap()
                             .into(),
                     )));
+
+                    if let Err(e) = maintain_single_instance(|| {
+                        ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+                        ctx.send_viewport_cmd(ViewportCommand::Focus);
+
+                        let (sleep, wait) = &*wakeup;
+                        let mut sleep = sleep.lock().unwrap_or_else(PoisonError::into_inner);
+                        *sleep = false;
+                        wait.notify_one();
+                    }) {
+                        let _ = response_sender.send(Message::Error(e.into()));
+                    }
                 }
             });
+
             Ok(Box::new(App::start(
                 entry_font,
                 command_sender,
                 response_receiver,
+                wakeup,
             )))
         }),
     )
@@ -153,6 +174,8 @@ struct App {
     requests: Sender<Command>,
     responses: Receiver<Message>,
     row_font: FontFamily,
+    // TODO https://github.com/emilk/egui/issues/4917
+    wakeup: Arc<(Mutex<bool>, Condvar)>,
 
     state: State,
 }
@@ -186,6 +209,7 @@ struct UiState {
 
     was_focused: bool,
     skipped_first_focus: bool,
+    block_main_thread: bool,
 }
 
 impl App {
@@ -193,11 +217,13 @@ impl App {
         row_font: FontFamily,
         requests: Sender<Command>,
         responses: Receiver<Message>,
+        wakeup: Arc<(Mutex<bool>, Condvar)>,
     ) -> Self {
         Self {
             requests,
             responses,
             row_font,
+            wakeup,
 
             state: State::default(),
         }
@@ -225,6 +251,7 @@ fn handle_message(
                 queued_searches,
                 was_focused: _,
                 skipped_first_focus: _,
+                block_main_thread,
             },
     }: &mut State,
     ctx: &egui::Context,
@@ -265,12 +292,24 @@ fn handle_message(
             }
             *pending_search_token = Some(token);
         }
-        Message::Pasted => ctx.send_viewport_cmd(ViewportCommand::Close),
+        Message::Pasted => {
+            ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+            *block_main_thread = true;
+        }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.state.ui.block_main_thread {
+            let (sleep, wait) = &*self.wakeup;
+            let mut sleep = sleep.lock().unwrap_or_else(PoisonError::into_inner);
+            *sleep = true;
+            drop(wait.wait_while(sleep, |&mut sleep| sleep));
+
+            self.state.ui.block_main_thread = false;
+        }
+
         for message in self.responses.try_iter() {
             handle_message(message, &mut self.state, ctx);
         }

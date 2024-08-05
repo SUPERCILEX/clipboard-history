@@ -35,7 +35,7 @@ pub fn paste_socket_file() -> PathBuf {
     file
 }
 
-fn push_sockets_prefix(file: &mut PathBuf) {
+pub fn push_sockets_prefix(file: &mut PathBuf) {
     #[allow(clippy::path_buf_push_overwrite)]
     file.push("/tmp/.ringboard");
     file.push(
