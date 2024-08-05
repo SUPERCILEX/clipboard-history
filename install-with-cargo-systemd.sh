@@ -17,5 +17,5 @@ cargo +nightly install clipboard-history-egui --no-default-features --features $
 echo
 echo "--- DONE ---"
 echo
-echo "Consider adding a custom keyboard shortcut to start the GUI:"
-echo "bash -c 'PATH=~/.cargo/bin:\$PATH ringboard-egui'"
+echo "Consider reading the egui docs:"
+echo "https://github.com/SUPERCILEX/clipboard-history/blob/master/egui/README.md"
