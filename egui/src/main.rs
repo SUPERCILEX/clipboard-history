@@ -296,6 +296,7 @@ impl eframe::App for App {
             main_ui(ui, &self.row_font, &mut self.state, &self.requests);
         });
 
+        #[cfg(not(feature = "wayland"))]
         if ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(ViewportCommand::Visible(false));
