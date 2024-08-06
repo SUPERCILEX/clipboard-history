@@ -44,7 +44,7 @@ static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
 
 fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
-        "Ringboard",
+        concat!("Ringboard v", env!("CARGO_PKG_VERSION")),
         eframe::NativeOptions {
             viewport: ViewportBuilder::default()
                 .with_app_id("ringboard-egui")

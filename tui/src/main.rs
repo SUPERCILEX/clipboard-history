@@ -803,7 +803,7 @@ impl AppWrapper<'_> {
     }
 
     fn render_title(area: Rect, buf: &mut Buffer) {
-        Paragraph::new("Ringboard")
+        Paragraph::new(concat!("Ringboard v", env!("CARGO_PKG_VERSION")))
             .bold()
             .centered()
             .render(area, buf);
