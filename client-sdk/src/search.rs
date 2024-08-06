@@ -31,9 +31,30 @@ use thiserror::Error;
 use crate::{ring_reader::xattr_mime_type, EntryReader};
 
 #[derive(Clone, Debug)]
+pub struct CaselessQuery {
+    query: Vec<u8>,
+    trim: bool,
+}
+
+impl CaselessQuery {
+    pub fn new<Q: Into<Vec<u8>>>(query: Q) -> Self {
+        Self {
+            query: query.into(),
+            trim: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn trim(mut self) -> Self {
+        self.trim = true;
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum Query<'a> {
     Plain(&'a [u8]),
-    PlainIgnoreCase(&'a [u8]),
+    PlainIgnoreCase(CaselessQuery),
     Regex(Regex),
     Mimes(Regex),
 }
@@ -162,11 +183,12 @@ pub fn search(
 ) {
     let (results, threads) = match query {
         Query::Plain(p) => search_impl(PlainQuery(Arc::new(Finder::new(p).into_owned())), reader),
-        Query::PlainIgnoreCase(p) => {
-            debug_assert!(p.to_ascii_lowercase() == p);
+        Query::PlainIgnoreCase(CaselessQuery { mut query, trim }) => {
+            query.make_ascii_lowercase();
+            let query = if trim { query.trim_ascii() } else { &query };
             search_impl(
                 PlainIgnoreCaseQuery {
-                    inner: PlainQuery(Arc::new(Finder::new(p).into_owned())),
+                    inner: PlainQuery(Arc::new(Finder::new(query).into_owned())),
                     cache: Vec::new(),
                 },
                 reader,

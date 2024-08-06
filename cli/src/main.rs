@@ -52,7 +52,7 @@ use ringboard_sdk::{
         size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS,
     },
     duplicate_detection::DuplicateDetector,
-    search::{EntryLocation, Query, QueryResult},
+    search::{CaselessQuery, EntryLocation, Query, QueryResult},
     ClientError, DatabaseReader, EntryReader, Kind,
 };
 use rustc_hash::FxHasher;
@@ -474,7 +474,7 @@ fn search(
     Search {
         regex,
         ignore_case,
-        mut query,
+        query,
     }: Search,
 ) -> Result<(), CliError> {
     const PREFIX_CONTEXT: usize = 40;
@@ -522,18 +522,21 @@ fn search(
     };
 
     let reader = Arc::new(reader);
-    let (result_stream, threads) = ringboard_sdk::search(
-        if regex {
-            Query::Regex(Regex::new(&query)?)
-        } else if ignore_case {
-            query.make_ascii_lowercase();
-            Query::PlainIgnoreCase(query.as_bytes())
-        } else {
-            Query::Plain(query.as_bytes())
-        },
-        reader.clone(),
-    );
-    drop(query);
+    let (result_stream, threads) = {
+        // TODO https://github.com/rust-lang/rust-clippy/issues/13227
+        #[allow(clippy::redundant_locals)]
+        let query = query;
+        ringboard_sdk::search(
+            if regex {
+                Query::Regex(Regex::new(&query)?)
+            } else if ignore_case {
+                Query::PlainIgnoreCase(CaselessQuery::new(query))
+            } else {
+                Query::Plain(query.as_bytes())
+            },
+            reader.clone(),
+        )
+    };
     let mut results = BTreeMap::<BucketAndIndex, (u16, u16)>::new();
     let mut buf = [0; CONTEXT_WINDOW];
     for result in result_stream {

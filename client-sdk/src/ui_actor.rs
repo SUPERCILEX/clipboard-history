@@ -30,7 +30,7 @@ use crate::{
         size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, RingAndIndex,
     },
     search,
-    search::{CancellationToken, EntryLocation, Query},
+    search::{CancellationToken, CaselessQuery, EntryLocation, Query},
     ClientError, DatabaseReader, Entry, EntryReader, Kind,
 };
 
@@ -315,15 +315,14 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
             RemoveResponse { error: None } => Ok(Some(Message::Deleted(id))),
             RemoveResponse { error: Some(e) } => Err(e.into()),
         },
-        Command::Search { mut query, kind } => {
+        Command::Search { query, kind } => {
             let query = match kind {
                 SearchKind::Plain => {
                     if query
                         .chars()
                         .all(|c| !char::is_alphabetic(c) || char::is_lowercase(c))
                     {
-                        query.make_ascii_lowercase();
-                        Query::PlainIgnoreCase(query.trim().as_bytes())
+                        Query::PlainIgnoreCase(CaselessQuery::new(query.into_boxed_bytes()).trim())
                     } else {
                         Query::Plain(query.trim().as_bytes())
                     }

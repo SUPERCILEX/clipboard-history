@@ -269,7 +269,7 @@ impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search
 pub enum clipboard_history_client_sdk::search::Query<'a>
 pub clipboard_history_client_sdk::search::Query::Mimes(regex::regex::bytes::Regex)
 pub clipboard_history_client_sdk::search::Query::Plain(&'a [u8])
-pub clipboard_history_client_sdk::search::Query::PlainIgnoreCase(&'a [u8])
+pub clipboard_history_client_sdk::search::Query::PlainIgnoreCase(clipboard_history_client_sdk::search::CaselessQuery)
 pub clipboard_history_client_sdk::search::Query::Regex(regex::regex::bytes::Regex)
 impl<'a> core::clone::Clone for clipboard_history_client_sdk::search::Query<'a>
 pub fn clipboard_history_client_sdk::search::Query<'a>::clone(&self) -> clipboard_history_client_sdk::search::Query<'a>
@@ -355,6 +355,50 @@ pub unsafe fn clipboard_history_client_sdk::search::CancellationToken::deref_mut
 pub unsafe fn clipboard_history_client_sdk::search::CancellationToken::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::search::CancellationToken::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::CancellationToken
+pub struct clipboard_history_client_sdk::search::CaselessQuery
+impl clipboard_history_client_sdk::search::CaselessQuery
+pub fn clipboard_history_client_sdk::search::CaselessQuery::new<Q: core::convert::Into<alloc::vec::Vec<u8>>>(query: Q) -> Self
+pub const fn clipboard_history_client_sdk::search::CaselessQuery::trim(self) -> Self
+impl core::clone::Clone for clipboard_history_client_sdk::search::CaselessQuery
+pub fn clipboard_history_client_sdk::search::CaselessQuery::clone(&self) -> clipboard_history_client_sdk::search::CaselessQuery
+impl core::fmt::Debug for clipboard_history_client_sdk::search::CaselessQuery
+pub fn clipboard_history_client_sdk::search::CaselessQuery::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_client_sdk::search::CaselessQuery
+impl core::marker::Send for clipboard_history_client_sdk::search::CaselessQuery
+impl core::marker::Sync for clipboard_history_client_sdk::search::CaselessQuery
+impl core::marker::Unpin for clipboard_history_client_sdk::search::CaselessQuery
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::search::CaselessQuery
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::search::CaselessQuery
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::search::CaselessQuery where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::search::CaselessQuery::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::search::CaselessQuery where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::search::CaselessQuery::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::search::CaselessQuery::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::search::CaselessQuery where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::search::CaselessQuery::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::search::CaselessQuery::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_client_sdk::search::CaselessQuery where T: core::clone::Clone
+pub type clipboard_history_client_sdk::search::CaselessQuery::Owned = T
+pub fn clipboard_history_client_sdk::search::CaselessQuery::clone_into(&self, target: &mut T)
+pub fn clipboard_history_client_sdk::search::CaselessQuery::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_client_sdk::search::CaselessQuery where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::search::CaselessQuery::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::CaselessQuery where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::search::CaselessQuery::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::CaselessQuery where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::search::CaselessQuery::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::CaselessQuery where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::search::CaselessQuery::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::CaselessQuery
+pub fn clipboard_history_client_sdk::search::CaselessQuery::from(t: T) -> T
+impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::search::CaselessQuery
+pub type clipboard_history_client_sdk::search::CaselessQuery::Init = T
+pub const clipboard_history_client_sdk::search::CaselessQuery::ALIGN: usize
+pub unsafe fn clipboard_history_client_sdk::search::CaselessQuery::deref<'a>(ptr: usize) -> &'a T
+pub unsafe fn clipboard_history_client_sdk::search::CaselessQuery::deref_mut<'a>(ptr: usize) -> &'a mut T
+pub unsafe fn clipboard_history_client_sdk::search::CaselessQuery::drop(ptr: usize)
+pub unsafe fn clipboard_history_client_sdk::search::CaselessQuery::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
+impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::CaselessQuery
 pub struct clipboard_history_client_sdk::search::QueryIter
 impl clipboard_history_client_sdk::search::QueryIter
 pub const fn clipboard_history_client_sdk::search::QueryIter::cancellation_token(&self) -> &clipboard_history_client_sdk::search::CancellationToken
