@@ -14,10 +14,9 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        text::LayoutJob, Align, CentralPanel, Event, FontId, FontSelection, Image, InputState, Key,
-        Label, Layout, Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense,
-        TextEdit, TextFormat, TextStyle, TopBottomPanel, Ui, Vec2, ViewportBuilder,
-        ViewportCommand, Widget,
+        text::LayoutJob, Align, CentralPanel, Event, FontId, Image, InputState, Key, Label, Layout,
+        Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, TextEdit,
+        TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
     },
     epaint::FontFamily,
 };
@@ -350,8 +349,8 @@ fn search_ui(
                 SearchKind::Mime => "Mime type search",
             })
             .font(match search_kind {
-                SearchKind::Plain => FontSelection::default(),
-                SearchKind::Regex | SearchKind::Mime => TextStyle::Monospace.into(),
+                SearchKind::Plain => FontId::proportional(16.5),
+                SearchKind::Regex | SearchKind::Mime => FontId::monospace(16.),
             })
             .desired_width(f32::INFINITY)
             .cursor_at_end(true)
