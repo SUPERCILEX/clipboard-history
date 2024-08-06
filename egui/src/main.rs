@@ -377,7 +377,11 @@ fn search_ui(
     };
 
     if ui.input(|input| input.key_pressed(Key::Escape)) && ui.memory(|mem| !mem.any_popup_open()) {
-        reset(query);
+        if query.is_empty() {
+            ui.ctx().send_viewport_cmd(ViewportCommand::Close);
+        } else {
+            reset(query);
+        }
     }
     if ui.input(|i| i.key_pressed(Key::ArrowUp) || i.key_pressed(Key::ArrowDown)) {
         response.surrender_focus();
