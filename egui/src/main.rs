@@ -2,7 +2,9 @@
 #![allow(clippy::significant_drop_tightening)]
 
 use std::{
+    env,
     error::Error,
+    ffi::OsStr,
     sync::{
         mpsc,
         mpsc::{Receiver, Sender},
@@ -19,6 +21,7 @@ use eframe::{
         TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
     },
     epaint::FontFamily,
+    Theme,
 };
 use ringboard_sdk::{
     core::{protocol::RingKind, Error as CoreError},
@@ -48,6 +51,15 @@ fn main() -> Result<(), eframe::Error> {
                 .with_min_inner_size(Vec2::splat(100.))
                 .with_inner_size(Vec2::new(666., 777.))
                 .with_position(Pos2::ZERO),
+            default_theme: if env::var_os("THEME")
+                .as_deref()
+                .unwrap_or_else(|| OsStr::new("dark"))
+                == "light"
+            {
+                Theme::Light
+            } else {
+                Theme::Dark
+            },
             ..Default::default()
         },
         Box::new(|cc| {
@@ -563,6 +575,7 @@ fn entry_ui(
                 one_liner.to_string(),
                 TextFormat {
                     font_id: FontId::new(16., entry_text_font.clone()),
+                    color: ui.visuals().text_color(),
                     ..Default::default()
                 },
             );
