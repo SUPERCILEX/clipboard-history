@@ -59,12 +59,12 @@ You'll need the server, an X11 or Wayland clipboard watcher, and a way to view y
    2. If on X11, install from source with
       `cargo install clipboard-history-x11 --no-default-features`.
 3. Install a client of your choice:
-   - egui: `cargo install clipboard-history-egui`
+   - egui: `cargo install clipboard-history-egui --no-default-features --features wayland/x11`
    - ratatui: `cargo install clipboard-history-tui`
    - CLI: `cargo install clipboard-history`
 4. Add a
    [custom shortcut](https://help.gnome.org/users/gnome-help/stable/keyboard-shortcuts-set.html.en)
-   to start your GUI, for example with `bash -c 'PATH=~/.cargo/bin:$PATH ringboard-egui'`.
+   to start your GUI. See the [`egui` docs](egui#suggested-workflow) for example.
 
 #### For systemd
 
@@ -88,7 +88,7 @@ Tooling is provided to migrate from other clipboard managers. Run:
 
 ## Project breakdown
 
-Each submodule contains its own README with details on how to use it.
+Each submodule contains its own README with details on the submodule.
 
 - `/`
   - [`cli/`](cli): The Ringboard Command Line Interface contains tools for working with the
