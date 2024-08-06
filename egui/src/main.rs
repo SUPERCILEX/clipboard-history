@@ -6,7 +6,7 @@ use std::{
     sync::{
         mpsc,
         mpsc::{Receiver, Sender},
-        Arc, Condvar, Mutex, PoisonError,
+        Arc,
     },
     thread,
 };
@@ -135,10 +135,8 @@ fn main() -> Result<(), eframe::Error> {
                 }
             });
 
-            let wakeup = Arc::new((Mutex::new(false), Condvar::new()));
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
-                let wakeup = wakeup.clone();
                 move || {
                     ctx.send_viewport_cmd(ViewportCommand::Icon(Some(
                         eframe::icon_data::from_png_bytes(include_bytes!("../logo.jpeg"))
@@ -149,11 +147,6 @@ fn main() -> Result<(), eframe::Error> {
                     if let Err(e) = maintain_single_instance(|| {
                         ctx.send_viewport_cmd(ViewportCommand::Visible(true));
                         ctx.send_viewport_cmd(ViewportCommand::Focus);
-
-                        let (sleep, wait) = &*wakeup;
-                        let mut sleep = sleep.lock().unwrap_or_else(PoisonError::into_inner);
-                        *sleep = false;
-                        wait.notify_one();
                     }) {
                         let _ = response_sender.send(Message::Error(e.into()));
                     }
@@ -164,7 +157,6 @@ fn main() -> Result<(), eframe::Error> {
                 entry_font,
                 command_sender,
                 response_receiver,
-                wakeup,
             )))
         }),
     )
@@ -174,8 +166,6 @@ struct App {
     requests: Sender<Command>,
     responses: Receiver<Message>,
     row_font: FontFamily,
-    // TODO https://github.com/emilk/egui/issues/4917
-    wakeup: Arc<(Mutex<bool>, Condvar)>,
 
     state: State,
 }
@@ -208,8 +198,7 @@ struct UiState {
     queued_searches: u32,
 
     was_focused: bool,
-    skipped_first_focus: bool,
-    block_main_thread: bool,
+    skip_first_focus: bool,
 }
 
 impl App {
@@ -217,15 +206,15 @@ impl App {
         row_font: FontFamily,
         requests: Sender<Command>,
         responses: Receiver<Message>,
-        wakeup: Arc<(Mutex<bool>, Condvar)>,
     ) -> Self {
+        let mut state = State::default();
+        state.ui.skip_first_focus = true;
         Self {
             requests,
             responses,
             row_font,
-            wakeup,
 
-            state: State::default(),
+            state,
         }
     }
 }
@@ -250,8 +239,7 @@ fn handle_message(
                 pending_search_token,
                 queued_searches,
                 was_focused: _,
-                skipped_first_focus: _,
-                block_main_thread,
+                skip_first_focus: _,
             },
     }: &mut State,
     ctx: &egui::Context,
@@ -292,24 +280,12 @@ fn handle_message(
             }
             *pending_search_token = Some(token);
         }
-        Message::Pasted => {
-            ctx.send_viewport_cmd(ViewportCommand::Visible(false));
-            *block_main_thread = true;
-        }
+        Message::Pasted => ctx.send_viewport_cmd(ViewportCommand::Close),
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.state.ui.block_main_thread {
-            let (sleep, wait) = &*self.wakeup;
-            let mut sleep = sleep.lock().unwrap_or_else(PoisonError::into_inner);
-            *sleep = true;
-            drop(wait.wait_while(sleep, |&mut sleep| sleep));
-
-            self.state.ui.block_main_thread = false;
-        }
-
         for message in self.responses.try_iter() {
             handle_message(message, &mut self.state, ctx);
         }
@@ -324,6 +300,9 @@ impl eframe::App for App {
         if ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+
+            self.state = State::default();
+            ctx.forget_all_images();
         }
     }
 }
@@ -455,11 +434,11 @@ fn main_ui(
 
     {
         let focused = ui.input(|i| i.focused);
-        if !state.was_focused && focused && state.skipped_first_focus {
+        if !state.was_focused && focused && !state.skip_first_focus {
             refresh(state);
         }
         if focused {
-            state.skipped_first_focus = true;
+            state.skip_first_focus = false;
         }
         state.was_focused = focused;
     }
