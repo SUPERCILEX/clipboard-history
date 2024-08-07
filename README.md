@@ -36,10 +36,11 @@ A detailed technical breakdown of the project is available at https://alexsaveau
 > Note: Ringboard is Linux-only and requires a relatively recent Kernel (6+).
 
 The easiest way to get going is to
-[install cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html) and then run the
-installation script for systemd:
+[install cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html) with nightly and
+then run the installation script for systemd:
 
 ```sh
+rustup install nightly # If not already installed
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/install-with-cargo-systemd.sh | bash
 ```
 
