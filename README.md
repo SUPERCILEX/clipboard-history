@@ -44,6 +44,9 @@ rustup install nightly # If not already installed
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/install-with-cargo-systemd.sh | bash
 ```
 
+Additionally, consider using https://github.com/nabijaczleweli/cargo-update to update your cargo
+apps.
+
 ### Manual installation
 
 #### Common core
