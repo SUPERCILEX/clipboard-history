@@ -533,6 +533,7 @@ fn main_ui(
     let try_popup =
         ui.input(|input| input.key_pressed(Key::Space)) && ui.memory(|mem| mem.focused().is_none());
 
+    let usable_height_for_popup = ui.available_size().y - 50.;
     ScrollArea::vertical().show(ui, |ui| {
         let mut prev_was_favorites = false;
         for entry in active_entries(entries, state) {
@@ -552,6 +553,7 @@ fn main_ui(
                 try_scroll,
                 try_popup,
                 no_popups_open,
+                usable_height_for_popup,
             );
         }
     });
@@ -575,6 +577,7 @@ fn entry_ui(
     try_scroll: bool,
     try_popup: bool,
     no_popups_open: bool,
+    max_popup_height: f32,
 ) {
     let response = match &entry.cache {
         UiEntryCache::Text { one_liner } => {
@@ -600,6 +603,7 @@ fn entry_ui(
                 entry,
                 try_scroll,
                 try_popup,
+                max_popup_height,
             )
         }
         UiEntryCache::Image => row_ui(
@@ -614,6 +618,7 @@ fn entry_ui(
             entry,
             try_scroll,
             try_popup,
+            max_popup_height,
         ),
         UiEntryCache::Binary { mime_type } => row_ui(
             ui,
@@ -625,6 +630,7 @@ fn entry_ui(
             entry,
             try_scroll,
             try_popup,
+            max_popup_height,
         ),
         UiEntryCache::Error(e) => {
             show_error(ui, e);
@@ -645,6 +651,7 @@ fn row_ui(
     &UiEntry { entry, ref cache }: &UiEntry,
     try_scroll: bool,
     try_popup: bool,
+    max_popup_height: f32,
 ) -> Response {
     let entry_id = entry.id();
 
@@ -698,6 +705,7 @@ fn row_ui(
             }
 
             ui.set_min_width(200.);
+            ui.set_max_height(max_popup_height);
 
             ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
                 ui.horizontal(|ui| {
