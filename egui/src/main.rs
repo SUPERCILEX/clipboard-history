@@ -475,7 +475,8 @@ fn main_ui(
         refresh(&mut state_.ui);
         return;
     }
-    if !active_entries(entries, state).is_empty() && ui.memory(|mem| !mem.any_popup_open()) {
+    let no_popups_open = ui.memory(|mem| !mem.any_popup_open());
+    if !active_entries(entries, state).is_empty() && no_popups_open {
         ui.input(|input| {
             handle_arrow_keys(
                 active_entries(entries, state),
@@ -550,6 +551,7 @@ fn main_ui(
                 refresh,
                 try_scroll,
                 try_popup,
+                no_popups_open,
             );
         }
     });
@@ -572,6 +574,7 @@ fn entry_ui(
     refresh: impl FnMut(&mut UiState),
     try_scroll: bool,
     try_popup: bool,
+    no_popups_open: bool,
 ) {
     let response = match &entry.cache {
         UiEntryCache::Text { one_liner } => {
@@ -628,7 +631,7 @@ fn entry_ui(
             return;
         }
     };
-    if response.clicked() {
+    if response.clicked() && no_popups_open {
         let _ = requests.send(Command::Paste(entry.entry.id()));
     }
 }
