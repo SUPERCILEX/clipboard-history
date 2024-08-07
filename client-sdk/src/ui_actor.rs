@@ -340,7 +340,7 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
                 id,
                 image: ImageReader::new(BufReader::new(&*entry.to_file(reader)?))
                     .with_guessed_format()
-                    .map_io_err(|| "Failed to guess image format for entry {id}.")?
+                    .map_io_err(|| format!("Failed to guess image format for entry {id}."))?
                     .decode()?,
             }))
         }
@@ -545,6 +545,6 @@ fn send_paste_buffer(
         &mut ancillary,
         SendFlags::empty(),
     )
-    .map_io_err(|| "Failed to send paste entry to paste server.")?;
+    .map_io_err(|| format!("Failed to send paste entry to paste server at {addr:?}."))?;
     Ok(())
 }

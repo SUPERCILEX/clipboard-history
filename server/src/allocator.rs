@@ -428,8 +428,12 @@ impl Allocator {
                     let mut to_buf = Default::default();
                     let to_buf = direct_file_name(&mut to_buf, to, to_id);
 
-                    renameat(direct_dir, &*from_buf, direct_dir, &*to_buf)
-                        .map_io_err(|| "Failed to rename direct allocation file.")?;
+                    renameat(direct_dir, &*from_buf, direct_dir, &*to_buf).map_io_err(|| {
+                        format!(
+                            "Failed to rename direct allocation file from {from_buf:?} to \
+                             {to_buf:?}."
+                        )
+                    })?;
                 }
             }
             Ok(from_entry)
@@ -491,8 +495,14 @@ impl Allocator {
                 } else {
                     RenameFlags::empty()
                 };
-                renameat_with(direct_dir, &*from_buf, direct_dir, &*to_buf, flags)
-                    .map_io_err(|| "Failed to rename direct allocation file.")?;
+                renameat_with(direct_dir, &*from_buf, direct_dir, &*to_buf, flags).map_io_err(
+                    || {
+                        format!(
+                            "Failed to rename direct allocation file from {from_buf:?} to \
+                             {to_buf:?}."
+                        )
+                    },
+                )?;
             }
             (Entry::Bucketed(_), Entry::Bucketed(_) | Entry::Uninitialized)
             | (Entry::Uninitialized, Entry::Bucketed(_)) => {
@@ -881,7 +891,7 @@ impl AllocatorData {
         let mut buf = Default::default();
         let buf = direct_file_name(&mut buf, to, id);
         link_tmp_file(data, &self.direct_dir, &*buf)
-            .map_io_err(|| "Failed to materialize direct allocation.")?;
+            .map_io_err(|| format!("Failed to materialize direct allocation: {buf:?}"))?;
 
         Ok(Entry::File)
     }
@@ -905,7 +915,7 @@ impl AllocatorData {
         let mut buf = Default::default();
         let buf = direct_file_name(&mut buf, to, id);
         unlinkat(&self.direct_dir, &*buf, AtFlags::empty())
-            .map_io_err(|| "Failed to remove direct allocation file.")?;
+            .map_io_err(|| format!("Failed to remove direct allocation file: {buf:?}"))?;
         Ok(())
     }
 }

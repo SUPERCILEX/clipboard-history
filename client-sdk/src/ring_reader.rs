@@ -407,10 +407,9 @@ impl Entry {
                 if let Err(BucketTooShort { bucket, needed_len }) =
                     bucket_entry_to_slice(reader, entry)
                 {
-                    let bucket = &mut reader.buckets[bucket];
-                    bucket
-                        .remap(needed_len)
-                        .map_io_err(|| "Failed to remap bucket.")?;
+                    let data = &mut reader.buckets[bucket];
+                    data.remap(needed_len)
+                        .map_io_err(|| format!("Failed to remap bucket {bucket:?}."))?;
                 }
             }
             Kind::File => {}
@@ -512,7 +511,7 @@ impl EntryReader {
             for (i, fd) in buckets.into_iter().enumerate() {
                 maps.push(
                     Mmap::new(fd, usize::try_from(lengths[i]).unwrap())
-                        .map_io_err(|| "Failed to map memory.")?,
+                        .map_io_err(|| format!("Failed to mmap bucket {i:?}."))?,
                 );
             }
             maps.into_inner().unwrap()

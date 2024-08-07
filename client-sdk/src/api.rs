@@ -66,7 +66,7 @@ pub fn connect_to_server_with(
             &mut SendAncillaryBuffer::default(),
             SendFlags::empty(),
         )
-        .map_io_err(|| "Failed to send version.")?;
+        .map_io_err(|| format!("Failed to send version to {addr:?}."))?;
 
         let Response {
             sequence_number: _,
