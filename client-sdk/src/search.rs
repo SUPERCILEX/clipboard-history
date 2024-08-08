@@ -209,6 +209,8 @@ fn search_impl(
     let token = CancellationToken::new();
     let mut threads = ArrayVec::<_, 13>::new_const();
 
+    let mut extra_direct_threads = 1;
+    let (direct_file_sender, direct_file_receiver) = crossbeam_channel::bounded(8);
     for bucket in usize::from(size_to_bucket(
         u16::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u16::MAX),
     ))..reader.buckets().len()
@@ -217,63 +219,70 @@ fn search_impl(
         let reader = reader.clone();
         let sender = sender.clone();
         let token = token.clone();
+        let direct_file_receiver = if extra_direct_threads > 0 {
+            extra_direct_threads -= 1;
+            Some(direct_file_receiver.clone())
+        } else {
+            None
+        };
         threads.push(thread::spawn(move || {
-            let bucket_size = usize::from(bucket_to_length(bucket));
-            let midpoint = if bucket_size == 4 {
-                1
-            } else {
-                bucket_size / 2 + 1
-            };
-            for (index, entry) in reader.buckets()[bucket]
-                .chunks_exact(bucket_size)
-                .enumerate()
             {
-                if token.is_cancelled() {
-                    break;
-                }
-
-                let entry = memchr::memchr(0, &entry[midpoint..])
-                    .map_or(entry, |stop| &entry[..midpoint + stop]);
-                let Some((start, end)) = query.find(entry) else {
-                    continue;
+                let bucket_size = usize::from(bucket_to_length(bucket));
+                let midpoint = if bucket_size == 4 {
+                    1
+                } else {
+                    bucket_size / 2 + 1
                 };
-                if sender
-                    .send(Ok(QueryResult {
-                        location: EntryLocation::Bucketed {
-                            bucket: u8::try_from(bucket).unwrap(),
-                            index: u32::try_from(index).unwrap(),
-                        },
-                        start,
-                        end,
-                    }))
-                    .is_err()
+                for (index, entry) in reader.buckets()[bucket]
+                    .chunks_exact(bucket_size)
+                    .enumerate()
                 {
-                    break;
+                    if token.is_cancelled() {
+                        break;
+                    }
+
+                    let entry = memchr::memchr(0, &entry[midpoint..])
+                        .map_or(entry, |stop| &entry[..midpoint + stop]);
+                    let Some((start, end)) = query.find(entry) else {
+                        continue;
+                    };
+                    if sender
+                        .send(Ok(QueryResult {
+                            location: EntryLocation::Bucketed {
+                                bucket: u8::try_from(bucket).unwrap(),
+                                index: u32::try_from(index).unwrap(),
+                            },
+                            start,
+                            end,
+                        }))
+                        .is_err()
+                    {
+                        break;
+                    }
                 }
+            }
+            if let Some(directs) = direct_file_receiver {
+                direct_alloc_search_stream(&token, &mut query, directs, |r| sender.send(r));
             }
         }));
     }
-    {
-        let (direct_file_sender, direct_file_receiver) = mpsc::sync_channel(8);
-        threads.push(thread::spawn({
-            let token = token.clone();
-            let sender = sender.clone();
-            move || {
-                stream_through_direct_allocations(
-                    &reader,
-                    &token,
-                    &sender,
-                    |file_name, fd, mime_type| {
-                        if !is_searchable_mime(mime_type) {
-                            return Ok(());
-                        }
+    threads.push(thread::spawn({
+        let token = token.clone();
+        let sender = sender.clone();
+        move || {
+            stream_through_direct_allocations(
+                &reader,
+                &token,
+                &sender,
+                |file_name, fd, mime_type| {
+                    if !is_searchable_mime(mime_type) {
+                        return Ok(());
+                    }
 
-                        let data = Mmap::from(&fd).map_io_err(|| {
-                            format!("Failed to mmap direct allocation: {file_name:?}")
-                        })?;
-                        let file_name = <[u8; DIRECT_FILE_NAME_LEN]>::try_from(
-                            file_name.to_bytes(),
-                        )
+                    let data = Mmap::from(&fd).map_io_err(|| {
+                        format!("Failed to mmap direct allocation: {file_name:?}")
+                    })?;
+                    let file_name = <[u8; DIRECT_FILE_NAME_LEN]>::try_from(file_name.to_bytes())
                         .map_err(|_| CoreError::Io {
                             error: io::Error::new(
                                 ErrorKind::InvalidData,
@@ -284,47 +293,20 @@ fn search_impl(
                             )
                             .into(),
                         })?;
-                        direct_file_sender.send((data, file_name))?;
-                        Ok(())
-                    },
-                );
-            }
-        }));
-        threads.push(thread::spawn({
-            let token = token.clone();
-            move || {
-                for (file, file_name) in direct_file_receiver {
-                    if token.is_cancelled() {
-                        break;
-                    }
-
-                    let mut run = || {
-                        // TODO consider splitting this off into its own thread if big enough
-                        let Some((start, end)) = query.find(&file) else {
-                            return Ok(None);
-                        };
-
-                        let id = entry_id_from_direct_file_name(&file_name)?;
-                        Ok(Some(QueryResult {
-                            location: EntryLocation::File { entry_id: id },
-                            start,
-                            end,
-                        }))
-                    };
-
-                    if match run() {
-                        Ok(Some(r)) => sender.send(Ok(r)),
-                        Ok(None) => continue,
-                        Err(e) => sender.send(Err(e)),
-                    }
-                    .is_err()
-                    {
-                        break;
-                    }
-                }
-            }
-        }));
-    }
+                    direct_file_sender.send((data, file_name))?;
+                    Ok(())
+                },
+            );
+        }
+    }));
+    threads.push(thread::spawn({
+        let token = token.clone();
+        move || {
+            direct_alloc_search_stream(&token, &mut query, direct_file_receiver, |r| {
+                sender.send(r)
+            });
+        }
+    }));
 
     (
         QueryIter {
@@ -333,6 +315,42 @@ fn search_impl(
         },
         threads.into_iter(),
     )
+}
+
+fn direct_alloc_search_stream<U>(
+    token: &CancellationToken,
+    query: &mut impl QueryImpl,
+    inputs: impl IntoIterator<Item = (Mmap, [u8; DIRECT_FILE_NAME_LEN])>,
+    mut send: impl FnMut(Result<QueryResult, CoreError>) -> Result<(), U>,
+) {
+    for (file, file_name) in inputs {
+        if token.is_cancelled() {
+            break;
+        }
+
+        let mut run = || {
+            let Some((start, end)) = query.find(&file) else {
+                return Ok(None);
+            };
+
+            let id = entry_id_from_direct_file_name(&file_name)?;
+            Ok(Some(QueryResult {
+                location: EntryLocation::File { entry_id: id },
+                start,
+                end,
+            }))
+        };
+
+        if match run() {
+            Ok(Some(r)) => send(Ok(r)),
+            Ok(None) => continue,
+            Err(e) => send(Err(e)),
+        }
+        .is_err()
+        {
+            break;
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -345,6 +363,12 @@ enum DirectIterError {
 
 impl<T> From<SendError<T>> for DirectIterError {
     fn from(_: SendError<T>) -> Self {
+        Self::Send
+    }
+}
+
+impl<T> From<crossbeam_channel::SendError<T>> for DirectIterError {
+    fn from(_: crossbeam_channel::SendError<T>) -> Self {
         Self::Send
     }
 }

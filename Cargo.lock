@@ -692,6 +692,7 @@ version = "0.5.2"
 dependencies = [
  "arrayvec",
  "clipboard-history-core",
+ "crossbeam-channel",
  "error-stack",
  "image",
  "memchr",
