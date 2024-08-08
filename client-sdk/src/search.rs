@@ -217,15 +217,22 @@ fn search_impl(
         let sender = sender.clone();
         let token = token.clone();
         threads.push(thread::spawn(move || {
+            let bucket_size = usize::from(bucket_to_length(bucket));
+            let midpoint = if bucket_size == 4 {
+                1
+            } else {
+                bucket_size / 2 + 1
+            };
             for (index, entry) in reader.buckets()[bucket]
-                .chunks_exact(usize::from(bucket_to_length(bucket)))
+                .chunks_exact(bucket_size)
                 .enumerate()
             {
                 if token.is_cancelled() {
                     break;
                 }
 
-                let entry = memchr::memchr(0, entry).map_or(entry, |stop| &entry[..stop]);
+                let entry = memchr::memchr(0, &entry[midpoint..])
+                    .map_or(entry, |stop| &entry[..midpoint + stop]);
                 let Some((start, end)) = query.find(entry) else {
                     continue;
                 };
