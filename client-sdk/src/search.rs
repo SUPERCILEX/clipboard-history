@@ -20,7 +20,8 @@ use arrayvec::ArrayVec;
 use memchr::memmem::Finder;
 use regex::bytes::Regex;
 use ringboard_core::{
-    bucket_to_length, ring::Mmap, size_to_bucket, IoErr, DIRECT_FILE_NAME_LEN, TEXT_MIMES,
+    bucket_to_length, ring::Mmap, size_to_bucket, Error as CoreError, IoErr, DIRECT_FILE_NAME_LEN,
+    TEXT_MIMES,
 };
 use rustix::{
     fs::{openat, Mode, OFlags, RawDir},
@@ -149,7 +150,7 @@ impl CancellationToken {
 }
 
 pub struct QueryIter {
-    stream: mpsc::IntoIter<Result<QueryResult, ringboard_core::Error>>,
+    stream: mpsc::IntoIter<Result<QueryResult, CoreError>>,
     token: CancellationToken,
 }
 
@@ -161,7 +162,7 @@ impl QueryIter {
 }
 
 impl Iterator for QueryIter {
-    type Item = Result<QueryResult, ringboard_core::Error>;
+    type Item = Result<QueryResult, CoreError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.stream.next()
@@ -273,7 +274,7 @@ fn search_impl(
                         let file_name = <[u8; DIRECT_FILE_NAME_LEN]>::try_from(
                             file_name.to_bytes(),
                         )
-                        .map_err(|_| ringboard_core::Error::Io {
+                        .map_err(|_| CoreError::Io {
                             error: io::Error::new(
                                 ErrorKind::InvalidData,
                                 "Not a Ringboard database.",
@@ -335,16 +336,24 @@ fn search_impl(
 }
 
 #[derive(Error, Debug)]
-enum DirectIterError<T> {
-    Core(#[from] ringboard_core::Error),
-    Send(#[from] SendError<T>),
+enum DirectIterError {
+    #[error("{0}")]
+    Core(#[from] CoreError),
+    #[error("Receiver closed the connection.")]
+    Send,
 }
 
-fn stream_through_direct_allocations<T, U>(
+impl<T> From<SendError<T>> for DirectIterError {
+    fn from(_: SendError<T>) -> Self {
+        Self::Send
+    }
+}
+
+fn stream_through_direct_allocations<T>(
     reader: &EntryReader,
     token: &CancellationToken,
-    sender: &SyncSender<Result<T, ringboard_core::Error>>,
-    mut f: impl FnMut(&CStr, OwnedFd, &str) -> Result<(), DirectIterError<U>>,
+    sender: &SyncSender<Result<T, CoreError>>,
+    mut f: impl FnMut(&CStr, OwnedFd, &str) -> Result<(), DirectIterError>,
 ) {
     let direct_dir = match openat(reader.direct(), c".", OFlags::DIRECTORY, Mode::empty())
         .map_io_err(|| "Failed to open direct dir.")
@@ -387,16 +396,16 @@ fn stream_through_direct_allocations<T, U>(
                     break;
                 }
             }
-            Err(DirectIterError::Send(_)) => break,
+            Err(DirectIterError::Send) => break,
         }
     }
 }
 
-fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, ringboard_core::Error> {
+fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, CoreError> {
     str::from_utf8(file_name)
         .ok()
         .and_then(|id| u64::from_str(id).ok())
-        .ok_or_else(|| ringboard_core::Error::Io {
+        .ok_or_else(|| CoreError::Io {
             error: io::Error::new(ErrorKind::InvalidData, "Not a Ringboard database."),
             context: format!(
                 "Invalid direct allocation file name: {:?}",
