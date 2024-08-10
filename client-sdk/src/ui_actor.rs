@@ -356,57 +356,50 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
 fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError> {
     let loaded = entry.to_slice(reader)?;
     let mime_type = &*loaded.mime_type()?;
-    let entry = if mime_type.starts_with("image/") {
-        UiEntry {
+    if mime_type.starts_with("image/") {
+        return Ok(UiEntry {
             entry,
             cache: UiEntryCache::Image,
-        }
-    } else if let Ok(s) = {
-        let mut shrunk = &loaded[..min(loaded.len(), 250)];
-        loop {
-            let Some(&b) = shrunk.last() else {
-                break;
-            };
-            // https://github.com/rust-lang/rust/blob/33422e72c8a66bdb5ee21246a948a1a02ca91674/library/core/src/num/mod.rs#L1090
-            #[allow(clippy::cast_possible_wrap)]
-            let is_utf8_char_boundary = (b as i8) >= -0x40;
-            if is_utf8_char_boundary || loaded.len() == shrunk.len() {
-                break;
-            }
+        });
+    }
 
-            shrunk = &loaded[..=shrunk.len()];
+    Ok(match str::from_utf8(&loaded[..min(loaded.len(), 250)]) {
+        Ok(s) => Some(s),
+        Err(e) if e.error_len().is_none() => {
+            Some(unsafe { str::from_utf8_unchecked(&loaded[..e.valid_up_to()]) })
         }
-        str::from_utf8(shrunk)
-    } {
-        let mut one_liner = String::new();
-        let mut prev_char_is_whitespace = false;
-        for c in s.chars() {
-            if (prev_char_is_whitespace || one_liner.is_empty()) && c.is_whitespace() {
-                continue;
-            }
-
-            one_liner.push(if c.is_whitespace() { ' ' } else { c });
-            prev_char_is_whitespace = c.is_whitespace();
-        }
-        if s.len() != loaded.len() {
-            one_liner.push('…');
-        }
-
-        UiEntry {
-            entry,
-            cache: UiEntryCache::Text {
-                one_liner: one_liner.into(),
-            },
-        }
-    } else {
-        UiEntry {
+        Err(_) => None,
+    }
+    .map_or_else(
+        || UiEntry {
             entry,
             cache: UiEntryCache::Binary {
                 mime_type: mime_type.into(),
             },
-        }
-    };
-    Ok(entry)
+        },
+        |s| {
+            let mut one_liner = String::new();
+            let mut prev_char_is_whitespace = false;
+            for c in s.chars() {
+                if (prev_char_is_whitespace || one_liner.is_empty()) && c.is_whitespace() {
+                    continue;
+                }
+
+                one_liner.push(if c.is_whitespace() { ' ' } else { c });
+                prev_char_is_whitespace = c.is_whitespace();
+            }
+            if s.len() != loaded.len() {
+                one_liner.push('…');
+            }
+
+            UiEntry {
+                entry,
+                cache: UiEntryCache::Text {
+                    one_liner: one_liner.into(),
+                },
+            }
+        },
+    ))
 }
 
 fn do_search<E>(
