@@ -339,12 +339,26 @@ fn search_ui(
     }: &mut State,
     requests: &Sender<Command>,
 ) {
+    macro_rules! search {
+        () => {
+            if let Some(token) = pending_search_token {
+                token.cancel();
+            }
+            let _ = requests.send(Command::Search {
+                query: query.clone().into(),
+                kind: *search_kind,
+            });
+            *queued_searches += 1;
+        };
+    }
+
     if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::X)) {
         *search_kind = match search_kind {
             SearchKind::Regex => SearchKind::Plain,
             SearchKind::Plain | SearchKind::Mime => SearchKind::Regex,
         };
         ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))));
+        search!();
     }
     if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::M)) {
         *search_kind = match search_kind {
@@ -352,6 +366,7 @@ fn search_ui(
             SearchKind::Plain | SearchKind::Regex => SearchKind::Mime,
         };
         ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))));
+        search!();
     }
 
     let response = ui.add(
@@ -402,14 +417,7 @@ fn search_ui(
         return;
     }
 
-    if let Some(token) = pending_search_token {
-        token.cancel();
-    }
-    let _ = requests.send(Command::Search {
-        query: query.clone().into(),
-        kind: *search_kind,
-    });
-    *queued_searches += 1;
+    search!();
 }
 
 macro_rules! active_highlighted_id {

@@ -386,17 +386,20 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
         ui.details_requested = None;
         ui.detailed_entry = None;
     };
+    let search = |ui: &mut UiState, kind: SearchKind| {
+        if let Some(token) = &ui.pending_search_token {
+            token.cancel();
+        }
+        let _ = requests.send(Command::Search {
+            query: ui.query.lines().first().unwrap().to_string().into(),
+            kind,
+        });
+        ui.queued_searches += 1;
+    };
     let refresh = |ui: &mut UiState| {
         let _ = requests.send(Command::LoadFirstPage);
         if let &Some(SearchState { focused: _, kind }) = &ui.search_state {
-            if let Some(token) = &ui.pending_search_token {
-                token.cancel();
-            }
-            let _ = requests.send(Command::Search {
-                query: ui.query.lines().first().unwrap().to_string().into(),
-                kind,
-            });
-            ui.queued_searches += 1;
+            search(ui, kind);
         }
     };
 
@@ -466,14 +469,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                         i => ui.query.input(i),
                     };
                     if changed {
-                        if let Some(token) = &ui.pending_search_token {
-                            token.cancel();
-                        }
-                        let _ = requests.send(Command::Search {
-                            query: ui.query.lines().first().unwrap().to_string().into(),
-                            kind,
-                        });
-                        ui.queued_searches += 1;
+                        search(ui, kind);
                     } else if code == Up || code == Down {
                         *focused = false;
                     }
@@ -526,14 +522,16 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                             }
                         }
                         Char(c @ ('/' | 's' | 'x' | 'm')) => {
+                            let kind = match c {
+                                'x' => SearchKind::Regex,
+                                'm' => SearchKind::Mime,
+                                _ => SearchKind::Plain,
+                            };
                             ui.search_state = Some(SearchState {
                                 focused: true,
-                                kind: match c {
-                                    'x' => SearchKind::Regex,
-                                    'm' => SearchKind::Mime,
-                                    _ => SearchKind::Plain,
-                                },
+                                kind,
                             });
+                            search(ui, kind);
                         }
                         Char('f') => {
                             if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
