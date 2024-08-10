@@ -591,7 +591,7 @@ struct AppWrapper<'a> {
 
 impl AppWrapper<'_> {
     fn draw(&mut self, terminal: &mut Terminal<impl Backend>) -> io::Result<()> {
-        terminal.draw(|f| f.render_widget(self, f.size()))?;
+        terminal.draw(|f| f.render_widget(self, f.area()))?;
         Ok(())
     }
 }
