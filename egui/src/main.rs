@@ -544,7 +544,7 @@ fn main_ui(
     let usable_height_for_popup = ui.available_size().y - 50.;
     ScrollArea::vertical().show(ui, |ui| {
         let mut prev_was_favorites = false;
-        for entry in active_entries(entries, state) {
+        for (i, entry) in active_entries(entries, state).iter().enumerate() {
             let next_was_favorites = entry.entry.ring() == RingKind::Favorites;
             if prev_was_favorites && !next_was_favorites {
                 ui.separator();
@@ -562,6 +562,7 @@ fn main_ui(
                 try_popup,
                 no_popups_open,
                 usable_height_for_popup,
+                i,
             );
         }
     });
@@ -586,6 +587,7 @@ fn entry_ui(
     try_popup: bool,
     no_popups_open: bool,
     max_popup_height: f32,
+    index: usize,
 ) {
     let response = match &entry.cache {
         UiEntryCache::Text { one_liner } => {
@@ -612,6 +614,7 @@ fn entry_ui(
                 try_scroll,
                 try_popup,
                 max_popup_height,
+                index,
             )
         }
         UiEntryCache::Image => row_ui(
@@ -627,6 +630,7 @@ fn entry_ui(
             try_scroll,
             try_popup,
             max_popup_height,
+            index,
         ),
         UiEntryCache::Binary { mime_type } => row_ui(
             ui,
@@ -639,6 +643,7 @@ fn entry_ui(
             try_scroll,
             try_popup,
             max_popup_height,
+            index,
         ),
         UiEntryCache::Error(e) => {
             show_error(ui, e);
@@ -660,7 +665,16 @@ fn row_ui(
     try_scroll: bool,
     try_popup: bool,
     max_popup_height: f32,
+    index: usize,
 ) -> Response {
+    if index < 10 && ui.input(|i| i.modifiers.ctrl) {
+        egui::Area::new(ui.next_auto_id())
+            .fixed_pos(ui.next_widget_position())
+            .show(ui.ctx(), |ui| {
+                ui.code(index.to_string());
+            });
+    }
+
     let entry_id = entry.id();
 
     let frame_data = egui::Frame::default().inner_margin(5.);
