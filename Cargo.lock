@@ -660,7 +660,7 @@ checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
 
 [[package]]
 name = "clipboard-history"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "arrayvec",
  "ask-cli",
@@ -688,7 +688,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-client-sdk"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "arrayvec",
  "clipboard-history-core",
@@ -706,7 +706,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-core"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "arrayvec",
  "dirs",
@@ -718,7 +718,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-egui"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "clipboard-history-client-sdk",
  "eframe",
@@ -730,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-server"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "arrayvec",
  "bitcode",
@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-tui"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "clipboard-history-client-sdk",
  "error-stack",
@@ -765,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-x11"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
