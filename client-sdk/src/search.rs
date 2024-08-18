@@ -432,7 +432,7 @@ fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, CoreError> {
         .ok_or_else(|| CoreError::Io {
             error: io::Error::new(ErrorKind::InvalidData, "Not a Ringboard database."),
             context: format!(
-                "Invalid direct allocation file name: {:?}",
+                "Invalid direct allocation file name: {}",
                 file_name.escape_ascii()
             )
             .into(),
