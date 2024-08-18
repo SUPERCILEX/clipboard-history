@@ -4,7 +4,6 @@ use std::{
     io::{ErrorKind, Read as StdRead, Write},
     mem,
     os::fd::{AsRawFd, OwnedFd},
-    path::PathBuf,
     ptr,
 };
 
@@ -19,6 +18,7 @@ use io_uring::{
 use log::{debug, info, trace, warn};
 use ringboard_core::{dirs::socket_file, init_unix_server, IoErr};
 use rustix::{
+    fs::{openat, Mode, OFlags, CWD},
     io::Errno,
     net::{RecvFlags, SocketType},
 };
@@ -103,7 +103,7 @@ impl Clients {
     }
 }
 
-fn setup_uring() -> Result<IoUring, CliError> {
+fn setup_uring() -> Result<(IoUring, bool), CliError> {
     let uring = IoUring::<io_uring::squeue::Entry>::builder()
         .setup_coop_taskrun()
         .setup_single_issuer()
@@ -131,32 +131,38 @@ fn setup_uring() -> Result<IoUring, CliError> {
         OwnedFd::from_raw_fd(fd)
     };
 
-    let low_mem_listener = {
-        let mut cgroup = String::with_capacity(160);
-        cgroup.push_str("/sys/fs/cgroup");
-        let start = cgroup.len();
-        File::open("/proc/self/cgroup")
-            .map_io_err(|| "Failed to open cgroup file: \"/proc/self/cgroup\"")?
-            .read_to_string(&mut cgroup)
-            .map_io_err(|| "Failed to read cgroup file: \"/proc/self/cgroup\"")?;
-        if let Some((idx, _)) = cgroup.match_indices(':').nth(1) {
-            cgroup.replace_range(start..=idx, "");
+    let low_mem_listener = 'init: {
+        let mut mem_pressure_path = Vec::with_capacity(160);
+        mem_pressure_path.extend_from_slice(b"/sys/fs/cgr");
+        {
+            let start = mem_pressure_path.len();
+            File::open("/proc/self/cgroup")
+                .map_io_err(|| "Failed to open cgroup file: \"/proc/self/cgroup\"")?
+                .read_to_end(&mut mem_pressure_path)
+                .map_io_err(|| "Failed to read cgroup file: \"/proc/self/cgroup\"")?;
+            if !mem_pressure_path[start..].starts_with(b"0::") {
+                debug!("Detected cgroup v1 which is unsupported.");
+                break 'init None;
+            }
+            mem_pressure_path[start..start + 3].copy_from_slice(b"oup");
+            mem_pressure_path.pop();
         }
-        cgroup.truncate(cgroup.trim_end().len());
 
-        let mut mem_pressure_path = PathBuf::from(cgroup);
-        mem_pressure_path.push("memory.pressure");
-        let mut mem_pressure = File::options()
-            .read(true)
-            .write(true)
-            .open(&mem_pressure_path)
-            .map_io_err(|| format!("Failed to open pressure file: {mem_pressure_path:?}"))?;
+        mem_pressure_path.extend_from_slice(b"/memory.pressure");
+        let mut mem_pressure = File::from(
+            openat(CWD, &mem_pressure_path, OFlags::RDWR, Mode::empty()).map_io_err(|| {
+                format!(
+                    "Failed to open pressure file: {}",
+                    mem_pressure_path.escape_ascii()
+                )
+            })?,
+        );
 
         mem_pressure
             .write_all(b"some 50000 2000000")
             .map_io_err(|| format!("Failed to write to pressure file: {mem_pressure_path:?}"))?;
 
-        OwnedFd::from(mem_pressure)
+        Some(mem_pressure)
     };
 
     let socket = init_unix_server(socket_file(), SocketType::SEQPACKET)?;
@@ -164,7 +170,7 @@ fn setup_uring() -> Result<IoUring, CliError> {
     let built_ins = [
         socket.as_raw_fd(),
         signal_handler.as_raw_fd(),
-        low_mem_listener.as_raw_fd(),
+        low_mem_listener.as_ref().map_or(-1, File::as_raw_fd),
     ];
     uring
         .submitter()
@@ -175,7 +181,7 @@ fn setup_uring() -> Result<IoUring, CliError> {
         .register_files_update(MAX_NUM_CLIENTS.into(), &built_ins)
         .map_io_err(|| "Failed to register socket FD with io_uring.")?;
 
-    Ok(uring)
+    Ok((uring, low_mem_listener.is_some()))
 }
 
 impl From<PushError> for CliError {
@@ -266,7 +272,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         Ok(())
     };
 
-    let mut uring = setup_uring()?;
+    let (mut uring, supports_low_mem) = setup_uring()?;
 
     #[cfg(feature = "systemd")]
     sd_notify::notify(false, &[sd_notify::NotifyState::Ready])
@@ -283,8 +289,11 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         let mut submission = uring.submission();
         unsafe {
             submission
-                .push_multiple(&[accept.clone(), read_signals, poll_low_mem.clone()])
+                .push_multiple(&[accept.clone(), read_signals])
                 .unwrap();
+            if supports_low_mem {
+                submission.push(&poll_low_mem).unwrap();
+            }
         }
     }
 
