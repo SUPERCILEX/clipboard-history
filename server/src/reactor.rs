@@ -131,6 +131,7 @@ fn setup_uring() -> Result<IoUring, CliError> {
         OwnedFd::from_raw_fd(fd)
     };
 
+    #[cfg(feature="memory-pressure-monitoring")]
     let low_mem_listener = {
         let mut cgroup = String::with_capacity(160);
         cgroup.push_str("/sys/fs/cgroup");
@@ -164,6 +165,7 @@ fn setup_uring() -> Result<IoUring, CliError> {
     let built_ins = [
         socket.as_raw_fd(),
         signal_handler.as_raw_fd(),
+        #[cfg(feature="memory-pressure-monitoring")]
         low_mem_listener.as_raw_fd(),
     ];
     uring
@@ -200,6 +202,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         .allocate_file_index(true)
         .build()
         .user_data(REQ_TYPE_ACCEPT);
+    #[cfg(feature="memory-pressure-monitoring")]
     let poll_low_mem = PollAdd::new(
         Fixed(u32::from(MAX_NUM_CLIENTS) + 2),
         u32::try_from(libc::POLLPRI).unwrap(),
@@ -283,7 +286,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         let mut submission = uring.submission();
         unsafe {
             submission
-                .push_multiple(&[accept.clone(), read_signals, poll_low_mem.clone()])
+                .push_multiple(&[accept.clone(), read_signals, #[cfg(feature="memory-pressure-monitoring")] poll_low_mem.clone()])
                 .unwrap();
         }
     }
@@ -526,6 +529,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
 
                     break 'outer;
                 }
+                #[cfg(feature="memory-pressure-monitoring")]
                 REQ_TYPE_LOW_MEM => {
                     debug!("Handling low memory completion.");
                     let result = result.map_io_err(|| "Failed to poll for low memory events.")?;

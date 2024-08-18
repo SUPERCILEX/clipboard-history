@@ -26,10 +26,11 @@ thiserror = "1.0.63"
 tracy-client = { version = "0.17.1", optional = true }
 
 [features]
-default = ["systemd", "human-logs"]
+default = ["systemd", "human-logs", "memory-pressure-monitoring"]
 systemd = ["dep:sd-notify"]
 human-logs = ["env_logger/default"]
 trace = ["dep:tracy-client"]
+memory-pressure-monitoring = []
 
 [[bin]]
 name = "ringboard-server"
