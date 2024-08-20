@@ -212,6 +212,7 @@ atom_manager! {
         UTF8_STRING,
 
         CLIPBOARD,
+        PRIMARY,
         TARGETS,
         INCR,
 
@@ -377,7 +378,7 @@ fn run() -> Result<(), CliError> {
                 0 => continue,
                 1 => handle_paste_event(
                     &conn,
-                    clipboard_atom,
+                    &atoms,
                     paste_window,
                     &paste_socket,
                     &mut ancillary_buf,
@@ -408,6 +409,7 @@ fn handle_x11_event(
         _NET_WM_NAME: window_name_atom,
         UTF8_STRING: utf8_string_atom,
         CLIPBOARD: clipboard_atom,
+        PRIMARY: primary_atom,
         TARGETS: targets_atom,
         INCR: incr_atom,
         ..
@@ -449,7 +451,7 @@ fn handle_x11_event(
                 Ok(())
             };
 
-            if selection != clipboard_atom {
+            if ![clipboard_atom, primary_atom].contains(&selection) {
                 debug!("Unsupported selection type.");
                 return reply(x11rb::NONE);
             }
@@ -900,7 +902,7 @@ fn handle_x11_event(
 
 fn handle_paste_event(
     conn: &RustConnection,
-    clipboard_atom: Atom,
+    atoms: &Atoms,
     paste_window: Window,
     paste_socket: impl AsFd,
     ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
@@ -961,7 +963,15 @@ fn handle_paste_event(
         }
     }
 
+    let Atoms {
+        CLIPBOARD: clipboard_atom,
+        PRIMARY: primary_atom,
+        ..
+    } = *atoms;
+
     debug!("Claiming selection ownership.");
     conn.set_selection_owner(paste_window, clipboard_atom, x11rb::CURRENT_TIME)?;
+    conn.set_selection_owner(paste_window, primary_atom, x11rb::CURRENT_TIME)?;
+
     Ok(())
 }
