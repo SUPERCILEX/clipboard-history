@@ -1,5 +1,6 @@
 pub mod clipboard_history_core
 pub mod clipboard_history_core::dirs
+pub fn clipboard_history_core::dirs::config_file_dir() -> std::path::PathBuf
 pub fn clipboard_history_core::dirs::data_dir() -> std::path::PathBuf
 pub fn clipboard_history_core::dirs::paste_socket_file() -> std::path::PathBuf
 pub fn clipboard_history_core::dirs::push_sockets_prefix(file: &mut std::path::PathBuf)

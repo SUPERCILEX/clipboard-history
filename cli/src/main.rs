@@ -6,7 +6,7 @@ use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     fmt::{Debug, Display, Formatter},
     fs,
-    fs::File,
+    fs::{create_dir_all, File},
     hash::BuildHasherDefault,
     io,
     io::{BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
@@ -40,6 +40,7 @@ use ringboard_sdk::{
         connect_to_server, connect_to_server_with, AddRequest, GarbageCollectRequest,
         MoveToFrontRequest, RemoveRequest, SwapRequest,
     },
+    config::{x11_config_file, X11Config, X11V1Config},
     core::{
         bucket_to_length, copy_file_range_all,
         dirs::{data_dir, socket_file},
@@ -148,10 +149,33 @@ enum Cmd {
     #[command(aliases = ["gc", "clean"])]
     GarbageCollect(GarbageCollect),
 
+    /// Modify app settings.
+    #[command(aliases = ["c", "config"])]
+    #[command(subcommand)]
+    Configure(Configure),
+
     /// Debugging tools for developers.
     #[command(aliases = ["d", "dev"])]
     #[command(subcommand)]
     Debug(Dev),
+}
+
+#[derive(Subcommand, Debug)]
+enum Configure {
+    /// Edit the X11 watcher settings.
+    #[command(aliases = ["x"])]
+    X11(ConfigureX11),
+}
+
+#[derive(Args, Debug)]
+struct ConfigureX11 {
+    /// Instead of simply placing selected items in the clipboard, attempt to
+    /// automatically paste the selected item into the previously focused
+    /// application.
+    #[clap(long)]
+    #[clap(default_value_t = true)]
+    #[clap(action = ArgAction::Set)]
+    auto_paste: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -367,6 +391,8 @@ enum CliError {
     QuickXml(#[from] quick_xml::Error),
     #[error("Serde XML (de)serialization failed")]
     QuickXmlDe(#[from] quick_xml::DeError),
+    #[error("Serde TOML serialization failed")]
+    Toml(#[from] toml::ser::Error),
     #[error("invalid RegEx")]
     Regex(#[from] regex::Error),
     #[error("internal search error")]
@@ -400,6 +426,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::SerdeJson(e) => Report::new(e).change_context(wrapper),
             CliError::QuickXml(e) => Report::new(e).change_context(wrapper),
             CliError::QuickXmlDe(e) => Report::new(e).change_context(wrapper),
+            CliError::Toml(e) => Report::new(e).change_context(wrapper),
             CliError::Regex(e) => Report::new(e).change_context(wrapper),
             CliError::InternalSearchError => Report::new(wrapper).attach_printable(
                 "Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new",
@@ -440,6 +467,7 @@ fn run() -> Result<(), CliError> {
         Cmd::Wipe => wipe(),
         Cmd::GarbageCollect(data) => garbage_collect(connect_to_server(&server_addr)?, data),
         Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, data),
+        Cmd::Configure(Configure::X11(data)) => configure_x11(data),
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump) => dump(),
         Cmd::Debug(Dev::Generate(data)) => generate(connect_to_server(&server_addr)?, data),
@@ -1981,6 +2009,22 @@ fn fuzz(
             _ => unreachable!(),
         }
     }
+}
+
+fn configure_x11(ConfigureX11 { auto_paste }: ConfigureX11) -> Result<(), CliError> {
+    let path = x11_config_file();
+    {
+        let parent = path.parent().unwrap();
+        create_dir_all(parent).map_io_err(|| format!("Failed to create dir: {parent:?}"))?;
+    }
+    let mut file = File::create(&path).map_io_err(|| format!("Failed to open file: {path:?}"))?;
+
+    let config = toml::to_string_pretty(&X11Config::V1(X11V1Config { auto_paste }))?;
+    file.write_all(config.as_bytes())
+        .map_io_err(|| format!("Failed to write to config file: {path:?}"))?;
+
+    println!("Saved configuration file to {path:?}.");
+    Ok(())
 }
 
 fn pipeline_request(

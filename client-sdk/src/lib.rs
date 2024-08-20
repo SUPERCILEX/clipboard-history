@@ -8,6 +8,8 @@ pub use search::search;
 use thiserror::Error;
 
 pub mod api;
+#[cfg(feature = "config")]
+pub mod config;
 #[cfg(feature = "deduplication")]
 pub mod duplicate_detection;
 mod ring_reader;
