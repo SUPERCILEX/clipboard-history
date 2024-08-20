@@ -59,6 +59,17 @@ jobs:
           cargo publish --package clipboard-history-x11
           cargo publish --package clipboard-history-egui
           cargo publish --package clipboard-history-tui
+
+          sed -i 's/name = "clipboard-history-server"/name = "ringboard-server"/' server/Cargo.toml
+          cargo publish --package ringboard-server --allow-dirty
+          sed -i 's/name = "clipboard-history"/name = "ringboard"/' cli/Cargo.toml
+          cargo publish --package ringboard --allow-dirty
+          sed -i 's/name = "clipboard-history-x11"/name = "ringboard-x11"/' x11/Cargo.toml
+          cargo publish --package ringboard-x11 --allow-dirty
+          sed -i 's/name = "clipboard-history-egui"/name = "ringboard-egui"/' egui/Cargo.toml
+          cargo publish --package ringboard-egui --allow-dirty
+          sed -i 's/name = "clipboard-history-tui"/name = "ringboard-tui"/' tui/Cargo.toml
+          cargo publish --package ringboard-tui --allow-dirty
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
