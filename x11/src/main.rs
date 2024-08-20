@@ -5,9 +5,11 @@ use std::{
     fs::File,
     io::IoSliceMut,
     mem,
+    mem::MaybeUninit,
     os::{fd::AsFd, unix::fs::FileExt},
     rc::Rc,
     slice,
+    time::Duration,
 };
 
 use arrayvec::ArrayVec;
@@ -26,11 +28,16 @@ use ringboard_sdk::{
 use rustix::{
     event::epoll,
     fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
+    io::read_uninit,
     net::{
         recvmsg, RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, SocketAddrUnix,
         SocketType,
     },
     path::Arg,
+    time::{
+        timerfd_create, timerfd_settime, Itimerspec, TimerfdClockId, TimerfdFlags,
+        TimerfdTimerFlags, Timespec,
+    },
 };
 use thiserror::Error;
 use x11rb::{
@@ -43,9 +50,11 @@ use x11rb::{
         xfixes::{select_selection_input, SelectionEventMask},
         xproto::{
             Atom, AtomEnum, ChangeWindowAttributesAux, ConnectionExt, CreateWindowAux, EventMask,
-            GetAtomNameReply, GetPropertyType, PropMode, Property, SelectionNotifyEvent,
-            SelectionRequestEvent, Window, WindowClass, SELECTION_NOTIFY_EVENT,
+            GetAtomNameReply, GetPropertyType, NotifyDetail, PropMode, Property,
+            SelectionNotifyEvent, SelectionRequestEvent, Window, WindowClass, KEY_PRESS_EVENT,
+            KEY_RELEASE_EVENT, SELECTION_NOTIFY_EVENT,
         },
+        xtest::ConnectionExt as XTestExt,
         Event,
     },
     rust_connection::RustConnection,
@@ -209,6 +218,7 @@ atom_manager! {
     Atoms:
     AtomsCookie {
         _NET_WM_NAME,
+        WM_CLASS,
         UTF8_STRING,
 
         CLIPBOARD,
@@ -320,6 +330,8 @@ fn run() -> Result<(), CliError> {
     debug!("Selection owner listener registered.");
 
     let paste_socket = init_unix_server(paste_socket_file(), SocketType::DGRAM)?;
+    let paste_timer = timerfd_create(TimerfdClockId::Monotonic, TimerfdFlags::empty())
+        .map_io_err(|| "Failed to create timer fd.")?;
     debug!("Initialized paste server");
 
     let mut ancillary_buf = [0; rustix::cmsg_space!(ScmRights(1))];
@@ -327,21 +339,23 @@ fn run() -> Result<(), CliError> {
 
     let epoll =
         epoll::create(epoll::CreateFlags::empty()).map_io_err(|| "Failed to create epoll.")?;
-    epoll::add(
-        &epoll,
-        conn.stream(),
-        epoll::EventData::new_u64(0),
-        epoll::EventFlags::IN,
-    )
-    .map_io_err(|| "Failed to register X11 server with epoll.")?;
-    epoll::add(
-        &epoll,
-        &paste_socket,
-        epoll::EventData::new_u64(1),
-        epoll::EventFlags::IN,
-    )
-    .map_io_err(|| "Failed to register paste server with epoll.")?;
-    let mut epoll_events = epoll::EventVec::with_capacity(2);
+    for (i, fd) in [
+        conn.stream().as_fd(),
+        paste_socket.as_fd(),
+        paste_timer.as_fd(),
+    ]
+    .iter()
+    .enumerate()
+    {
+        epoll::add(
+            &epoll,
+            fd,
+            epoll::EventData::new_u64(u64::try_from(i).unwrap()),
+            epoll::EventFlags::IN,
+        )
+        .map_io_err(|| "Failed to register epoll interest.")?;
+    }
+    let mut epoll_events = epoll::EventVec::with_capacity(3);
 
     let mut allocator = TransferAtomAllocator {
         windows: transfer_windows.into_inner().unwrap(),
@@ -363,6 +377,8 @@ fn run() -> Result<(), CliError> {
                 &server,
                 &mut deduplicator,
                 paste_window,
+                root,
+                &paste_timer,
                 &mut last_paste,
                 &mut paste_allocator,
             )?;
@@ -379,11 +395,17 @@ fn run() -> Result<(), CliError> {
                 1 => handle_paste_event(
                     &conn,
                     &atoms,
+                    root,
                     paste_window,
                     &paste_socket,
                     &mut ancillary_buf,
                     &mut last_paste,
                 )?,
+                2 => {
+                    read_uninit(&paste_timer, &mut [MaybeUninit::uninit(); 8])
+                        .map_io_err(|| "Failed to clear paste timer.")?;
+                    trigger_paste(&conn, root)?;
+                }
                 _ => unreachable!(),
             }
         }
@@ -399,6 +421,8 @@ fn handle_x11_event(
     deduplicator: &mut CopyDeduplication,
 
     paste_window: Window,
+    root: Window,
+    paste_timer: impl AsFd,
     last_paste: &mut Option<(PasteFile, PasteAtom)>,
     (paste_alloc_next, paste_allocations): &mut (
         u8,
@@ -587,6 +611,30 @@ fn handle_x11_event(
                     data.len() - end
                 );
                 *start = end;
+            }
+        }
+        Event::FocusIn(e) => {
+            debug!("Received focus event of type {:?}", e.detail);
+            if e.detail == NotifyDetail::NONLINEAR_VIRTUAL {
+                conn.change_window_attributes(
+                    root,
+                    &ChangeWindowAttributesAux::default().event_mask(EventMask::NO_EVENT),
+                )?;
+                timerfd_settime(
+                    &paste_timer,
+                    TimerfdTimerFlags::empty(),
+                    &Itimerspec {
+                        it_interval: Timespec {
+                            tv_sec: 0,
+                            tv_nsec: 0,
+                        },
+                        it_value: Timespec {
+                            tv_sec: 0,
+                            tv_nsec: Duration::from_millis(20).as_nanos().try_into().unwrap(),
+                        },
+                    },
+                )
+                .map_io_err(|| "Failed to arm paste timer.")?;
             }
         }
 
@@ -894,7 +942,7 @@ fn handle_x11_event(
         }
         Event::Error(e) => return Err(e.into()),
         event => {
-            debug!("Ignoring unknown X11 event: {event:?}");
+            trace!("Ignoring irrelevant X11 event: {event:?}");
         }
     }
     Ok(())
@@ -903,6 +951,7 @@ fn handle_x11_event(
 fn handle_paste_event(
     conn: &RustConnection,
     atoms: &Atoms,
+    root: Window,
     paste_window: Window,
     paste_socket: impl AsFd,
     ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
@@ -966,12 +1015,59 @@ fn handle_paste_event(
     let Atoms {
         CLIPBOARD: clipboard_atom,
         PRIMARY: primary_atom,
+        WM_CLASS: window_class_atom,
         ..
     } = *atoms;
 
     debug!("Claiming selection ownership.");
     conn.set_selection_owner(paste_window, clipboard_atom, x11rb::CURRENT_TIME)?;
     conn.set_selection_owner(paste_window, primary_atom, x11rb::CURRENT_TIME)?;
+
+    trace!("Preparing to send paste command.");
+    let focused_window = conn.get_input_focus()?.reply()?.focus;
+    let should_defer = || -> Result<bool, CliError> {
+        let class = conn
+            .get_property(
+                false,
+                focused_window,
+                window_class_atom,
+                GetPropertyType::ANY,
+                0,
+                u32::MAX,
+            )?
+            .reply()?;
+        let Some(name) = class.value.split(|&b| b == 0).nth(1) else {
+            return Ok(false);
+        };
+        if name != b"ringboard-egui" {
+            return Ok(false);
+        }
+
+        conn.change_window_attributes(
+            root,
+            &ChangeWindowAttributesAux::default().event_mask(EventMask::FOCUS_CHANGE),
+        )?;
+
+        Ok(true)
+    };
+    if should_defer().ok() == Some(true) {
+        debug!("Waiting for focus event to send paste command.");
+    } else {
+        trigger_paste(conn, root)?;
+    }
+
+    Ok(())
+}
+
+fn trigger_paste(conn: &RustConnection, root: Window) -> Result<(), CliError> {
+    let key = |type_, code| conn.xtest_fake_input(type_, code, x11rb::CURRENT_TIME, root, 1, 1, 0);
+
+    // Shift + Insert
+    key(KEY_PRESS_EVENT, 50)?;
+    key(KEY_PRESS_EVENT, 118)?;
+    key(KEY_RELEASE_EVENT, 118)?;
+    key(KEY_RELEASE_EVENT, 50)?;
+    info!("Sent paste command.");
 
     Ok(())
 }
