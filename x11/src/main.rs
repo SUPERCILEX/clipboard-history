@@ -3,10 +3,13 @@
 
 use std::{
     fs::File,
-    io::IoSliceMut,
+    io::{ErrorKind, IoSliceMut, Read},
     mem,
     mem::MaybeUninit,
-    os::{fd::AsFd, unix::fs::FileExt},
+    os::{
+        fd::{AsFd, OwnedFd},
+        unix::fs::FileExt,
+    },
     rc::Rc,
     slice,
     time::Duration,
@@ -17,6 +20,7 @@ use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
     api::{connect_to_server, AddRequest, MoveToFrontRequest},
+    config::{x11_config_file, X11Config, X11V1Config},
     core::{
         dirs::{paste_socket_file, socket_file},
         init_unix_server,
@@ -86,6 +90,8 @@ enum CliError {
     X11IdsExhausted,
     #[error("unsupported X11 version: XFixes extension not available")]
     X11NoXfixes,
+    #[error("Serde TOML deserialization failed")]
+    Toml(#[from] toml::de::Error),
 }
 
 impl From<X11Error> for CliError {
@@ -147,6 +153,7 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
         CliError::X11Connection(e) => Report::new(e).change_context(wrapper),
         CliError::X11Error(e) => Report::new(wrapper).attach_printable(format!("{e:?}")),
         CliError::X11IdsExhausted | CliError::X11NoXfixes => Report::new(wrapper),
+        CliError::Toml(e) => Report::new(e).change_context(wrapper),
     }
 }
 
@@ -246,11 +253,29 @@ enum PasteFile {
     Large(Rc<Mmap>),
 }
 
+fn load_config() -> Result<X11V1Config, CliError> {
+    let path = x11_config_file();
+    let mut file = match File::open(&path) {
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(X11V1Config::default()),
+        r => r.map_io_err(|| format!("Failed to open file: {path:?}"))?,
+    };
+
+    let mut config = String::new();
+    file.read_to_string(&mut config)
+        .map_io_err(|| format!("Failed to read config: {path:?}"))?;
+    Ok(match toml::from_str::<X11Config>(&config)? {
+        X11Config::V1(c) => c,
+    })
+}
+
 fn run() -> Result<(), CliError> {
     info!(
         "Starting Ringboard X11 clipboard listener v{}.",
         env!("CARGO_PKG_VERSION")
     );
+
+    let ref config @ X11V1Config { auto_paste } = load_config()?;
+    info!("Using configuration {config:?}");
 
     let server = {
         let socket_file = socket_file();
@@ -330,8 +355,14 @@ fn run() -> Result<(), CliError> {
     debug!("Selection owner listener registered.");
 
     let paste_socket = init_unix_server(paste_socket_file(), SocketType::DGRAM)?;
-    let paste_timer = timerfd_create(TimerfdClockId::Monotonic, TimerfdFlags::empty())
-        .map_io_err(|| "Failed to create timer fd.")?;
+    let paste_timer = if auto_paste {
+        Some(
+            timerfd_create(TimerfdClockId::Monotonic, TimerfdFlags::empty())
+                .map_io_err(|| "Failed to create timer fd.")?,
+        )
+    } else {
+        None
+    };
     debug!("Initialized paste server");
 
     let mut ancillary_buf = [0; rustix::cmsg_space!(ScmRights(1))];
@@ -340,13 +371,14 @@ fn run() -> Result<(), CliError> {
     let epoll =
         epoll::create(epoll::CreateFlags::empty()).map_io_err(|| "Failed to create epoll.")?;
     for (i, fd) in [
-        conn.stream().as_fd(),
-        paste_socket.as_fd(),
-        paste_timer.as_fd(),
+        Some(conn.stream().as_fd()),
+        Some(paste_socket.as_fd()),
+        paste_timer.as_ref().map(OwnedFd::as_fd),
     ]
     .iter()
     .enumerate()
     {
+        let Some(fd) = fd else { continue };
         epoll::add(
             &epoll,
             fd,
@@ -378,7 +410,7 @@ fn run() -> Result<(), CliError> {
                 &mut deduplicator,
                 paste_window,
                 root,
-                &paste_timer,
+                paste_timer.as_ref(),
                 &mut last_paste,
                 &mut paste_allocator,
             )?;
@@ -400,10 +432,14 @@ fn run() -> Result<(), CliError> {
                     &paste_socket,
                     &mut ancillary_buf,
                     &mut last_paste,
+                    paste_timer.is_some(),
                 )?,
                 2 => {
-                    read_uninit(&paste_timer, &mut [MaybeUninit::uninit(); 8])
-                        .map_io_err(|| "Failed to clear paste timer.")?;
+                    read_uninit(
+                        paste_timer.as_ref().unwrap(),
+                        &mut [MaybeUninit::uninit(); 8],
+                    )
+                    .map_io_err(|| "Failed to clear paste timer.")?;
                     trigger_paste(&conn, root)?;
                 }
                 _ => unreachable!(),
@@ -422,7 +458,7 @@ fn handle_x11_event(
 
     paste_window: Window,
     root: Window,
-    paste_timer: impl AsFd,
+    paste_timer: Option<impl AsFd>,
     last_paste: &mut Option<(PasteFile, PasteAtom)>,
     (paste_alloc_next, paste_allocations): &mut (
         u8,
@@ -621,7 +657,7 @@ fn handle_x11_event(
                     &ChangeWindowAttributesAux::default().event_mask(EventMask::NO_EVENT),
                 )?;
                 timerfd_settime(
-                    &paste_timer,
+                    paste_timer.unwrap(),
                     TimerfdTimerFlags::empty(),
                     &Itimerspec {
                         it_interval: Timespec {
@@ -956,6 +992,7 @@ fn handle_paste_event(
     paste_socket: impl AsFd,
     ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
     last_paste: &mut Option<(PasteFile, PasteAtom)>,
+    auto_paste: bool,
 ) -> Result<(), CliError> {
     let mut mime = MimeType::new_const();
     let mut ancillary = RecvAncillaryBuffer::new(ancillary_buf);
@@ -1023,37 +1060,39 @@ fn handle_paste_event(
     conn.set_selection_owner(paste_window, clipboard_atom, x11rb::CURRENT_TIME)?;
     conn.set_selection_owner(paste_window, primary_atom, x11rb::CURRENT_TIME)?;
 
-    trace!("Preparing to send paste command.");
-    let focused_window = conn.get_input_focus()?.reply()?.focus;
-    let should_defer = || -> Result<bool, CliError> {
-        let class = conn
-            .get_property(
-                false,
-                focused_window,
-                window_class_atom,
-                GetPropertyType::ANY,
-                0,
-                u32::MAX,
-            )?
-            .reply()?;
-        let Some(name) = class.value.split(|&b| b == 0).nth(1) else {
-            return Ok(false);
+    if auto_paste {
+        trace!("Preparing to send paste command.");
+        let focused_window = conn.get_input_focus()?.reply()?.focus;
+        let should_defer = || -> Result<bool, CliError> {
+            let class = conn
+                .get_property(
+                    false,
+                    focused_window,
+                    window_class_atom,
+                    GetPropertyType::ANY,
+                    0,
+                    u32::MAX,
+                )?
+                .reply()?;
+            let Some(name) = class.value.split(|&b| b == 0).nth(1) else {
+                return Ok(false);
+            };
+            if name != b"ringboard-egui" {
+                return Ok(false);
+            }
+
+            conn.change_window_attributes(
+                root,
+                &ChangeWindowAttributesAux::default().event_mask(EventMask::FOCUS_CHANGE),
+            )?;
+
+            Ok(true)
         };
-        if name != b"ringboard-egui" {
-            return Ok(false);
+        if should_defer().ok() == Some(true) {
+            debug!("Waiting for focus event to send paste command.");
+        } else {
+            trigger_paste(conn, root)?;
         }
-
-        conn.change_window_attributes(
-            root,
-            &ChangeWindowAttributesAux::default().event_mask(EventMask::FOCUS_CHANGE),
-        )?;
-
-        Ok(true)
-    };
-    if should_defer().ok() == Some(true) {
-        debug!("Waiting for focus event to send paste command.");
-    } else {
-        trigger_paste(conn, root)?;
     }
 
     Ok(())
