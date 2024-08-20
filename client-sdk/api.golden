@@ -254,8 +254,6 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::Ent
 pub fn clipboard_history_client_sdk::search::EntryLocation::borrow_mut(&mut self) -> &mut T
 impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::EntryLocation where T: core::clone::Clone
 pub unsafe fn clipboard_history_client_sdk::search::EntryLocation::clone_to_uninit(&self, dst: *mut T)
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::EntryLocation where T: core::marker::Copy
-pub unsafe fn clipboard_history_client_sdk::search::EntryLocation::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::EntryLocation
 pub fn clipboard_history_client_sdk::search::EntryLocation::from(t: T) -> T
 impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::search::EntryLocation
@@ -488,8 +486,6 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::Que
 pub fn clipboard_history_client_sdk::search::QueryResult::borrow_mut(&mut self) -> &mut T
 impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::QueryResult where T: core::clone::Clone
 pub unsafe fn clipboard_history_client_sdk::search::QueryResult::clone_to_uninit(&self, dst: *mut T)
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::QueryResult where T: core::marker::Copy
-pub unsafe fn clipboard_history_client_sdk::search::QueryResult::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::QueryResult
 pub fn clipboard_history_client_sdk::search::QueryResult::from(t: T) -> T
 impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::search::QueryResult
@@ -696,8 +692,6 @@ pub fn clipboard_history_client_sdk::ui_actor::SearchKind::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::ui_actor::SearchKind where T: core::marker::Sized
 pub fn clipboard_history_client_sdk::ui_actor::SearchKind::borrow_mut(&mut self) -> &mut T
 impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::ui_actor::SearchKind where T: core::clone::Clone
-pub unsafe fn clipboard_history_client_sdk::ui_actor::SearchKind::clone_to_uninit(&self, dst: *mut T)
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::ui_actor::SearchKind where T: core::marker::Copy
 pub unsafe fn clipboard_history_client_sdk::ui_actor::SearchKind::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::ui_actor::SearchKind
 pub fn clipboard_history_client_sdk::ui_actor::SearchKind::from(t: T) -> T
@@ -913,8 +907,6 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::Kind where 
 pub fn clipboard_history_client_sdk::Kind::borrow_mut(&mut self) -> &mut T
 impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::Kind where T: core::clone::Clone
 pub unsafe fn clipboard_history_client_sdk::Kind::clone_to_uninit(&self, dst: *mut T)
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::Kind where T: core::marker::Copy
-pub unsafe fn clipboard_history_client_sdk::Kind::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::Kind
 pub fn clipboard_history_client_sdk::Kind::from(t: T) -> T
 impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::Kind
@@ -1007,8 +999,6 @@ pub fn clipboard_history_client_sdk::Entry::borrow(&self) -> &T
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::Entry where T: core::marker::Sized
 pub fn clipboard_history_client_sdk::Entry::borrow_mut(&mut self) -> &mut T
 impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::Entry where T: core::clone::Clone
-pub unsafe fn clipboard_history_client_sdk::Entry::clone_to_uninit(&self, dst: *mut T)
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::Entry where T: core::marker::Copy
 pub unsafe fn clipboard_history_client_sdk::Entry::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_client_sdk::Entry
 pub fn clipboard_history_client_sdk::Entry::from(t: T) -> T
