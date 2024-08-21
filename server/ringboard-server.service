@@ -6,5 +6,5 @@ After=multi-user.target
 [Service]
 Type=notify
 Environment=RUST_LOG=trace
-ExecStart=/bin/sh -c 'PATH=~/.cargo/bin:$PATH exec ringboard-server'
+ExecStart=ringboard-server
 Restart=on-failure

@@ -5,6 +5,7 @@ Terminal=false
 Type=Application
 Name=Ringboard
 GenericName=Clipboard Manager
-Exec=/bin/sh -c "PATH=~/.cargo/bin:\\$PATH exec ringboard-egui"
+Comment=A fast, efficient, and composable clipboard manager for Linux.
+Exec=ringboard-egui
 Icon=ringboard
 StartupWMClass=ringboard-egui
