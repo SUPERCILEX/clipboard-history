@@ -8,3 +8,4 @@ Type=notify
 Environment=RUST_LOG=trace
 ExecStart=ringboard-server
 Restart=on-failure
+Slice=ringboard.slice

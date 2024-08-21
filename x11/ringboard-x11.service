@@ -11,6 +11,7 @@ Type=exec
 Environment=RUST_LOG=trace
 ExecStart=ringboard-x11
 Restart=on-failure
+Slice=ringboard.slice
 
 [Install]
 WantedBy=graphical-session.target
