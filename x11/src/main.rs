@@ -32,7 +32,7 @@ use ringboard_sdk::{
 use rustix::{
     event::epoll,
     fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
-    io::read_uninit,
+    io::{read_uninit, Errno},
     net::{
         recvmsg, RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, SocketAddrUnix,
         SocketType,
@@ -418,8 +418,10 @@ fn run() -> Result<(), CliError> {
         conn.flush()?;
 
         trace!("Waiting for event.");
-        epoll::wait(&epoll, &mut epoll_events, -1)
-            .map_io_err(|| "Failed to wait for epoll events.")?;
+        match epoll::wait(&epoll, &mut epoll_events, -1) {
+            Err(Errno::INTR) => continue,
+            r => r.map_io_err(|| "Failed to wait for epoll events.")?,
+        };
 
         for epoll::Event { flags: _, data } in &epoll_events {
             match data.u64() {
