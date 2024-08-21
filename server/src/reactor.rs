@@ -103,7 +103,9 @@ impl Clients {
     }
 }
 
-fn setup_uring() -> Result<(IoUring, bool), CliError> {
+struct BuiltInFds([u32; 3]);
+
+fn setup_uring() -> Result<(IoUring, BuiltInFds), CliError> {
     let uring = IoUring::<io_uring::squeue::Entry>::builder()
         .setup_coop_taskrun()
         .setup_single_issuer()
@@ -167,11 +169,26 @@ fn setup_uring() -> Result<(IoUring, bool), CliError> {
 
     let socket = init_unix_server(socket_file(), SocketType::SEQPACKET)?;
 
-    let built_ins = [
-        socket.as_raw_fd(),
-        signal_handler.as_raw_fd(),
-        low_mem_listener.as_ref().map_or(-1, File::as_raw_fd),
-    ];
+    let (built_ins, built_ins_mapping) = {
+        let base = u32::from(MAX_NUM_CLIENTS);
+        let mut map = [0; 3];
+
+        let mut fds = ArrayVec::<_, 3>::new_const();
+        for (i, &fd) in [
+            Some(socket.as_raw_fd()),
+            Some(signal_handler.as_raw_fd()),
+            low_mem_listener.as_ref().map(File::as_raw_fd),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let Some(fd) = fd else { continue };
+            fds.push(fd);
+            map[i] = base + u32::try_from(i).unwrap();
+        }
+
+        (fds, BuiltInFds(map))
+    };
     uring
         .submitter()
         .register_files_sparse(u32::from(MAX_NUM_CLIENTS) + u32::try_from(built_ins.len()).unwrap())
@@ -181,7 +198,7 @@ fn setup_uring() -> Result<(IoUring, bool), CliError> {
         .register_files_update(MAX_NUM_CLIENTS.into(), &built_ins)
         .map_io_err(|| "Failed to register socket FD with io_uring.")?;
 
-    Ok((uring, low_mem_listener.is_some()))
+    Ok((uring, built_ins_mapping))
 }
 
 impl From<PushError> for CliError {
@@ -202,12 +219,19 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
     const REQ_TYPE_MASK: u64 = 0b111;
     const REQ_TYPE_SHIFT: u32 = REQ_TYPE_MASK.count_ones();
 
-    let accept = AcceptMulti::new(Fixed(MAX_NUM_CLIENTS.into()))
+    let (mut uring, BuiltInFds([accept_fd, signal_handler_fd, low_mem_listener_fd])) =
+        setup_uring()?;
+
+    #[cfg(feature = "systemd")]
+    sd_notify::notify(false, &[sd_notify::NotifyState::Ready])
+        .map_io_err(|| "Failed to notify systemd of startup completion.")?;
+
+    let accept = AcceptMulti::new(Fixed(accept_fd))
         .allocate_file_index(true)
         .build()
         .user_data(REQ_TYPE_ACCEPT);
     let poll_low_mem = PollAdd::new(
-        Fixed(u32::from(MAX_NUM_CLIENTS) + 2),
+        Fixed(low_mem_listener_fd),
         u32::try_from(libc::POLLPRI).unwrap(),
     )
     .multi(true)
@@ -272,15 +296,9 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         Ok(())
     };
 
-    let (mut uring, supports_low_mem) = setup_uring()?;
-
-    #[cfg(feature = "systemd")]
-    sd_notify::notify(false, &[sd_notify::NotifyState::Ready])
-        .map_io_err(|| "Failed to notify systemd of startup completion.")?;
-
     {
         let read_signals = PollAdd::new(
-            Fixed(u32::from(MAX_NUM_CLIENTS) + 1),
+            Fixed(signal_handler_fd),
             u32::try_from(libc::POLLIN).unwrap(),
         )
         .build()
@@ -291,7 +309,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
             submission
                 .push_multiple(&[accept.clone(), read_signals])
                 .unwrap();
-            if supports_low_mem {
+            if low_mem_listener_fd > 0 {
                 submission.push(&poll_low_mem).unwrap();
             }
         }
