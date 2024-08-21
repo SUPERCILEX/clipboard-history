@@ -33,6 +33,10 @@ enum CliError {
     Multiple(Vec<CliError>),
     #[error("internal error")]
     Internal { context: Cow<'static, str> },
+
+    /// A non-fatal error.
+    #[error("Detected cgroup v1 which is unsupported.")]
+    CgroupV1
 }
 
 #[derive(Error, Debug)]
@@ -78,6 +82,7 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
             .attach_printable(
             "Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new",
         ),
+        CliError::CgroupV1 => unreachable!(),
     }
 }
 

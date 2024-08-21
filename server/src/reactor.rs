@@ -131,7 +131,7 @@ fn setup_uring() -> Result<(IoUring, bool), CliError> {
         OwnedFd::from_raw_fd(fd)
     };
 
-    let low_mem_listener = 'init: {
+    let get_low_mem_listener = || -> Result<File, CliError> {
         let mut mem_pressure_path = Vec::with_capacity(160);
         mem_pressure_path.extend_from_slice(b"/sys/fs/cgr");
         {
@@ -141,8 +141,7 @@ fn setup_uring() -> Result<(IoUring, bool), CliError> {
                 .read_to_end(&mut mem_pressure_path)
                 .map_io_err(|| "Failed to read cgroup file: \"/proc/self/cgroup\"")?;
             if !mem_pressure_path[start..].starts_with(b"0::") {
-                debug!("Detected cgroup v1 which is unsupported.");
-                break 'init None;
+                return Err(CliError::CgroupV1)
             }
             mem_pressure_path[start..start + 3].copy_from_slice(b"oup");
             mem_pressure_path.pop();
@@ -162,7 +161,15 @@ fn setup_uring() -> Result<(IoUring, bool), CliError> {
             .write_all(b"some 50000 2000000")
             .map_io_err(|| format!("Failed to write to pressure file: {mem_pressure_path:?}"))?;
 
-        Some(mem_pressure)
+        Ok(mem_pressure)
+    };
+
+    let low_mem_listener = match get_low_mem_listener() {
+        Ok(x) => Some(x),
+        Err(e) => {
+            debug!("Failed to set up memory pressure monitoring: {e}");
+            None
+        }
     };
 
     let socket = init_unix_server(socket_file(), SocketType::SEQPACKET)?;
