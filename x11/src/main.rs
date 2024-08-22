@@ -367,6 +367,7 @@ fn run() -> Result<(), CliError> {
 
     let mut ancillary_buf = [0; rustix::cmsg_space!(ScmRights(1))];
     let mut last_paste = None;
+    let mut clear_selection_mask = 0;
 
     let epoll =
         epoll::create(epoll::CreateFlags::empty()).map_io_err(|| "Failed to create epoll.")?;
@@ -413,6 +414,7 @@ fn run() -> Result<(), CliError> {
                 paste_timer.as_ref(),
                 &mut last_paste,
                 &mut paste_allocator,
+                &mut clear_selection_mask,
             )?;
         }
         conn.flush()?;
@@ -434,6 +436,7 @@ fn run() -> Result<(), CliError> {
                     &paste_socket,
                     &mut ancillary_buf,
                     &mut last_paste,
+                    &mut clear_selection_mask,
                     paste_timer.is_some(),
                 )?,
                 2 => {
@@ -466,6 +469,7 @@ fn handle_x11_event(
         u8,
         [(Window, Option<(Atom, Rc<Mmap>, usize)>); MAX_CONCURRENT_TRANSFERS],
     ),
+    clear_selection_mask: &mut u8,
 ) -> Result<(), CliError> {
     let &Atoms {
         _NET_WM_NAME: window_name_atom,
@@ -604,7 +608,24 @@ fn handle_x11_event(
             error!("Trying to paste into ourselves!");
         }
         Event::SelectionClear(event) => {
-            if event.owner == paste_window && last_paste.take().is_some() {
+            if event.owner != paste_window {
+                debug!(
+                    "Ignoring selection clear for unknown window: {:?}",
+                    event.owner
+                );
+                return Ok(());
+            }
+            *clear_selection_mask |= 1
+                << if event.selection == clipboard_atom {
+                    0
+                } else if event.selection == primary_atom {
+                    1
+                } else {
+                    unreachable!()
+                };
+            trace!("Clear selection mask: {clear_selection_mask:#02b}");
+
+            if *clear_selection_mask == 3 && last_paste.take().is_some() {
                 info!("Lost selection ownership.");
             }
         }
@@ -994,6 +1015,7 @@ fn handle_paste_event(
     paste_socket: impl AsFd,
     ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
     last_paste: &mut Option<(PasteFile, PasteAtom)>,
+    clear_selection_mask: &mut u8,
     auto_paste: bool,
 ) -> Result<(), CliError> {
     let mut mime = MimeType::new_const();
@@ -1061,6 +1083,7 @@ fn handle_paste_event(
     debug!("Claiming selection ownership.");
     conn.set_selection_owner(paste_window, clipboard_atom, x11rb::CURRENT_TIME)?;
     conn.set_selection_owner(paste_window, primary_atom, x11rb::CURRENT_TIME)?;
+    *clear_selection_mask = 0;
 
     if auto_paste {
         trace!("Preparing to send paste command.");
