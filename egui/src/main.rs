@@ -16,9 +16,9 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        text::LayoutJob, Align, CentralPanel, Event, FontId, Image, InputState, Key, Label, Layout,
-        Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, TextEdit,
-        TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
+        text::LayoutJob, Align, CentralPanel, Event, FontId, FontTweak, Image, InputState, Key,
+        Label, Layout, Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense,
+        TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
     },
     epaint::FontFamily,
     Theme,
@@ -78,19 +78,18 @@ fn main() -> Result<(), eframe::Error> {
                         let mut fonts = egui::FontDefinitions::default();
 
                         fonts.font_data.insert(
-                            "Hack".to_owned(),
+                            "AtkinsonHyperlegible".to_owned(),
                             egui::FontData::from_static(include_bytes!(
-                                "../fonts/Hack-Regular.ttf"
-                            )),
+                                "../fonts/Atkinson-Hyperlegible-Regular-102.ttf"
+                            ))
+                            .tweak(FontTweak {
+                                y_offset_factor: 0.1,
+                                baseline_offset_factor: -0.04,
+                                ..FontTweak::default()
+                            }),
                         );
                         fonts.font_data.insert(
-                            "Ubuntu-Light".to_owned(),
-                            egui::FontData::from_static(include_bytes!(
-                                "../fonts/Ubuntu-Light.ttf"
-                            )),
-                        );
-                        fonts.font_data.insert(
-                            "cascadia".to_owned(),
+                            "Cascadia".to_owned(),
                             egui::FontData::from_static(include_bytes!(
                                 "../fonts/CascadiaCode-Light.ttf"
                             )),
@@ -106,22 +105,18 @@ fn main() -> Result<(), eframe::Error> {
                             .families
                             .entry(entry_font)
                             .or_default()
-                            .extend_from_slice(&["cascadia".into(), "NotoEmoji".into()]);
+                            .extend_from_slice(&["Cascadia".into(), "NotoEmoji".into()]);
                         fonts
                             .families
                             .entry(FontFamily::Monospace)
                             .or_default()
-                            .extend_from_slice(&[
-                                "Hack".into(),
-                                "Ubuntu-Light".into(),
-                                "NotoEmoji".into(),
-                            ]);
+                            .extend_from_slice(&["Cascadia".into(), "NotoEmoji".into()]);
                         fonts
                             .families
                             .entry(FontFamily::Proportional)
                             .or_default()
                             .extend_from_slice(&[
-                                "Ubuntu-Light".to_owned(),
+                                "AtkinsonHyperlegible".to_owned(),
                                 "NotoEmoji".to_owned(),
                             ]);
 
