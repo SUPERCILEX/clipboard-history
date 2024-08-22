@@ -121,10 +121,29 @@ pub struct UiEntry {
 
 #[derive(Debug)]
 pub enum UiEntryCache {
-    Text { one_liner: Box<str> },
+    Text {
+        one_liner: Box<str>,
+    },
+    HighlightedText {
+        one_liner: Box<str>,
+        start: usize,
+        end: usize,
+    },
     Image,
-    Binary { mime_type: Box<str> },
+    Binary {
+        mime_type: Box<str>,
+    },
     Error(CoreError),
+}
+
+impl UiEntryCache {
+    #[must_use]
+    pub const fn is_text(&self) -> bool {
+        match self {
+            Self::Text { .. } | Self::HighlightedText { .. } => true,
+            Self::Image | Self::Binary { .. } | Self::Error(_) => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -352,7 +371,7 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
 fn ui_entry(
     entry: Entry,
     reader: &mut EntryReader,
-    highlight: Option<(usize, usize)>,
+    mut highlight: Option<(usize, usize)>,
 ) -> Result<UiEntry, CoreError> {
     let loaded = entry.to_slice(reader)?;
     let mime_type = &*loaded.mime_type()?;
@@ -363,7 +382,7 @@ fn ui_entry(
         });
     }
 
-    let prefix_free = if let Some((start, _)) = highlight {
+    let prefix_free = if let Some((start, end)) = &mut highlight {
         let mut l = &loaded[start.saturating_sub(24)..];
         for &b in l.iter().take(3) {
             // https://github.com/rust-lang/rust/blob/33422e72c8a66bdb5ee21246a948a1a02ca91674/library/core/src/num/mod.rs#L1090
@@ -374,6 +393,11 @@ fn ui_entry(
             }
             l = &l[1..];
         }
+
+        let diff = loaded.len() - l.len();
+        *start -= diff;
+        *end -= diff;
+
         l
     } else {
         &loaded
@@ -399,10 +423,22 @@ fn ui_entry(
 
             if prefix_free.len() != loaded.len() {
                 one_liner.push('…');
+                if let Some((start, end)) = &mut highlight {
+                    *start += '…'.len_utf8();
+                    *end += '…'.len_utf8();
+                }
             }
             let mut prev_char_is_whitespace = false;
             for c in s.chars() {
                 if (prev_char_is_whitespace || one_liner.is_empty()) && c.is_whitespace() {
+                    if let Some((start, end)) = &mut highlight {
+                        if one_liner.len() < *start {
+                            *start -= c.len_utf8();
+                        }
+                        if one_liner.len() < *end {
+                            *end -= c.len_utf8();
+                        }
+                    }
                     continue;
                 }
 
@@ -412,11 +448,22 @@ fn ui_entry(
             if suffix_free.len() != prefix_free.len() {
                 one_liner.push('…');
             }
+            if let Some((_, end)) = &mut highlight {
+                *end = min(*end, one_liner.len());
+            }
 
             UiEntry {
                 entry,
-                cache: UiEntryCache::Text {
-                    one_liner: one_liner.into(),
+                cache: if let Some((start, end)) = highlight {
+                    UiEntryCache::HighlightedText {
+                        one_liner: one_liner.into(),
+                        start,
+                        end,
+                    }
+                } else {
+                    UiEntryCache::Text {
+                        one_liner: one_liner.into(),
+                    }
                 },
             }
         },
@@ -563,12 +610,19 @@ fn do_search<E>(
                 unsafe { database.get(id) }?
             };
 
-            Ok(
-                ui_entry(entry, reader, Some((start, end))).unwrap_or_else(|e| UiEntry {
-                    cache: UiEntryCache::Error(e),
-                    entry,
-                }),
+            Ok(ui_entry(
+                entry,
+                reader,
+                if start == end {
+                    None
+                } else {
+                    Some((start, end))
+                },
             )
+            .unwrap_or_else(|e| UiEntry {
+                cache: UiEntryCache::Error(e),
+                entry,
+            }))
         })
         .collect();
     *search_result_buf = results;

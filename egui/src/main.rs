@@ -16,8 +16,9 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        text::LayoutJob, Align, CentralPanel, Event, FontId, FontTweak, Image, InputState, Key,
-        Label, Layout, Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense,
+        text::{LayoutJob, LayoutSection},
+        Align, CentralPanel, Event, FontId, FontTweak, Image, InputState, Key, Label, Layout,
+        Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke,
         TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
     },
     epaint::FontFamily,
@@ -584,24 +585,11 @@ fn entry_ui(
     max_popup_height: f32,
     index: usize,
 ) {
-    let response = match &entry.cache {
-        UiEntryCache::Text { one_liner } => {
-            let mut job = LayoutJob::single_section(
-                one_liner.to_string(),
-                TextFormat {
-                    font_id: FontId::new(16., entry_text_font.clone()),
-                    color: ui.visuals().text_color(),
-                    ..Default::default()
-                },
-            );
-            job.wrap = egui::text::TextWrapping {
-                max_rows: 1,
-                break_anywhere: true,
-                ..Default::default()
-            };
+    macro_rules! response {
+        ($w:expr) => {
             row_ui(
                 ui,
-                Label::new(job).selectable(false),
+                $w,
                 state,
                 requests,
                 refresh,
@@ -611,34 +599,71 @@ fn entry_ui(
                 max_popup_height,
                 index,
             )
+        };
+    }
+    let response = match &entry.cache {
+        UiEntryCache::Text { one_liner } | UiEntryCache::HighlightedText { one_liner, .. } => {
+            let job = LayoutJob {
+                text: one_liner.to_string(),
+                break_on_newline: false,
+                wrap: egui::text::TextWrapping {
+                    max_rows: 1,
+                    break_anywhere: true,
+                    ..Default::default()
+                },
+                sections: {
+                    let format = TextFormat {
+                        font_id: FontId::new(16., entry_text_font.clone()),
+                        color: ui.visuals().text_color(),
+                        ..Default::default()
+                    };
+                    if let UiEntryCache::HighlightedText {
+                        one_liner: _,
+                        start,
+                        end,
+                    } = entry.cache
+                    {
+                        vec![
+                            LayoutSection {
+                                leading_space: 0.0,
+                                byte_range: 0..start,
+                                format: format.clone(),
+                            },
+                            LayoutSection {
+                                leading_space: 0.0,
+                                byte_range: start..end,
+                                format: TextFormat {
+                                    underline: Stroke::new(1., ui.visuals().strong_text_color()),
+                                    ..format.clone()
+                                },
+                            },
+                            LayoutSection {
+                                leading_space: 0.0,
+                                byte_range: end..one_liner.len(),
+                                format,
+                            },
+                        ]
+                    } else {
+                        vec![LayoutSection {
+                            leading_space: 0.0,
+                            byte_range: 0..one_liner.len(),
+                            format,
+                        }]
+                    }
+                },
+                ..LayoutJob::default()
+            };
+            response!(Label::new(job).selectable(false))
         }
-        UiEntryCache::Image => row_ui(
-            ui,
+        UiEntryCache::Image => response!(
             Image::new(format!("ringboard://{}", entry.entry.id()))
                 .max_height(250.)
                 .max_width(ui.available_width())
-                .fit_to_original_size(1.),
-            state,
-            requests,
-            refresh,
-            entry,
-            try_scroll,
-            try_popup,
-            max_popup_height,
-            index,
+                .fit_to_original_size(1.)
         ),
-        UiEntryCache::Binary { mime_type } => row_ui(
-            ui,
+        UiEntryCache::Binary { mime_type } => response!(
             Label::new(format!("Unable to display format of type {mime_type:?}."))
-                .selectable(false),
-            state,
-            requests,
-            refresh,
-            entry,
-            try_scroll,
-            try_popup,
-            max_popup_height,
-            index,
+                .selectable(false)
         ),
         UiEntryCache::Error(e) => {
             show_error(ui, e);
@@ -717,7 +742,7 @@ fn row_ui(
                 state.detailed_entry = None;
                 let _ = requests.send(Command::GetDetails {
                     id: entry_id,
-                    with_text: matches!(cache, UiEntryCache::Text { .. }),
+                    with_text: cache.is_text(),
                 });
             }
 

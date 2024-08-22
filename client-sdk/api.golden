@@ -793,9 +793,15 @@ pub enum clipboard_history_client_sdk::ui_actor::UiEntryCache
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Binary::mime_type: alloc::boxed::Box<str>
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Error(clipboard_history_core::Error)
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::HighlightedText
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::HighlightedText::end: usize
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::HighlightedText::one_liner: alloc::boxed::Box<str>
+pub clipboard_history_client_sdk::ui_actor::UiEntryCache::HighlightedText::start: usize
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Image
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Text
 pub clipboard_history_client_sdk::ui_actor::UiEntryCache::Text::one_liner: alloc::boxed::Box<str>
+impl clipboard_history_client_sdk::ui_actor::UiEntryCache
+pub const fn clipboard_history_client_sdk::ui_actor::UiEntryCache::is_text(&self) -> bool
 impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::UiEntryCache
 pub fn clipboard_history_client_sdk::ui_actor::UiEntryCache::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Freeze for clipboard_history_client_sdk::ui_actor::UiEntryCache

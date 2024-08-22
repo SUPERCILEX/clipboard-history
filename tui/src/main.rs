@@ -25,7 +25,7 @@ use ratatui::{
     },
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Modifier, Style, Stylize},
-    text::Line,
+    text::{Line, Span},
     widgets::{
         Block, Borders, HighlightSpacing, List, ListState, Padding, Paragraph, StatefulWidget,
         Widget, Wrap,
@@ -374,7 +374,7 @@ fn maybe_get_details(entries: &UiEntries, ui: &mut UiState, requests: &Sender<Co
         ui.detail_image_state = None;
         let _ = requests.send(Command::GetDetails {
             id: entry.id(),
-            with_text: matches!(cache, UiEntryCache::Text { .. }),
+            with_text: cache.is_text(),
         });
     }
 }
@@ -643,6 +643,15 @@ impl Widget for &mut AppWrapper<'_> {
 
 fn ui_entry_line(UiEntry { entry: _, cache }: &UiEntry) -> Line {
     match cache {
+        &UiEntryCache::HighlightedText {
+            ref one_liner,
+            start,
+            end,
+        } => Line::default().spans([
+            Span::raw(&one_liner[..start]),
+            Span::styled(&one_liner[start..end], Modifier::UNDERLINED),
+            Span::raw(&one_liner[end..]),
+        ]),
         UiEntryCache::Text { one_liner } => Line::raw(&**one_liner),
         UiEntryCache::Image => Line::raw("Image: open details to view.").italic(),
         UiEntryCache::Binary { mime_type } => {
