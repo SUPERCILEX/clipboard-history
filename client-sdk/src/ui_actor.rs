@@ -1,6 +1,6 @@
 use std::{
     array,
-    cmp::min,
+    cmp::{min, Ordering},
     collections::{BinaryHeap, HashMap},
     hash::BuildHasherDefault,
     io::{BufReader, IoSlice},
@@ -30,7 +30,7 @@ use crate::{
         size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, RingAndIndex,
     },
     search,
-    search::{CancellationToken, CaselessQuery, EntryLocation, Query},
+    search::{CancellationToken, CaselessQuery, EntryLocation, Query, QueryResult},
     ClientError, DatabaseReader, Entry, EntryReader, Kind,
 };
 
@@ -228,11 +228,7 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
     send: impl FnMut(Message) -> Result<(), E>,
     database: &mut DatabaseReader,
     reader_: &mut Option<EntryReader>,
-    cache: &mut (
-        Option<(u32, u32)>,
-        HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
-        Vec<RingAndIndex>,
-    ),
+    cache: &mut SearchCache,
 ) -> Result<Option<Message>, CommandError> {
     let reader = reader_.as_mut().unwrap();
     match command {
@@ -261,7 +257,7 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
                 .rev()
                 .chain(database.main().rev().take(100))
             {
-                entries.push(ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
+                entries.push(ui_entry(entry, reader, None).unwrap_or_else(|e| UiEntry {
                     cache: UiEntryCache::Error(e),
                     entry,
                 }));
@@ -353,7 +349,11 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
     }
 }
 
-fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError> {
+fn ui_entry(
+    entry: Entry,
+    reader: &mut EntryReader,
+    highlight: Option<(usize, usize)>,
+) -> Result<UiEntry, CoreError> {
     let loaded = entry.to_slice(reader)?;
     let mime_type = &*loaded.mime_type()?;
     if mime_type.starts_with("image/") {
@@ -363,10 +363,27 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
         });
     }
 
-    Ok(match str::from_utf8(&loaded[..min(loaded.len(), 250)]) {
+    let prefix_free = if let Some((start, _)) = highlight {
+        let mut l = &loaded[start.saturating_sub(24)..];
+        for &b in l.iter().take(3) {
+            // https://github.com/rust-lang/rust/blob/33422e72c8a66bdb5ee21246a948a1a02ca91674/library/core/src/num/mod.rs#L1090
+            #[allow(clippy::cast_possible_wrap)]
+            let is_utf8_char_boundary = (b as i8) >= -0x40;
+            if is_utf8_char_boundary {
+                break;
+            }
+            l = &l[1..];
+        }
+        l
+    } else {
+        &loaded
+    };
+    let suffix_free = &prefix_free[..min(prefix_free.len(), 250)];
+
+    Ok(match str::from_utf8(suffix_free) {
         Ok(s) => Some(s),
         Err(e) if e.error_len().is_none() => {
-            Some(unsafe { str::from_utf8_unchecked(&loaded[..e.valid_up_to()]) })
+            Some(unsafe { str::from_utf8_unchecked(&suffix_free[..e.valid_up_to()]) })
         }
         Err(_) => None,
     }
@@ -378,7 +395,11 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
             },
         },
         |s| {
-            let mut one_liner = String::new();
+            let mut one_liner = String::with_capacity(s.len());
+
+            if prefix_free.len() != loaded.len() {
+                one_liner.push('…');
+            }
             let mut prev_char_is_whitespace = false;
             for c in s.chars() {
                 if (prev_char_is_whitespace || one_liner.is_empty()) && c.is_whitespace() {
@@ -388,7 +409,7 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
                 one_liner.push(if c.is_whitespace() { ' ' } else { c });
                 prev_char_is_whitespace = c.is_whitespace();
             }
-            if s.len() != loaded.len() {
+            if suffix_free.len() != prefix_free.len() {
                 one_liner.push('…');
             }
 
@@ -402,16 +423,45 @@ fn ui_entry(entry: Entry, reader: &mut EntryReader) -> Result<UiEntry, CoreError
     ))
 }
 
+type SearchCache = (
+    Option<(u32, u32)>,
+    HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
+    Vec<SearchEntry>,
+);
+
+#[derive(Debug)]
+struct SearchEntry {
+    rai: RingAndIndex,
+    start: usize,
+    end: usize,
+}
+
+impl Eq for SearchEntry {}
+
+impl PartialEq<Self> for SearchEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.rai.eq(&other.rai)
+    }
+}
+
+impl PartialOrd<Self> for SearchEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SearchEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.rai.cmp(&other.rai)
+    }
+}
+
 fn do_search<E>(
     query: Query,
     reader_: &mut Option<EntryReader>,
     database: &mut DatabaseReader,
     mut send: impl FnMut(Message) -> Result<(), E>,
-    (cached_write_heads, reverse_index_cache, search_result_buf): &mut (
-        Option<(u32, u32)>,
-        HashMap<BucketAndIndex, RingAndIndex, BuildHasherDefault<FxHasher>>,
-        Vec<RingAndIndex>,
-    ),
+    (cached_write_heads, reverse_index_cache, search_result_buf): &mut SearchCache,
 ) -> Vec<UiEntry> {
     const MAX_SEARCH_ENTRIES: usize = 256;
 
@@ -454,28 +504,36 @@ fn do_search<E>(
         let ring = ring.ring();
         ring.prev_entry(ring.write_head())
     });
-    for entry in result_stream
-        .flatten()
-        .flat_map(|q| match q.location {
-            EntryLocation::Bucketed { bucket, index } => reverse_index_cache
-                .get(&BucketAndIndex::new(bucket, index))
-                .copied()
-                .ok_or_else(|| {
-                    CoreError::IdNotFound(IdNotFoundError::Entry(
-                        index << u8::BITS | u32::from(bucket),
-                    ))
-                }),
-            EntryLocation::File { entry_id } => {
-                RingAndIndex::from_id(entry_id).map_err(CoreError::IdNotFound)
-            }
-        })
-        .map(|entry| {
-            RingAndIndex::new(
-                entry.ring(),
-                write_heads[entry.ring() as usize].wrapping_sub(entry.index()) & MAX_ENTRIES,
-            )
-        })
-    {
+    for entry in result_stream.flatten().flat_map(
+        |QueryResult {
+             location,
+             start,
+             end,
+         }|
+         -> Result<_, CoreError> {
+            let entry = match location {
+                EntryLocation::Bucketed { bucket, index } => reverse_index_cache
+                    .get(&BucketAndIndex::new(bucket, index))
+                    .copied()
+                    .ok_or_else(|| {
+                        CoreError::IdNotFound(IdNotFoundError::Entry(
+                            index << u8::BITS | u32::from(bucket),
+                        ))
+                    }),
+                EntryLocation::File { entry_id } => {
+                    RingAndIndex::from_id(entry_id).map_err(CoreError::IdNotFound)
+                }
+            }?;
+            Ok(SearchEntry {
+                rai: RingAndIndex::new(
+                    entry.ring(),
+                    write_heads[entry.ring() as usize].wrapping_sub(entry.index()) & MAX_ENTRIES,
+                ),
+                start,
+                end,
+            })
+        },
+    ) {
         if results.len() == MAX_SEARCH_ENTRIES {
             if entry < *results.peek().unwrap() {
                 results.pop();
@@ -496,19 +554,21 @@ fn do_search<E>(
     #[allow(clippy::iter_with_drain)] // https://github.com/rust-lang/rust-clippy/issues/8539
     let entries = results
         .drain(..)
-        .flat_map(|entry| {
-            let ring = entry.ring();
-            let index = write_heads[ring as usize].wrapping_sub(entry.index()) & MAX_ENTRIES;
+        .flat_map(|SearchEntry { rai, start, end }| -> Result<_, CoreError> {
+            let entry = {
+                let ring = rai.ring();
+                let index = write_heads[ring as usize].wrapping_sub(rai.index()) & MAX_ENTRIES;
 
-            let id = composite_id(ring, index);
-            unsafe { database.get(id) }
-        })
-        .map(|entry| {
-            // TODO add support for bold highlighting the selection range
-            ui_entry(entry, reader).unwrap_or_else(|e| UiEntry {
-                cache: UiEntryCache::Error(e),
-                entry,
-            })
+                let id = composite_id(ring, index);
+                unsafe { database.get(id) }?
+            };
+
+            Ok(
+                ui_entry(entry, reader, Some((start, end))).unwrap_or_else(|e| UiEntry {
+                    cache: UiEntryCache::Error(e),
+                    entry,
+                }),
+            )
         })
         .collect();
     *search_result_buf = results;
