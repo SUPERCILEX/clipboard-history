@@ -17,9 +17,10 @@ use eframe::{
     egui,
     egui::{
         text::{LayoutJob, LayoutSection},
-        Align, CentralPanel, Event, FontId, FontTweak, Image, InputState, Key, Label, Layout,
-        Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke,
-        TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
+        Align, CentralPanel, Event, FontId, FontTweak, Frame, Image, InputState, Key, Label,
+        Layout, Margin, Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense,
+        Stroke, TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand,
+        Widget,
     },
     epaint::FontFamily,
     Theme,
@@ -297,12 +298,19 @@ impl eframe::App for App {
             handle_message(message, &mut self.state, ctx);
         }
 
-        TopBottomPanel::top("search_bar").show(ctx, |ui| {
-            search_ui(ui, &mut self.state, &self.requests);
-        });
-        CentralPanel::default().show(ctx, |ui| {
-            main_ui(ui, &self.row_font, &mut self.state, &self.requests);
-        });
+        TopBottomPanel::top("search_bar")
+            .frame(Frame::side_top_panel(&ctx.style()).inner_margin(0.))
+            .show(ctx, |ui| {
+                search_ui(ui, &mut self.state, &self.requests);
+            });
+        CentralPanel::default()
+            .frame(Frame::central_panel(&ctx.style()).inner_margin(Margin {
+                top: 1.5,
+                ..Margin::ZERO
+            }))
+            .show(ctx, |ui| {
+                main_ui(ui, &self.row_font, &mut self.state, &self.requests);
+            });
 
         #[cfg(not(feature = "wayland"))]
         if ctx.input(|i| i.viewport().close_requested()) {
@@ -379,7 +387,7 @@ fn search_ui(
             .desired_width(f32::INFINITY)
             .cursor_at_end(true)
             .frame(false)
-            .margin(5.),
+            .margin(8.),
     );
     let mut reset = |query: &mut String| {
         *query = String::new();
@@ -697,12 +705,12 @@ fn row_ui(
 
     let entry_id = entry.id();
 
-    let frame_data = egui::Frame::default().inner_margin(5.);
+    let frame_data = Frame::default().inner_margin(5.);
     let mut frame = frame_data.begin(ui);
     frame.content_ui.add(widget);
     frame
         .content_ui
-        .set_min_width(frame.content_ui.available_width() - frame_data.inner_margin.right);
+        .set_min_width(frame.content_ui.available_width());
     let response = ui.allocate_rect(
         frame.content_ui.min_rect() + (frame_data.inner_margin + frame_data.outer_margin),
         Sense::click(),
@@ -717,13 +725,7 @@ fn row_ui(
         *highlighted_id = Some(entry_id);
     }
     if *highlighted_id == Some(entry_id) {
-        frame.frame.fill = ui
-            .style()
-            .visuals
-            .widgets
-            .hovered
-            .bg_fill
-            .linear_multiply(0.1);
+        frame.frame.fill = ui.style().visuals.widgets.hovered.weak_bg_fill;
     }
     frame.paint(ui);
 
