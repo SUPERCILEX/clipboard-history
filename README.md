@@ -45,7 +45,7 @@ curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/in
 ```
 
 Additionally, consider using https://github.com/nabijaczleweli/cargo-update to update your cargo
-apps.
+apps or re-run the installation script whenever you need to update.
 
 ### Manual installation
 
