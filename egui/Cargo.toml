@@ -15,7 +15,7 @@ image = "0.25.2"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
 rustc-hash = "2.0.0"
 rustix = { version = "0.38.34", features = ["fs"] }
-tracy-client = { version = "0.17.1", optional = true }
+tracy-client = { version = "0.17.3", optional = true }
 
 [features]
 default = ["x11", "wayland"]

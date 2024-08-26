@@ -10,11 +10,11 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
-arrayvec = { version = "0.7.4", features = ["serde"] }
+arrayvec = { version = "0.7.6", features = ["serde"] }
 ask = { package = "ask-cli", version = "0.3.0" }
 base64 = "0.22.1"
 base64-serde = "0.7.0"
-clap = { version = "4.5.15", features = ["derive", "wrap_help"] }
+clap = { version = "4.5.16", features = ["derive", "wrap_help"] }
 clap-num = "1.1.1"
 dirs = "5.0.1"
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
@@ -28,8 +28,8 @@ regex = "1.10.6"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "deduplication", "search", "config"] }
 rustc-hash = "2.0.0"
 rustix = { version = "0.38.34", features = ["stdio", "event"] }
-serde = { version = "1.0.205", features = ["derive"] }
-serde_json = "1.0.122"
+serde = { version = "1.0.209", features = ["derive"] }
+serde_json = "1.0.127"
 thiserror = "1.0.63"
 toml = { version = "0.8.19", default-features = false, features = ["display"] }
 
