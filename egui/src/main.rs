@@ -294,7 +294,8 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
                 *search_results = entries;
             }
         }
-        Message::FavoriteChange(_) | Message::Deleted(_) => {}
+        Message::FavoriteChange(id) => *active_highlighted_id!(ui) = Some(id),
+        Message::Deleted(_) => {}
         Message::LoadedImage { .. } => unreachable!(),
         Message::PendingSearch(token) => {
             if *queued_searches > 1 {
@@ -563,6 +564,7 @@ fn main_ui(
                 ui,
                 entry_text_font,
                 entry,
+                entries,
                 state,
                 requests,
                 refresh,
@@ -580,6 +582,7 @@ fn entry_ui(
     ui: &mut Ui,
     entry_text_font: &FontFamily,
     entry: &UiEntry,
+    entries: &UiEntries,
     state: &mut UiState,
     requests: &Sender<Command>,
     refresh: impl FnMut(&mut UiState),
@@ -594,6 +597,7 @@ fn entry_ui(
             row_ui(
                 ui,
                 $w,
+                entries,
                 state,
                 requests,
                 refresh,
@@ -682,6 +686,7 @@ fn entry_ui(
 fn row_ui(
     ui: &mut Ui,
     widget: impl Widget,
+    entries: &UiEntries,
     state: &mut UiState,
     requests: &Sender<Command>,
     mut refresh: impl FnMut(&mut UiState),
@@ -751,7 +756,7 @@ fn row_ui(
                 let mut run = |ui: &mut Ui, command| {
                     let _ = requests.send(command);
                     refresh(state);
-                    ui.memory_mut(|m| m.close_popup());
+                    ui.memory_mut(egui::Memory::close_popup);
                 };
 
                 match entry.ring() {
@@ -768,6 +773,12 @@ fn row_ui(
                 }
                 if ui.button("Delete").clicked() {
                     run(ui, Command::Delete(entry_id));
+
+                    let entries = active_entries!(entries, state);
+                    *active_highlighted_id!(state) = entries
+                        .get(index.saturating_add(1))
+                        .or_else(|| entries.get(index.saturating_sub(1)))
+                        .map(|e| e.entry.id());
                 }
             });
             ui.separator();
