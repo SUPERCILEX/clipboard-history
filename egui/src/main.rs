@@ -226,31 +226,46 @@ impl App {
     }
 }
 
-fn handle_message(
-    message: Message,
-    State {
-        entries: UiEntries {
-            loaded_entries,
-            search_results,
-        },
-        ui:
-            UiState {
-                fatal_error,
-                last_error,
-                highlighted_id,
-                details_requested,
-                detailed_entry,
-                query: _,
-                search_highlighted_id,
-                search_kind: _,
-                pending_search_token,
-                queued_searches,
-                was_focused: _,
-                skip_first_focus: _,
-            },
-    }: &mut State,
-    ctx: &egui::Context,
-) {
+macro_rules! active_entries {
+    ($entries:expr, $state:expr) => {{
+        if $state.query.is_empty() {
+            &$entries.loaded_entries
+        } else {
+            &$entries.search_results
+        }
+    }};
+}
+
+macro_rules! active_highlighted_id {
+    ($state:ident) => {{
+        if $state.query.is_empty() {
+            &mut $state.highlighted_id
+        } else {
+            &mut $state.search_highlighted_id
+        }
+    }};
+}
+
+fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egui::Context) {
+    let UiEntries {
+        loaded_entries,
+        search_results,
+    } = entries;
+    let UiState {
+        fatal_error,
+        last_error,
+        highlighted_id,
+        details_requested,
+        detailed_entry,
+        query: _,
+        search_highlighted_id,
+        search_kind: _,
+        pending_search_token,
+        queued_searches,
+        was_focused: _,
+        skip_first_focus: _,
+    } = ui;
+
     last_error.take();
     match message {
         Message::FatalDbOpen(e) => *fatal_error = Some(e.into()),
@@ -423,16 +438,6 @@ fn search_ui(
     search!();
 }
 
-macro_rules! active_highlighted_id {
-    ($state:ident) => {{
-        if $state.query.is_empty() {
-            &mut $state.highlighted_id
-        } else {
-            &mut $state.search_highlighted_id
-        }
-    }};
-}
-
 fn show_error(ui: &mut Ui, e: &dyn Error) {
     ui.label(format!("Error: {e}"));
     ui.label(format!("Details: {e:#?}"));
@@ -487,10 +492,10 @@ fn main_ui(
         return;
     }
     let no_popups_open = ui.memory(|mem| !mem.any_popup_open());
-    if !active_entries(entries, state).is_empty() && no_popups_open {
+    if !active_entries!(entries, state).is_empty() && no_popups_open {
         ui.input(|input| {
             handle_arrow_keys(
-                active_entries(entries, state),
+                active_entries!(entries, state),
                 active_highlighted_id!(state),
                 &mut try_scroll,
                 input,
@@ -523,12 +528,12 @@ fn main_ui(
                 )
             })
         })
-        .and_then(|idx| active_entries(entries, state).get(idx))
+        .and_then(|idx| active_entries!(entries, state).get(idx))
     {
         let _ = requests.send(Command::Paste(entry.id()));
     }
 
-    if active_entries(entries, state).is_empty() {
+    if active_entries!(entries, state).is_empty() {
         ui.centered_and_justified(|ui| {
             ui.label(
                 RichText::new(if state.queued_searches > 0 {
@@ -547,7 +552,7 @@ fn main_ui(
     let usable_height_for_popup = ui.available_size().y - 50.;
     ScrollArea::vertical().show(ui, |ui| {
         let mut prev_was_favorites = false;
-        for (i, entry) in active_entries(entries, state).iter().enumerate() {
+        for (i, entry) in active_entries!(entries, state).iter().enumerate() {
             let next_was_favorites = entry.entry.ring() == RingKind::Favorites;
             if prev_was_favorites && !next_was_favorites {
                 ui.separator();
@@ -569,14 +574,6 @@ fn main_ui(
             );
         }
     });
-}
-
-fn active_entries<'a>(entries: &'a UiEntries, state: &UiState) -> &'a [UiEntry] {
-    if state.query.is_empty() {
-        &entries.loaded_entries
-    } else {
-        &entries.search_results
-    }
 }
 
 fn entry_ui(
