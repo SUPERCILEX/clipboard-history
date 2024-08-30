@@ -17,10 +17,9 @@ use eframe::{
     egui,
     egui::{
         text::{LayoutJob, LayoutSection},
-        Align, CentralPanel, Event, FontId, FontTweak, Frame, Image, InputState, Key, Label,
-        Layout, Margin, Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense,
-        Stroke, TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand,
-        Widget,
+        CentralPanel, Event, FontId, FontTweak, Frame, Image, InputState, Key, Label, Margin,
+        Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke,
+        TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
     },
     epaint::FontFamily,
     Theme,
@@ -751,68 +750,66 @@ fn row_ui(
             ui.set_min_width(200.);
             ui.set_max_height(max_popup_height);
 
-            ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
-                ui.horizontal(|ui| {
-                    match entry.ring() {
-                        RingKind::Favorites => {
-                            if ui.button("Unfavorite").clicked() {
-                                let _ = requests.send(Command::Unfavorite(entry_id));
-                                refresh(state);
-                            }
-                        }
-                        RingKind::Main => {
-                            if ui.button("Favorite").clicked() {
-                                let _ = requests.send(Command::Favorite(entry_id));
-                                refresh(state);
-                            }
+            ui.horizontal(|ui| {
+                match entry.ring() {
+                    RingKind::Favorites => {
+                        if ui.button("Unfavorite").clicked() {
+                            let _ = requests.send(Command::Unfavorite(entry_id));
+                            refresh(state);
                         }
                     }
-                    if ui.button("Delete").clicked() {
-                        let _ = requests.send(Command::Delete(entry_id));
-                        refresh(state);
-                    }
-                });
-                ui.separator();
-
-                ui.label(format!("Id: {entry_id}"));
-                match &state.detailed_entry {
-                    None => {
-                        ui.separator();
-                        ui.label("Loading…");
-                    }
-                    Some(Ok(DetailedEntry {
-                        mime_type,
-                        full_text,
-                    })) => {
-                        if !mime_type.is_empty() {
-                            ui.label(format!("Mime type: {mime_type}"));
+                    RingKind::Main => {
+                        if ui.button("Favorite").clicked() {
+                            let _ = requests.send(Command::Favorite(entry_id));
+                            refresh(state);
                         }
-                        ui.separator();
-                        if let Some(full) = full_text {
-                            ScrollArea::both()
-                                .auto_shrink([false, true])
-                                .show(ui, |ui| {
-                                    ui.label(RichText::new(&**full).monospace());
-                                });
-                        } else if matches!(cache, UiEntryCache::Image) {
-                            ScrollArea::vertical()
-                                .auto_shrink([false, true])
-                                .show(ui, |ui| {
-                                    ui.add(
-                                        Image::new(format!("ringboard://{}", entry.id()))
-                                            .max_width(ui.available_width())
-                                            .fit_to_original_size(1.),
-                                    );
-                                });
-                        } else {
-                            ui.label("Binary data.");
-                        }
-                    }
-                    Some(Err(e)) => {
-                        ui.label(format!("Failed to get entry details:\n{e}"));
                     }
                 }
+                if ui.button("Delete").clicked() {
+                    let _ = requests.send(Command::Delete(entry_id));
+                    refresh(state);
+                }
             });
+            ui.separator();
+
+            ui.label(format!("Id: {entry_id}"));
+            match &state.detailed_entry {
+                None => {
+                    ui.separator();
+                    ui.label("Loading…");
+                }
+                Some(Ok(DetailedEntry {
+                    mime_type,
+                    full_text,
+                })) => {
+                    if !mime_type.is_empty() {
+                        ui.label(format!("Mime type: {mime_type}"));
+                    }
+                    ui.separator();
+                    if let Some(full) = full_text {
+                        ScrollArea::both()
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                ui.label(RichText::new(&**full).monospace());
+                            });
+                    } else if matches!(cache, UiEntryCache::Image) {
+                        ScrollArea::vertical()
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                ui.add(
+                                    Image::new(format!("ringboard://{}", entry.id()))
+                                        .max_width(ui.available_width())
+                                        .fit_to_original_size(1.),
+                                );
+                            });
+                    } else {
+                        ui.label("Binary data.");
+                    }
+                }
+                Some(Err(e)) => {
+                    ui.label(format!("Failed to get entry details:\n{e}"));
+                }
+            }
         },
     );
     response
