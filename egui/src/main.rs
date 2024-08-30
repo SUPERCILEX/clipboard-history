@@ -751,23 +751,26 @@ fn row_ui(
             ui.set_max_height(max_popup_height);
 
             ui.horizontal(|ui| {
+                let mut run = |ui: &mut Ui, command| {
+                    let _ = requests.send(command);
+                    refresh(state);
+                    ui.memory_mut(|m| m.close_popup());
+                };
+
                 match entry.ring() {
                     RingKind::Favorites => {
                         if ui.button("Unfavorite").clicked() {
-                            let _ = requests.send(Command::Unfavorite(entry_id));
-                            refresh(state);
+                            run(ui, Command::Unfavorite(entry_id));
                         }
                     }
                     RingKind::Main => {
                         if ui.button("Favorite").clicked() {
-                            let _ = requests.send(Command::Favorite(entry_id));
-                            refresh(state);
+                            run(ui, Command::Favorite(entry_id));
                         }
                     }
                 }
                 if ui.button("Delete").clicked() {
-                    let _ = requests.send(Command::Delete(entry_id));
-                    refresh(state);
+                    run(ui, Command::Delete(entry_id));
                 }
             });
             ui.separator();
