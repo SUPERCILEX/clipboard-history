@@ -7,35 +7,46 @@ use std::{
     os::{fd::AsFd, unix::ffi::OsStringExt},
     path::PathBuf,
     process,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use ringboard_sdk::core::{
     Error as CoreError, IoErr, dirs::push_sockets_prefix, link_tmp_file, read_lock_file_pid,
 };
 use rustix::{
-    fs::{
-        CWD, Mode, OFlags, inotify,
-        inotify::{inotify_add_watch, inotify_init},
-        openat, unlink,
-    },
-    io::{Errno, read_uninit},
+    fs::{CWD, Mode, OFlags, inotify, inotify::ReadFlags, openat, unlink},
+    io::Errno,
     path::Arg,
     process::{Signal, getpid, kill_process},
 };
 
-pub fn maintain_single_instance(mut open: impl FnMut()) -> Result<(), CoreError> {
+pub fn sleep_file_name() -> CString {
     let mut path = PathBuf::with_capacity("/tmp/.ringboard/username.egui-sleep".len());
     push_sockets_prefix(&mut path);
     path.set_extension("egui-sleep");
-    let path = CString::new(path.into_os_string().into_vec()).unwrap();
+    CString::new(path.into_os_string().into_vec()).unwrap()
+}
 
+pub fn maintain_single_instance(
+    stop: &AtomicBool,
+    mut open: impl FnMut(),
+) -> Result<(), CoreError> {
+    let path = sleep_file_name();
     let inotify =
-        inotify_init(inotify::CreateFlags::empty()).map_io_err(|| "Failed to create inotify.")?;
+        inotify::init(inotify::CreateFlags::empty()).map_io_err(|| "Failed to create inotify.")?;
     loop {
+        if stop.load(Ordering::Relaxed) {
+            break Ok(());
+        }
+
         kill_old_instances_if_any(&path)?;
-        inotify_add_watch(inotify.as_fd(), &path, inotify::WatchFlags::MOVE_SELF)
-            .map_io_err(|| "Failed to register inotify watch.")?;
-        wait_for_sleep_cancel(&inotify, &mut open)?;
+        let id = inotify::add_watch(
+            &inotify,
+            &path,
+            inotify::WatchFlags::MOVE_SELF | inotify::WatchFlags::DELETE_SELF,
+        )
+        .map_io_err(|| "Failed to register inotify watch.")?;
+        wait_for_sleep_cancel(&inotify, id, &mut open)?;
     }
 }
 
@@ -79,10 +90,29 @@ fn kill_old_instances_if_any(path: impl Arg + Copy + Debug) -> Result<(), CoreEr
     }
 }
 
-fn wait_for_sleep_cancel(inotify: impl AsFd, mut open: impl FnMut()) -> Result<(), CoreError> {
-    // TODO https://github.com/bytecodealliance/rustix/issues/538#issuecomment-2076539826
-    let mut buf = [MaybeUninit::uninit(); 32];
-    read_uninit(inotify, &mut buf).map_io_err(|| "Failed to read inotify event.")?;
+fn wait_for_sleep_cancel(
+    inotify: impl AsFd,
+    watch_id: i32,
+    mut open: impl FnMut(),
+) -> Result<(), CoreError> {
+    {
+        let mut watch_deleted = false;
+
+        let mut buf = [MaybeUninit::uninit(); 96];
+        let mut buf = inotify::Reader::new(&inotify, &mut buf);
+        loop {
+            let e = buf.next().map_io_err(|| "Failed to read inotify events")?;
+            watch_deleted |= e.events().contains(ReadFlags::IGNORED);
+            if buf.is_buffer_empty() {
+                break;
+            }
+        }
+
+        if !watch_deleted {
+            inotify::remove_watch(&inotify, watch_id)
+                .map_io_err(|| "Failed to remove inotify watch.")?;
+        }
+    }
     open();
     Ok(())
 }

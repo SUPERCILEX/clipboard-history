@@ -5,7 +5,9 @@ use std::{
     env,
     error::Error,
     sync::{
-        Arc, mpsc,
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
         mpsc::{Receiver, Sender},
     },
     thread,
@@ -31,8 +33,12 @@ use ringboard_sdk::{
         controller,
     },
 };
+use rustix::fs::unlink;
 
-use crate::{loader::RingboardLoader, startup::maintain_single_instance};
+use crate::{
+    loader::RingboardLoader,
+    startup::{maintain_single_instance, sleep_file_name},
+};
 
 mod startup;
 
@@ -42,7 +48,8 @@ static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
     tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
 
 fn main() -> Result<(), eframe::Error> {
-    eframe::run_native(
+    let stop = Arc::new(AtomicBool::new(false));
+    let result = eframe::run_native(
         concat!("Ringboard v", env!("CARGO_PKG_VERSION")),
         eframe::NativeOptions {
             viewport: ViewportBuilder::default()
@@ -133,6 +140,7 @@ fn main() -> Result<(), eframe::Error> {
 
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
+                let stop = stop.clone();
                 move || {
                     ctx.send_viewport_cmd(ViewportCommand::Icon(Some(
                         eframe::icon_data::from_png_bytes(include_bytes!("../logo.jpeg"))
@@ -140,7 +148,7 @@ fn main() -> Result<(), eframe::Error> {
                             .into(),
                     )));
 
-                    if let Err(e) = maintain_single_instance(|| {
+                    if let Err(e) = maintain_single_instance(&stop, || {
                         ctx.send_viewport_cmd(ViewportCommand::Visible(true));
                         ctx.send_viewport_cmd(ViewportCommand::Focus);
                     }) {
@@ -159,7 +167,16 @@ fn main() -> Result<(), eframe::Error> {
                 response_receiver,
             )))
         }),
-    )
+    );
+
+    stop.store(true, Ordering::Relaxed);
+    {
+        let sleep_file = sleep_file_name();
+        let _ = unlink(&sleep_file)
+            .inspect_err(|e| eprintln!("Failed to delete sleep file: {sleep_file:?}\nError: {e}"));
+    }
+
+    result
 }
 
 struct App {
