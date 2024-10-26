@@ -177,6 +177,16 @@ fn run() -> Result<(), CoreError> {
 }
 
 fn init_terminal(mut stdout: impl io::Write) -> Result<Terminal<impl Backend>, CoreError> {
+    std::panic::set_hook({
+        let hook = std::panic::take_hook();
+        Box::new(move |info| {
+            if let Err(err) = restore_terminal(io::stdout()) {
+                eprintln!("Failed to restore terminal: {err}");
+            }
+            hook(info);
+        })
+    });
+
     enable_raw_mode().map_io_err(|| "Failed to enable raw mode.")?;
     stdout
         .execute(EnterAlternateScreen)
