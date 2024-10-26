@@ -396,7 +396,7 @@ fn search_ui(
                 SearchKind::Mime => "Mime type search",
             })
             .font(match search_kind {
-                SearchKind::Plain => FontId::proportional(16.5),
+                SearchKind::Plain => FontId::proportional(17.5),
                 SearchKind::Regex | SearchKind::Mime => FontId::monospace(16.),
             })
             .desired_width(f32::INFINITY)
