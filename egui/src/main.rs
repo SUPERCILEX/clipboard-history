@@ -330,7 +330,7 @@ impl eframe::App for App {
             });
         CentralPanel::default()
             .frame(Frame::central_panel(&ctx.style()).inner_margin(Margin {
-                top: 1.5,
+                top: 5.,
                 ..Margin::ZERO
             }))
             .show(ctx, |ui| {
