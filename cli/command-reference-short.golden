@@ -12,7 +12,7 @@ Commands:
   swap             Swap the positions of two entries
   remove           Delete an entry from the database
   wipe             Wipe the entire database
-  migrate          Migrate from other clipboard managers to Ringboard
+  import           Migrate from other clipboard managers to Ringboard
   garbage-collect  Run garbage collection on the database
   configure        Modify app settings
   debug            Debugging tools for developers
@@ -136,10 +136,10 @@ Options:
 
 Migrate from other clipboard managers to Ringboard
 
-Usage: clipboard-history migrate <FROM> [DATABASE]
+Usage: clipboard-history import <FROM> [DATABASE]
 
 Arguments:
-  <FROM>      The existing clipboard to migrate from [possible values: gnome-clipboard-history,
+  <FROM>      The existing clipboard to import [possible values: gnome-clipboard-history,
               clipboard-indicator, g-paste, json]
   [DATABASE]  The existing clipboard's database location
 
@@ -323,7 +323,7 @@ Commands:
   swap             Swap the positions of two entries
   remove           Delete an entry from the database
   wipe             Wipe the entire database
-  migrate          Migrate from other clipboard managers to Ringboard
+  import           Migrate from other clipboard managers to Ringboard
   garbage-collect  Run garbage collection on the database
   configure        Modify app settings
   debug            Debugging tools for developers
@@ -387,7 +387,7 @@ Usage: clipboard-history help wipe
 
 Migrate from other clipboard managers to Ringboard
 
-Usage: clipboard-history help migrate
+Usage: clipboard-history help import
 
 ---
 

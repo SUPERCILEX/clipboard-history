@@ -16,7 +16,7 @@ Commands:
   swap             Swap the positions of two entries
   remove           Delete an entry from the database
   wipe             Wipe the entire database
-  migrate          Migrate from other clipboard managers to Ringboard
+  import           Migrate from other clipboard managers to Ringboard
   garbage-collect  Run garbage collection on the database
   configure        Modify app settings
   debug            Debugging tools for developers
@@ -187,11 +187,11 @@ Options:
 
 Migrate from other clipboard managers to Ringboard
 
-Usage: clipboard-history migrate <FROM> [DATABASE]
+Usage: clipboard-history import <FROM> [DATABASE]
 
 Arguments:
   <FROM>
-          The existing clipboard to migrate from
+          The existing clipboard to import
 
           Possible values:
           - gnome-clipboard-history: [Gnome Clipboard
@@ -324,7 +324,7 @@ The JSON format is as follows:
   ... 
 ]
 
-Note that `$ ringboard migrate json` expects a JSON stream (wherein each object appears on its own
+Note that `$ ringboard import json` expects a JSON stream (wherein each object appears on its own
 line instead of being in a list). To import an export, you can convert the JSON array to a stream
 with `$ ... | jq -c .[]`.
 
@@ -446,7 +446,7 @@ Commands:
   swap             Swap the positions of two entries
   remove           Delete an entry from the database
   wipe             Wipe the entire database
-  migrate          Migrate from other clipboard managers to Ringboard
+  import           Migrate from other clipboard managers to Ringboard
   garbage-collect  Run garbage collection on the database
   configure        Modify app settings
   debug            Debugging tools for developers
@@ -510,7 +510,7 @@ Usage: clipboard-history help wipe
 
 Migrate from other clipboard managers to Ringboard
 
-Usage: clipboard-history help migrate
+Usage: clipboard-history help import
 
 ---
 

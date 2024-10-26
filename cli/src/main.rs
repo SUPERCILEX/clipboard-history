@@ -142,7 +142,8 @@ enum Cmd {
     Wipe,
 
     /// Migrate from other clipboard managers to Ringboard.
-    Migrate(Migrate),
+    #[command(alias = "migrate")]
+    Import(Import),
 
     /// Run garbage collection on the database.
     ///
@@ -197,7 +198,7 @@ enum Dev {
     ///{n}  ...
     ///{n}]
     ///
-    /// Note that `$ ringboard migrate json` expects a JSON stream (wherein each
+    /// Note that `$ ringboard import json` expects a JSON stream (wherein each
     /// object appears on its own line instead of being in a list). To import an
     /// export, you can convert the JSON array to a stream with `$ ... | jq -c
     /// .[]`.
@@ -287,11 +288,11 @@ struct Swap {
 
 #[derive(Args, Debug)]
 #[command(arg_required_else_help = true)]
-struct Migrate {
-    /// The existing clipboard to migrate from.
+struct Import {
+    /// The existing clipboard to import.
     #[arg(required = true)]
     #[arg(requires_if("json", "database"))]
-    from: MigrateFromClipboard,
+    from: ImportClipboard,
 
     /// The existing clipboard's database location.
     ///
@@ -301,7 +302,7 @@ struct Migrate {
 }
 
 #[derive(ValueEnum, Copy, Clone, Debug)]
-enum MigrateFromClipboard {
+enum ImportClipboard {
     /// [Gnome Clipboard History](https://extensions.gnome.org/extension/4839/clipboard-history/)
     #[value(alias = "gch")]
     GnomeClipboardHistory,
@@ -467,7 +468,7 @@ fn run() -> Result<(), CliError> {
         Cmd::Remove(data) => remove(connect_to_server(&server_addr)?, data),
         Cmd::Wipe => wipe(),
         Cmd::GarbageCollect(data) => garbage_collect(connect_to_server(&server_addr)?, data),
-        Cmd::Migrate(data) => migrate(connect_to_server(&server_addr)?, data),
+        Cmd::Import(data) => import(connect_to_server(&server_addr)?, data),
         Cmd::Configure(Configure::X11(data)) => configure_x11(data),
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump) => dump(),
@@ -819,14 +820,12 @@ fn garbage_collect(
     Ok(())
 }
 
-fn migrate(server: OwnedFd, Migrate { from, database }: Migrate) -> Result<(), CliError> {
+fn import(server: OwnedFd, Import { from, database }: Import) -> Result<(), CliError> {
     match from {
-        MigrateFromClipboard::GnomeClipboardHistory => migrate_from_gch(server, database),
-        MigrateFromClipboard::ClipboardIndicator => {
-            migrate_from_clipboard_indicator(server, database)
-        }
-        MigrateFromClipboard::GPaste => migrate_from_gpaste(server, database),
-        MigrateFromClipboard::Json => migrate_from_ringboard_export(server, database.unwrap()),
+        ImportClipboard::GnomeClipboardHistory => migrate_from_gch(server, database),
+        ImportClipboard::ClipboardIndicator => migrate_from_clipboard_indicator(server, database),
+        ImportClipboard::GPaste => migrate_from_gpaste(server, database),
+        ImportClipboard::Json => migrate_from_ringboard_export(server, database.unwrap()),
     }?;
     println!("Migration complete.");
     Ok(())
