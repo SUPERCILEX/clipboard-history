@@ -152,12 +152,21 @@ fn setup_uring() -> Result<(IoUring, BuiltInFds), CliError> {
 
         mem_pressure_path.extend_from_slice(b"/memory.pressure");
         let mut mem_pressure = File::from(
-            openat(CWD, &mem_pressure_path, OFlags::RDWR, Mode::empty()).map_io_err(|| {
-                format!(
-                    "Failed to open pressure file: {}",
-                    mem_pressure_path.escape_ascii()
-                )
-            })?,
+            match openat(CWD, &mem_pressure_path, OFlags::RDWR, Mode::empty()) {
+                Err(Errno::EXIST | Errno::PERM) => {
+                    debug!(
+                        "Pressure file not available: {}",
+                        mem_pressure_path.escape_ascii()
+                    );
+                    break 'init None;
+                }
+                r => r.map_io_err(|| {
+                    format!(
+                        "Failed to open pressure file: {}",
+                        mem_pressure_path.escape_ascii()
+                    )
+                })?,
+            },
         );
 
         mem_pressure
