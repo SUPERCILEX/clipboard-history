@@ -9,26 +9,26 @@ use std::{
 
 use arrayvec::ArrayVec;
 use io_uring::{
-    cqueue::{buffer_select, more, Entry},
+    IoUring, SubmissionQueue,
+    cqueue::{Entry, buffer_select, more},
     opcode::{AcceptMulti, Close, PollAdd, RecvMsgMulti, SendMsg},
     squeue::{Flags, PushError},
     types::Fixed,
-    IoUring, SubmissionQueue,
 };
 use log::{debug, info, trace, warn};
-use ringboard_core::{dirs::socket_file, init_unix_server, IoErr};
+use ringboard_core::{IoErr, dirs::socket_file, init_unix_server};
 use rustix::{
-    fs::{openat, Mode, OFlags, CWD},
+    fs::{CWD, Mode, OFlags, openat},
     io::Errno,
     net::{RecvFlags, SocketType},
 };
 
 use crate::{
+    CliError,
     allocator::Allocator,
     io_uring::{buf_ring::BufRing, register_buf_ring, types::RecvMsgOutMut},
     requests,
     send_msg_bufs::SendMsgBufs,
-    CliError,
 };
 
 pub const MAX_NUM_CLIENTS: u8 = 1 << MAX_NUM_CLIENTS_SHIFT;

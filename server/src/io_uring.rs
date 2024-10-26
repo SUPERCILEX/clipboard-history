@@ -3,7 +3,7 @@ use std::{io, ptr, ptr::NonNull};
 use io_uring::Submitter;
 use rustix::{
     io_uring::io_uring_buf,
-    mm::{mmap_anonymous, munmap, MapFlags, ProtFlags},
+    mm::{MapFlags, ProtFlags, mmap_anonymous, munmap},
 };
 
 use crate::io_uring::buf_ring::BufRing;
@@ -59,7 +59,7 @@ impl Drop for MmapAnon {
 pub mod types {
     use std::slice;
 
-    use rustix::io_uring::{io_uring_recvmsg_out, RecvmsgOutFlags};
+    use rustix::io_uring::{RecvmsgOutFlags, io_uring_recvmsg_out};
 
     /// Helper structure for parsing the result of a multishot
     /// [`opcode::RecvMsg`](crate::opcode::RecvMsg).
@@ -208,7 +208,7 @@ pub mod buf_ring {
     };
 
     use io_uring::Submitter;
-    use rustix::io_uring::{io_uring_buf, IORING_CQE_BUFFER_SHIFT};
+    use rustix::io_uring::{IORING_CQE_BUFFER_SHIFT, io_uring_buf};
 
     use crate::io_uring::MmapAnon;
 
@@ -236,7 +236,7 @@ pub mod buf_ring {
             {
                 let mut s = this.submissions();
                 for i in 0u16..ring_entries {
-                    let buf = unsafe { s._recycle_by_index(i) };
+                    let buf = unsafe { s.recycle_by_index_(i) };
                     buf.len = entry_size;
                 }
             }
@@ -296,10 +296,10 @@ pub mod buf_ring {
         }
 
         pub unsafe fn recycle_by_index(&mut self, index: u16) {
-            self._recycle_by_index(index);
+            self.recycle_by_index_(index);
         }
 
-        unsafe fn _recycle_by_index(&mut self, index: u16) -> &mut io_uring_buf {
+        unsafe fn recycle_by_index_(&mut self, index: u16) -> &mut io_uring_buf {
             let uindex = usize::from(index);
             {
                 let next_buf = unsafe { &mut *self.ring_ptr.add(self.tail.0 & self.tail_mask) };

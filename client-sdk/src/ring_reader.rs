@@ -14,13 +14,13 @@ use std::{
 
 use arrayvec::ArrayVec;
 use ringboard_core::{
-    bucket_to_length, direct_file_name, open_buckets,
-    protocol::{composite_id, decompose_id, IdNotFoundError, MimeType, RingKind},
+    IoErr, NUM_BUCKETS, PathView, RingAndIndex, bucket_to_length, direct_file_name, open_buckets,
+    protocol::{IdNotFoundError, MimeType, RingKind, composite_id, decompose_id},
     ring::{InitializedEntry, Mmap, Ring},
-    size_to_bucket, IoErr, PathView, RingAndIndex, NUM_BUCKETS,
+    size_to_bucket,
 };
 use rustix::{
-    fs::{fgetxattr, memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
+    fs::{CWD, MemfdFlags, Mode, OFlags, fgetxattr, memfd_create, openat},
     io::Errno,
 };
 
@@ -342,7 +342,7 @@ impl From<Mmap> for MmapOrSlice<'_> {
     }
 }
 
-impl<'a> Deref for MmapOrSlice<'a> {
+impl Deref for MmapOrSlice<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {

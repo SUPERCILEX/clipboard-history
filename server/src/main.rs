@@ -5,8 +5,8 @@ use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 
 use error_stack::Report;
 use log::info;
-use ringboard_core::{dirs::data_dir, Error, IoErr};
-use rustix::process::{chdir, Pid};
+use ringboard_core::{Error, IoErr, dirs::data_dir};
+use rustix::process::{Pid, chdir};
 use thiserror::Error;
 
 use crate::{allocator::Allocator, startup::claim_server_ownership};
@@ -67,7 +67,7 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
             .attach_printable(format!("Lock file: {lock_file:?}")),
         CliError::Multiple(errs) => {
             let mut errs = VecDeque::from(errs);
-            let mut report = into_report(errs.pop_front().unwrap_or(CliError::Internal {
+            let mut report = into_report(errs.pop_front().unwrap_or_else(|| CliError::Internal {
                 context: "Multiple errors variant contained no errors".into(),
             }));
             report.extend(errs.into_iter().map(into_report));

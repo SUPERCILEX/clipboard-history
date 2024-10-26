@@ -10,17 +10,17 @@ use std::{
 };
 
 use ringboard_sdk::core::{
-    dirs::push_sockets_prefix, link_tmp_file, read_lock_file_pid, Error as CoreError, IoErr,
+    Error as CoreError, IoErr, dirs::push_sockets_prefix, link_tmp_file, read_lock_file_pid,
 };
 use rustix::{
     fs::{
-        inotify,
+        CWD, Mode, OFlags, inotify,
         inotify::{inotify_add_watch, inotify_init},
-        openat, unlink, Mode, OFlags, CWD,
+        openat, unlink,
     },
-    io::{read_uninit, Errno},
+    io::{Errno, read_uninit},
     path::Arg,
-    process::{getpid, kill_process, Signal},
+    process::{Signal, getpid, kill_process},
 };
 
 pub fn maintain_single_instance(mut open: impl FnMut()) -> Result<(), CoreError> {

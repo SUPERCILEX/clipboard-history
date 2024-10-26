@@ -3,9 +3,9 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use ringboard_core::{protocol::IdNotFoundError, ring::Mmap, IoErr, RingAndIndex};
+use ringboard_core::{IoErr, RingAndIndex, protocol::IdNotFoundError, ring::Mmap};
 use rustc_hash::FxHasher;
-use rustix::fs::{statx, AtFlags, StatxFlags};
+use rustix::fs::{AtFlags, StatxFlags, statx};
 use smallvec::SmallVec;
 
 use crate::{DatabaseReader, Entry, EntryReader, Kind};

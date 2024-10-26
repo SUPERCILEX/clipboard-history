@@ -5,7 +5,7 @@ use std::{
     fs::File,
     io::{BorrowedBuf, ErrorKind, ErrorKind::UnexpectedEof, Read, Write},
     marker::PhantomData,
-    mem::{size_of, MaybeUninit},
+    mem::{MaybeUninit, size_of},
     ops::Deref,
     os::fd::{AsFd, AsRawFd, OwnedFd, RawFd},
     path::Path,
@@ -15,15 +15,15 @@ use std::{
 
 use arrayvec::{ArrayString, ArrayVec};
 use rustix::{
-    fs::{copy_file_range, linkat, openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
-    net::{bind_unix, listen, socket, AddressFamily, SocketAddrUnix, SocketType},
+    fs::{AtFlags, CWD, Mode, OFlags, StatxFlags, copy_file_range, linkat, openat, statx},
+    net::{AddressFamily, SocketAddrUnix, SocketType, bind_unix, listen, socket},
     path::Arg,
     process::Pid,
 };
 
 use crate::{
-    protocol::{composite_id, RingKind},
     Error, IoErr, Result,
+    protocol::{RingKind, composite_id},
 };
 
 pub const TEXT_MIMES: &[&str] = &[

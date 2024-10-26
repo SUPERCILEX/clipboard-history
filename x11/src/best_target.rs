@@ -1,4 +1,4 @@
-use ringboard_sdk::core::{protocol::MimeType, TEXT_MIMES};
+use ringboard_sdk::core::{TEXT_MIMES, protocol::MimeType};
 use x11rb::protocol::xproto::Atom;
 
 #[derive(Copy, Clone)]

@@ -4,11 +4,9 @@
 use std::{
     env,
     error::Error,
-    ffi::OsStr,
     sync::{
-        mpsc,
+        Arc, mpsc,
         mpsc::{Receiver, Sender},
-        Arc,
     },
     thread,
 };
@@ -16,22 +14,22 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        text::{LayoutJob, LayoutSection},
         CentralPanel, Event, FontId, FontTweak, Frame, Image, InputState, Key, Label, Margin,
         Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke,
-        TextEdit, TextFormat, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
+        TextEdit, TextFormat, ThemePreference, TopBottomPanel, Ui, Vec2, ViewportBuilder,
+        ViewportCommand, Widget,
+        text::{LayoutJob, LayoutSection},
     },
     epaint::FontFamily,
-    Theme,
 };
 use ringboard_sdk::{
-    core::{protocol::RingKind, Error as CoreError},
+    ClientError,
+    core::{Error as CoreError, protocol::RingKind},
     search::CancellationToken,
     ui_actor::{
-        controller, Command, CommandError, DetailedEntry, Message, SearchKind, UiEntry,
-        UiEntryCache,
+        Command, CommandError, DetailedEntry, Message, SearchKind, UiEntry, UiEntryCache,
+        controller,
     },
-    ClientError,
 };
 
 use crate::{loader::RingboardLoader, startup::maintain_single_instance};
@@ -52,15 +50,6 @@ fn main() -> Result<(), eframe::Error> {
                 .with_min_inner_size(Vec2::splat(100.))
                 .with_inner_size(Vec2::new(666., 777.))
                 .with_position(Pos2::ZERO),
-            default_theme: if env::var_os("THEME")
-                .as_deref()
-                .unwrap_or_else(|| OsStr::new("dark"))
-                == "light"
-            {
-                Theme::Light
-            } else {
-                Theme::Dark
-            },
             ..Default::default()
         },
         Box::new(|cc| {
@@ -159,6 +148,10 @@ fn main() -> Result<(), eframe::Error> {
                     }
                 }
             });
+
+            if env::var_os("THEME").as_deref().unwrap_or_default() == "light" {
+                cc.egui_ctx.set_theme(ThemePreference::Light);
+            }
 
             Ok(Box::new(App::start(
                 entry_font,
@@ -511,22 +504,19 @@ fn main_ui(
     if let Some(UiEntry { entry, cache: _ }) = ui
         .input_mut(|input| {
             (0..10).find(|i| {
-                input.consume_key(
-                    Modifiers::CTRL,
-                    match i {
-                        0 => Key::Num0,
-                        1 => Key::Num1,
-                        2 => Key::Num2,
-                        3 => Key::Num3,
-                        4 => Key::Num4,
-                        5 => Key::Num5,
-                        6 => Key::Num6,
-                        7 => Key::Num7,
-                        8 => Key::Num8,
-                        9 => Key::Num9,
-                        _ => unreachable!(),
-                    },
-                )
+                input.consume_key(Modifiers::CTRL, match i {
+                    0 => Key::Num0,
+                    1 => Key::Num1,
+                    2 => Key::Num2,
+                    3 => Key::Num3,
+                    4 => Key::Num4,
+                    5 => Key::Num5,
+                    6 => Key::Num6,
+                    7 => Key::Num7,
+                    8 => Key::Num8,
+                    9 => Key::Num9,
+                    _ => unreachable!(),
+                })
             })
         })
         .and_then(|idx| active_entries!(entries, state).get(idx))
@@ -866,17 +856,17 @@ fn handle_arrow_keys(
 
 mod loader {
     use std::{
-        collections::{hash_map::Entry, HashMap},
+        collections::{HashMap, hash_map::Entry},
         hash::BuildHasherDefault,
         str::FromStr,
-        sync::{mpsc::Sender, Arc, Mutex},
+        sync::{Arc, Mutex, mpsc::Sender},
     };
 
     use eframe::{
         egui,
         egui::{
-            load::{ImageLoadResult, ImageLoader, ImagePoll, LoadError},
             ColorImage, SizeHint,
+            load::{ImageLoadResult, ImageLoader, ImagePoll, LoadError},
         },
     };
     use image::DynamicImage;

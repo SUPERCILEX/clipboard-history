@@ -3,16 +3,15 @@ use std::fmt::Debug;
 use arrayvec::ArrayVec;
 use log::{debug, info, warn};
 use ringboard_core::{
-    protocol,
+    AsBytes, protocol,
     protocol::{AddResponse, MimeType, Request, RingKind},
-    AsBytes,
 };
 use rustix::net::{AncillaryDrain, RecvAncillaryMessage};
 
 use crate::{
+    CliError,
     allocator::Allocator,
     send_msg_bufs::{PendingBufAllocation, SendMsgBufs},
-    CliError,
 };
 
 pub fn connect(payload: &[u8], send_bufs: &mut SendMsgBufs) -> (bool, PendingBufAllocation) {

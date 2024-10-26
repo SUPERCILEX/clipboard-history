@@ -6,7 +6,7 @@ use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     fmt::{Debug, Display, Formatter},
     fs,
-    fs::{create_dir_all, File},
+    fs::{File, create_dir_all},
     hash::BuildHasherDefault,
     io,
     io::{BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
@@ -26,46 +26,47 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
 use error_stack::Report;
 use rand::{
-    distributions::{Alphanumeric, DistString, Standard},
     Rng,
+    distributions::{Alphanumeric, DistString, Standard},
 };
 use rand_distr::{Distribution, LogNormal, WeightedAliasIndex};
 use rand_xoshiro::{
-    rand_core::{RngCore, SeedableRng},
     Xoshiro256PlusPlus,
+    rand_core::{RngCore, SeedableRng},
 };
 use regex::bytes::Regex;
 use ringboard_sdk::{
+    ClientError, DatabaseReader, EntryReader, Kind,
     api::{
-        connect_to_server, connect_to_server_with, AddRequest, GarbageCollectRequest,
-        MoveToFrontRequest, RemoveRequest, SwapRequest,
+        AddRequest, GarbageCollectRequest, MoveToFrontRequest, RemoveRequest, SwapRequest,
+        connect_to_server, connect_to_server_with,
     },
-    config::{x11_config_file, X11Config, X11V1Config},
+    config::{X11Config, X11V1Config, x11_config_file},
     core::{
-        bucket_to_length, copy_file_range_all,
+        BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, bucket_to_length,
+        copy_file_range_all,
         dirs::{data_dir, socket_file},
         protocol::{
-            decompose_id, AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType,
-            MoveToFrontResponse, RemoveResponse, Response, RingKind, SwapResponse,
+            AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
+            RemoveResponse, Response, RingKind, SwapResponse, decompose_id,
         },
         read_lock_file_pid,
         ring::Mmap,
-        size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS,
+        size_to_bucket,
     },
     duplicate_detection::DuplicateDetector,
     search::{CaselessQuery, EntryLocation, Query, QueryResult},
-    ClientError, DatabaseReader, EntryReader, Kind,
 };
 use rustc_hash::FxHasher;
 use rustix::{
-    event::{poll, PollFd, PollFlags},
-    fs::{memfd_create, openat, statx, AtFlags, MemfdFlags, Mode, OFlags, StatxFlags, CWD},
+    event::{PollFd, PollFlags, poll},
+    fs::{AtFlags, CWD, MemfdFlags, Mode, OFlags, StatxFlags, memfd_create, openat, statx},
     io::Errno,
     net::{RecvFlags, SendFlags, SocketAddrUnix, SocketFlags},
-    process::{pidfd_open, pidfd_send_signal, PidfdFlags, Signal},
+    process::{PidfdFlags, Signal, pidfd_open, pidfd_send_signal},
     stdio::stdin,
 };
-use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeSeq};
 use thiserror::Error;
 
 /// The Ringboard (clipboard history) CLI.
@@ -934,16 +935,12 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
                 i += 4;
             }
             OP_TYPE_FAVORITE_ITEM | OP_TYPE_UNFAVORITE_ITEM | OP_TYPE_MOVE_ITEM_TO_END => {
-                match MoveToFrontRequest::response(
-                    &server,
-                    get_translation!(),
-                    match op {
-                        OP_TYPE_FAVORITE_ITEM => Some(RingKind::Favorites),
-                        OP_TYPE_UNFAVORITE_ITEM => Some(RingKind::Main),
-                        OP_TYPE_MOVE_ITEM_TO_END => None,
-                        _ => unreachable!(),
-                    },
-                )? {
+                match MoveToFrontRequest::response(&server, get_translation!(), match op {
+                    OP_TYPE_FAVORITE_ITEM => Some(RingKind::Favorites),
+                    OP_TYPE_UNFAVORITE_ITEM => Some(RingKind::Main),
+                    OP_TYPE_MOVE_ITEM_TO_END => None,
+                    _ => unreachable!(),
+                })? {
                     MoveToFrontResponse::Success { id } => {
                         translation[gch_id!()] = id;
                     }

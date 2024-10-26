@@ -5,16 +5,16 @@ use std::{
 
 use log::{error, info, warn};
 use ringboard_sdk::{
-    core::{
-        dirs::data_dir,
-        protocol::{composite_id, decompose_id, RingKind},
-        ring::Mmap,
-        Error as CoreError, IoErr,
-    },
     DatabaseReader, EntryReader, Kind, RingReader,
+    core::{
+        Error as CoreError, IoErr,
+        dirs::data_dir,
+        protocol::{RingKind, composite_id, decompose_id},
+        ring::Mmap,
+    },
 };
 use rustc_hash::FxHasher;
-use rustix::fs::{statx, AtFlags, StatxFlags};
+use rustix::fs::{AtFlags, StatxFlags, statx};
 
 pub struct CopyDeduplication {
     main: ArrayMap<2048>,

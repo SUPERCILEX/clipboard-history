@@ -19,28 +19,28 @@ use arrayvec::ArrayVec;
 use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
-    api::{connect_to_server, AddRequest, MoveToFrontRequest},
-    config::{x11_config_file, X11Config, X11V1Config},
+    api::{AddRequest, MoveToFrontRequest, connect_to_server},
+    config::{X11Config, X11V1Config, x11_config_file},
     core::{
+        Error, IoErr,
         dirs::{paste_socket_file, socket_file},
         init_unix_server,
         protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
         ring::Mmap,
-        Error, IoErr,
     },
 };
 use rustix::{
     event::epoll,
-    fs::{memfd_create, openat, MemfdFlags, Mode, OFlags, CWD},
-    io::{read_uninit, Errno},
+    fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create, openat},
+    io::{Errno, read_uninit},
     net::{
-        recvmsg, RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, SocketAddrUnix,
-        SocketType,
+        RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, SocketAddrUnix,
+        SocketType, recvmsg,
     },
     path::Arg,
     time::{
-        timerfd_create, timerfd_settime, Itimerspec, TimerfdClockId, TimerfdFlags,
-        TimerfdTimerFlags, Timespec,
+        Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
+        timerfd_settime,
     },
 };
 use thiserror::Error;
@@ -50,16 +50,15 @@ use x11rb::{
     cookie::Cookie,
     errors::{ConnectError, ConnectionError, ReplyError, ReplyOrIdError},
     protocol::{
-        xfixes,
-        xfixes::{select_selection_input, SelectionEventMask},
+        Event, xfixes,
+        xfixes::{SelectionEventMask, select_selection_input},
         xproto::{
             Atom, AtomEnum, ChangeWindowAttributesAux, ConnectionExt, CreateWindowAux, EventMask,
-            GetAtomNameReply, GetPropertyType, NotifyDetail, PropMode, Property,
-            SelectionNotifyEvent, SelectionRequestEvent, Window, WindowClass, KEY_PRESS_EVENT,
-            KEY_RELEASE_EVENT, SELECTION_NOTIFY_EVENT,
+            GetAtomNameReply, GetPropertyType, KEY_PRESS_EVENT, KEY_RELEASE_EVENT, NotifyDetail,
+            PropMode, Property, SELECTION_NOTIFY_EVENT, SelectionNotifyEvent,
+            SelectionRequestEvent, Window, WindowClass,
         },
         xtest::ConnectionExt as XTestExt,
-        Event,
     },
     rust_connection::RustConnection,
     wrapper::ConnectionExt as WrapperConnExt,
@@ -582,13 +581,9 @@ fn handle_x11_event(
                         requestor,
                         &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
                     )?;
-                    conn.change_property32(
-                        PropMode::REPLACE,
-                        requestor,
-                        property,
-                        incr_atom,
-                        &[u32::try_from(data.len()).unwrap_or(u32::MAX)],
-                    )?;
+                    conn.change_property32(PropMode::REPLACE, requestor, property, incr_atom, &[
+                        u32::try_from(data.len()).unwrap_or(u32::MAX),
+                    ])?;
 
                     if mem::replace(
                         &mut paste_allocations[usize::from(*paste_alloc_next)],

@@ -11,8 +11,8 @@ use std::{
 };
 
 use rustix::{
-    fs::{openat, statx, AtFlags, Mode, OFlags, StatxFlags, CWD},
-    mm::{mmap, mremap, munmap, MapFlags, MremapFlags, ProtFlags},
+    fs::{AtFlags, CWD, Mode, OFlags, StatxFlags, openat, statx},
+    mm::{MapFlags, MremapFlags, ProtFlags, mmap, mremap, munmap},
     path::Arg,
 };
 

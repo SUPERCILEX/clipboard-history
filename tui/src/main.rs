@@ -15,13 +15,13 @@ use std::{
 };
 
 use ratatui::{
+    Terminal,
     backend::{Backend, CrosstermBackend},
     buffer::Buffer,
     crossterm::{
-        event,
+        ExecutableCommand, event,
         event::{Event, KeyEvent, KeyEventKind, KeyModifiers},
-        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-        ExecutableCommand,
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Modifier, Style, Stylize},
@@ -30,15 +30,14 @@ use ratatui::{
         Block, Borders, HighlightSpacing, List, ListState, Padding, Paragraph, StatefulWidget,
         Widget, Wrap,
     },
-    Terminal,
 };
-use ratatui_image::{picker::Picker, protocol::StatefulProtocol, StatefulImage};
+use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 use ringboard_sdk::{
-    core::{protocol::RingKind, Error as CoreError, IoErr},
+    core::{Error as CoreError, IoErr, protocol::RingKind},
     search::CancellationToken,
     ui_actor::{
-        controller, Command, CommandError, DetailedEntry, Message, SearchKind, UiEntry,
-        UiEntryCache,
+        Command, CommandError, DetailedEntry, Message, SearchKind, UiEntry, UiEntryCache,
+        controller,
     },
 };
 use rustix::stdio::raw_stdout;

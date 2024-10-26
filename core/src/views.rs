@@ -7,7 +7,7 @@ pub use path::PathView;
 pub use string::StringView;
 
 use crate::{
-    protocol::{composite_id, decompose_id, IdNotFoundError, RingKind},
+    protocol::{IdNotFoundError, RingKind, composite_id, decompose_id},
     ring::MAX_ENTRIES,
 };
 
@@ -102,7 +102,7 @@ mod path {
         }
     }
 
-    impl<'a> Deref for PathView<'a> {
+    impl Deref for PathView<'_> {
         type Target = PathBuf;
 
         fn deref(&self) -> &Self::Target {
@@ -110,25 +110,25 @@ mod path {
         }
     }
 
-    impl<'a> DerefMut for PathView<'a> {
+    impl DerefMut for PathView<'_> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             self.0
         }
     }
 
-    impl<'a> AsRef<Path> for PathView<'a> {
+    impl AsRef<Path> for PathView<'_> {
         fn as_ref(&self) -> &Path {
             self.0
         }
     }
 
-    impl<'a> Debug for PathView<'a> {
+    impl Debug for PathView<'_> {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             Debug::fmt(&**self, f)
         }
     }
 
-    impl<'a> Drop for PathView<'a> {
+    impl Drop for PathView<'_> {
         fn drop(&mut self) {
             self.pop();
         }
@@ -150,7 +150,7 @@ mod string {
         }
     }
 
-    impl<'a> Deref for StringView<'a> {
+    impl Deref for StringView<'_> {
         type Target = String;
 
         fn deref(&self) -> &Self::Target {
@@ -158,25 +158,25 @@ mod string {
         }
     }
 
-    impl<'a> DerefMut for StringView<'a> {
+    impl DerefMut for StringView<'_> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             self.1
         }
     }
 
-    impl<'a> AsRef<str> for StringView<'a> {
+    impl AsRef<str> for StringView<'_> {
         fn as_ref(&self) -> &str {
             self.1
         }
     }
 
-    impl<'a> Debug for StringView<'a> {
+    impl Debug for StringView<'_> {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             Debug::fmt(&**self, f)
         }
     }
 
-    impl<'a> Drop for StringView<'a> {
+    impl Drop for StringView<'_> {
         fn drop(&mut self) {
             self.1.drain(self.0..);
         }

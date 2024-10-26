@@ -1,6 +1,6 @@
 use std::{
     array,
-    cmp::{min, Reverse},
+    cmp::{Reverse, min},
     collections::BinaryHeap,
     ffi::CStr,
     fmt::Debug,
@@ -18,19 +18,20 @@ use bitcode::{Decode, Encode};
 use bitvec::{order::Lsb0, vec::BitVec};
 use log::{debug, error, info, trace, warn};
 use ringboard_core::{
-    bucket_to_length, copy_file_range_all, direct_file_name, link_tmp_file, open_buckets,
+    IoErr, NUM_BUCKETS, RingAndIndex, TEXT_MIMES, bucket_to_length, copy_file_range_all,
+    direct_file_name, link_tmp_file, open_buckets,
     protocol::{
-        composite_id, decompose_id, AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType,
-        MoveToFrontResponse, RemoveResponse, RingKind, SwapResponse,
+        AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
+        RemoveResponse, RingKind, SwapResponse, composite_id, decompose_id,
     },
     ring,
-    ring::{entries_to_offset, Entry, Header, InitializedEntry, RawEntry, Ring},
-    size_to_bucket, IoErr, RingAndIndex, NUM_BUCKETS, TEXT_MIMES,
+    ring::{Entry, Header, InitializedEntry, RawEntry, Ring, entries_to_offset},
+    size_to_bucket,
 };
 use rustix::{
     fs::{
-        fsetxattr, ftruncate, mkdir, openat, renameat, renameat_with, unlinkat, AtFlags, Mode,
-        OFlags, RenameFlags, XattrFlags, CWD,
+        AtFlags, CWD, Mode, OFlags, RenameFlags, XattrFlags, fsetxattr, ftruncate, mkdir, openat,
+        renameat, renameat_with, unlinkat,
     },
     path::Arg,
 };

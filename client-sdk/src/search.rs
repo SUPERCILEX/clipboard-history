@@ -7,10 +7,10 @@ use std::{
     str,
     str::FromStr,
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
         mpsc,
         mpsc::{SendError, SyncSender},
-        Arc,
     },
     thread,
     thread::JoinHandle,
@@ -20,16 +20,16 @@ use arrayvec::ArrayVec;
 use memchr::memmem::Finder;
 use regex::bytes::Regex;
 use ringboard_core::{
-    bucket_to_length, ring::Mmap, size_to_bucket, Error as CoreError, IoErr, DIRECT_FILE_NAME_LEN,
-    TEXT_MIMES,
+    DIRECT_FILE_NAME_LEN, Error as CoreError, IoErr, TEXT_MIMES, bucket_to_length, ring::Mmap,
+    size_to_bucket,
 };
 use rustix::{
-    fs::{openat, Mode, OFlags, RawDir},
-    thread::{unshare, UnshareFlags},
+    fs::{Mode, OFlags, RawDir, openat},
+    thread::{UnshareFlags, unshare},
 };
 use thiserror::Error;
 
-use crate::{ring_reader::xattr_mime_type, EntryReader};
+use crate::{EntryReader, ring_reader::xattr_mime_type};
 
 #[derive(Clone, Debug)]
 pub struct CaselessQuery {

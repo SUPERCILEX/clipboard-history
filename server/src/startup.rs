@@ -8,9 +8,9 @@ use std::{
 };
 
 use log::warn;
-use ringboard_core::{link_tmp_file, read_lock_file_pid, IoErr};
+use ringboard_core::{IoErr, link_tmp_file, read_lock_file_pid};
 use rustix::{
-    fs::{openat, unlink, unlinkat, AtFlags, Mode, OFlags, CWD},
+    fs::{AtFlags, CWD, Mode, OFlags, openat, unlink, unlinkat},
     io::Errno,
     process::test_kill_process,
 };

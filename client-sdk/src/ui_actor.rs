@@ -1,6 +1,6 @@
 use std::{
     array,
-    cmp::{min, Ordering},
+    cmp::{Ordering, min},
     collections::{BinaryHeap, HashMap},
     hash::BuildHasherDefault,
     io::{BufReader, IoSlice},
@@ -16,22 +16,23 @@ use regex::bytes::Regex;
 use ringboard_core::dirs::paste_socket_file;
 use rustc_hash::FxHasher;
 use rustix::net::{
-    sendmsg_unix, socket_with, AddressFamily, SendAncillaryBuffer, SendAncillaryMessage, SendFlags,
-    SocketAddrUnix, SocketFlags, SocketType,
+    AddressFamily, SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix,
+    SocketFlags, SocketType, sendmsg_unix, socket_with,
 };
 use thiserror::Error;
 
 use crate::{
-    api::{connect_to_server, MoveToFrontRequest, RemoveRequest},
+    ClientError, DatabaseReader, Entry, EntryReader, Kind,
+    api::{MoveToFrontRequest, RemoveRequest, connect_to_server},
     core::{
+        BucketAndIndex, Error as CoreError, IoErr, RingAndIndex,
         dirs::{data_dir, socket_file},
-        protocol::{composite_id, IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind},
-        ring::{Ring, MAX_ENTRIES},
-        size_to_bucket, BucketAndIndex, Error as CoreError, IoErr, RingAndIndex,
+        protocol::{IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind, composite_id},
+        ring::{MAX_ENTRIES, Ring},
+        size_to_bucket,
     },
     search,
     search::{CancellationToken, CaselessQuery, EntryLocation, Query, QueryResult},
-    ClientError, DatabaseReader, Entry, EntryReader, Kind,
 };
 
 #[derive(Error, Debug)]

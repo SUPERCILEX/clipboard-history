@@ -1,6 +1,6 @@
 use std::{
     env,
-    path::{PathBuf, MAIN_SEPARATOR},
+    path::{MAIN_SEPARATOR, PathBuf},
 };
 
 #[must_use]

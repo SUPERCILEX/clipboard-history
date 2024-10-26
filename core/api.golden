@@ -725,17 +725,17 @@ pub fn clipboard_history_core::DirectFileNameToken<'a, T>::from(t: T) -> T
 pub struct clipboard_history_core::PathView<'a>(_)
 impl<'a> clipboard_history_core::PathView<'a>
 pub fn clipboard_history_core::PathView<'a>::new(path: &'a mut std::path::PathBuf, child: impl core::convert::AsRef<std::path::Path>) -> Self
-impl<'a> core::convert::AsRef<std::path::Path> for clipboard_history_core::PathView<'a>
-pub fn clipboard_history_core::PathView<'a>::as_ref(&self) -> &std::path::Path
-impl<'a> core::fmt::Debug for clipboard_history_core::PathView<'a>
-pub fn clipboard_history_core::PathView<'a>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl<'a> core::ops::deref::Deref for clipboard_history_core::PathView<'a>
-pub type clipboard_history_core::PathView<'a>::Target = std::path::PathBuf
-pub fn clipboard_history_core::PathView<'a>::deref(&self) -> &Self::Target
-impl<'a> core::ops::deref::DerefMut for clipboard_history_core::PathView<'a>
-pub fn clipboard_history_core::PathView<'a>::deref_mut(&mut self) -> &mut Self::Target
-impl<'a> core::ops::drop::Drop for clipboard_history_core::PathView<'a>
-pub fn clipboard_history_core::PathView<'a>::drop(&mut self)
+impl core::convert::AsRef<std::path::Path> for clipboard_history_core::PathView<'_>
+pub fn clipboard_history_core::PathView<'_>::as_ref(&self) -> &std::path::Path
+impl core::fmt::Debug for clipboard_history_core::PathView<'_>
+pub fn clipboard_history_core::PathView<'_>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::deref::Deref for clipboard_history_core::PathView<'_>
+pub type clipboard_history_core::PathView<'_>::Target = std::path::PathBuf
+pub fn clipboard_history_core::PathView<'_>::deref(&self) -> &Self::Target
+impl core::ops::deref::DerefMut for clipboard_history_core::PathView<'_>
+pub fn clipboard_history_core::PathView<'_>::deref_mut(&mut self) -> &mut Self::Target
+impl core::ops::drop::Drop for clipboard_history_core::PathView<'_>
+pub fn clipboard_history_core::PathView<'_>::drop(&mut self)
 impl<'a> core::marker::Freeze for clipboard_history_core::PathView<'a>
 impl<'a> core::marker::Send for clipboard_history_core::PathView<'a>
 impl<'a> core::marker::Sync for clipboard_history_core::PathView<'a>
@@ -811,17 +811,17 @@ pub fn clipboard_history_core::RingAndIndex::from(t: T) -> T
 pub struct clipboard_history_core::StringView<'a>(_, _)
 impl<'a> clipboard_history_core::StringView<'a>
 pub fn clipboard_history_core::StringView<'a>::new(s: &'a mut alloc::string::String) -> Self
-impl<'a> core::convert::AsRef<str> for clipboard_history_core::StringView<'a>
-pub fn clipboard_history_core::StringView<'a>::as_ref(&self) -> &str
-impl<'a> core::fmt::Debug for clipboard_history_core::StringView<'a>
-pub fn clipboard_history_core::StringView<'a>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl<'a> core::ops::deref::Deref for clipboard_history_core::StringView<'a>
-pub type clipboard_history_core::StringView<'a>::Target = alloc::string::String
-pub fn clipboard_history_core::StringView<'a>::deref(&self) -> &Self::Target
-impl<'a> core::ops::deref::DerefMut for clipboard_history_core::StringView<'a>
-pub fn clipboard_history_core::StringView<'a>::deref_mut(&mut self) -> &mut Self::Target
-impl<'a> core::ops::drop::Drop for clipboard_history_core::StringView<'a>
-pub fn clipboard_history_core::StringView<'a>::drop(&mut self)
+impl core::convert::AsRef<str> for clipboard_history_core::StringView<'_>
+pub fn clipboard_history_core::StringView<'_>::as_ref(&self) -> &str
+impl core::fmt::Debug for clipboard_history_core::StringView<'_>
+pub fn clipboard_history_core::StringView<'_>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::deref::Deref for clipboard_history_core::StringView<'_>
+pub type clipboard_history_core::StringView<'_>::Target = alloc::string::String
+pub fn clipboard_history_core::StringView<'_>::deref(&self) -> &Self::Target
+impl core::ops::deref::DerefMut for clipboard_history_core::StringView<'_>
+pub fn clipboard_history_core::StringView<'_>::deref_mut(&mut self) -> &mut Self::Target
+impl core::ops::drop::Drop for clipboard_history_core::StringView<'_>
+pub fn clipboard_history_core::StringView<'_>::drop(&mut self)
 impl<'a> core::marker::Freeze for clipboard_history_core::StringView<'a>
 impl<'a> core::marker::Send for clipboard_history_core::StringView<'a>
 impl<'a> core::marker::Sync for clipboard_history_core::StringView<'a>

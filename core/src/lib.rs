@@ -55,7 +55,7 @@ impl<T> IoErr<Result<T>> for rustix::io::Result<T> {
 mod error_stack_compat {
     use error_stack::{Context, Report};
 
-    use crate::{protocol::IdNotFoundError, Error};
+    use crate::{Error, protocol::IdNotFoundError};
 
     impl Error {
         pub fn into_report<W: Context>(self, wrapper: W) -> Report<W> {
