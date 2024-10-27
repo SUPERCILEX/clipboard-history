@@ -60,14 +60,11 @@ fn main() -> Result<(), eframe::Error> {
             ..Default::default()
         },
         Box::new(|cc| {
-            let entry_font = FontFamily::Name("entry-font".into());
-
             let (command_sender, command_receiver) = mpsc::channel();
             let (response_sender, response_receiver) = mpsc::sync_channel(8);
 
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
-                let entry_font = entry_font.clone();
                 let command_sender = command_sender.clone();
                 let response_sender = response_sender.clone();
                 move || {
@@ -94,15 +91,10 @@ fn main() -> Result<(), eframe::Error> {
                         fonts.font_data.insert(
                             "NotoEmoji".to_owned(),
                             egui::FontData::from_static(include_bytes!(
-                                "../fonts/NotoEmoji-VariableFont_wght.ttf"
+                                "../fonts/NotoEmoji-Regular.ttf"
                             )),
                         );
 
-                        fonts
-                            .families
-                            .entry(entry_font)
-                            .or_default()
-                            .extend_from_slice(&["Cascadia".into(), "NotoEmoji".into()]);
                         fonts
                             .families
                             .entry(FontFamily::Monospace)
@@ -161,11 +153,7 @@ fn main() -> Result<(), eframe::Error> {
                 cc.egui_ctx.set_theme(ThemePreference::Light);
             }
 
-            Ok(Box::new(App::start(
-                entry_font,
-                command_sender,
-                response_receiver,
-            )))
+            Ok(Box::new(App::start(command_sender, response_receiver)))
         }),
     );
 
@@ -182,7 +170,6 @@ fn main() -> Result<(), eframe::Error> {
 struct App {
     requests: Sender<Command>,
     responses: Receiver<Message>,
-    row_font: FontFamily,
 
     state: State,
 }
@@ -219,17 +206,12 @@ struct UiState {
 }
 
 impl App {
-    fn start(
-        row_font: FontFamily,
-        requests: Sender<Command>,
-        responses: Receiver<Message>,
-    ) -> Self {
+    fn start(requests: Sender<Command>, responses: Receiver<Message>) -> Self {
         let mut state = State::default();
         state.ui.skip_first_focus = true;
         Self {
             requests,
             responses,
-            row_font,
 
             state,
         }
@@ -334,7 +316,7 @@ impl eframe::App for App {
                 ..Margin::ZERO
             }))
             .show(ctx, |ui| {
-                main_ui(ui, &self.row_font, &mut self.state, &self.requests);
+                main_ui(ui, &mut self.state, &self.requests);
             });
 
         #[cfg(not(feature = "wayland"))]
@@ -454,12 +436,7 @@ fn show_error(ui: &mut Ui, e: &dyn Error) {
     ui.label(format!("Details: {e:#?}"));
 }
 
-fn main_ui(
-    ui: &mut Ui,
-    entry_text_font: &FontFamily,
-    state_: &mut State,
-    requests: &Sender<Command>,
-) {
+fn main_ui(ui: &mut Ui, state_: &mut State, requests: &Sender<Command>) {
     let State { entries, ui: state } = state_;
     let refresh = |state: &mut UiState| {
         let _ = requests.send(Command::LoadFirstPage);
@@ -569,7 +546,6 @@ fn main_ui(
 
             entry_ui(
                 ui,
-                entry_text_font,
                 entry,
                 entries,
                 state,
@@ -587,7 +563,6 @@ fn main_ui(
 
 fn entry_ui(
     ui: &mut Ui,
-    entry_text_font: &FontFamily,
     entry: &UiEntry,
     entries: &UiEntries,
     state: &mut UiState,
@@ -628,7 +603,7 @@ fn entry_ui(
                 },
                 sections: {
                     let format = TextFormat {
-                        font_id: FontId::new(16., entry_text_font.clone()),
+                        font_id: FontId::monospace(16.),
                         color: ui.visuals().text_color(),
                         ..Default::default()
                     };
