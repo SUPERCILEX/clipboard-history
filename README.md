@@ -80,6 +80,14 @@ Install the [server](server/ringboard-server.service) and [X11](x11/ringboard-x1
 
 You'll need to start the Ringboard server and X11/Wayland clipboard watcher on boot.
 
+### Uninstalling
+
+Run
+
+```sh
+curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/uninstall.sh | bash
+```
+
 ## Migrating from existing clipboard managers
 
 Tooling is provided to migrate from other clipboard managers. Run:
