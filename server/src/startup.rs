@@ -35,7 +35,8 @@ pub fn claim_server_ownership() -> Result<OwnedServer, CliError> {
             .map_io_err(|| "Failed to create server lock temp file.")?,
     );
 
-    write!(lock_file, "{}", process::id()).map_io_err(|| "Failed to write to server lock file.")?;
+    writeln!(lock_file, "{}", process::id())
+        .map_io_err(|| "Failed to write to server lock file.")?;
 
     loop {
         match link_tmp_file(&lock_file, CWD, c"server.lock") {

@@ -56,7 +56,8 @@ fn kill_old_instances_if_any(path: impl Arg + Copy + Debug) -> Result<(), CoreEr
             .map_io_err(|| "Failed to create egui sleep temp file.")?,
     );
 
-    write!(lock_file, "{}", process::id()).map_io_err(|| "Failed to write to egui sleep file.")?;
+    writeln!(lock_file, "{}", process::id())
+        .map_io_err(|| "Failed to write to egui sleep file.")?;
 
     loop {
         match link_tmp_file(&lock_file, CWD, path) {
