@@ -153,7 +153,7 @@ fn setup_uring() -> Result<(IoUring, BuiltInFds), CliError> {
         mem_pressure_path.extend_from_slice(b"/memory.pressure");
         let mut mem_pressure = File::from(
             match openat(CWD, &mem_pressure_path, OFlags::RDWR, Mode::empty()) {
-                Err(Errno::EXIST | Errno::PERM) => {
+                Err(Errno::EXIST | Errno::ACCESS) => {
                     debug!(
                         "Pressure file not available: {}",
                         mem_pressure_path.escape_ascii()
