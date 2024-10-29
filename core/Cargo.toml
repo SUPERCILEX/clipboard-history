@@ -13,7 +13,8 @@ license.workspace = true
 arrayvec = "0.7.6"
 dirs = "5.0.1"
 error-stack = { version = "0.5.0", default-features = false, optional = true }
-rustix = { version = "0.38.42", features = ["fs", "mm", "process", "net", "event", "linux_latest"] }
+itoa = "1.0.14"
+rustix = { version = "0.38.42", features = ["fs", "mm", "process", "net", "event", "itoa", "linux_latest"] }
 thiserror = "2.0.6"
 
 [dev-dependencies]

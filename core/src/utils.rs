@@ -5,9 +5,10 @@ use std::{
     fs::File,
     io,
     io::{BorrowedBuf, ErrorKind, ErrorKind::UnexpectedEof, Read, Write},
+    mem,
     mem::{MaybeUninit, size_of},
     os::{
-        fd::{AsFd, AsRawFd, OwnedFd, RawFd},
+        fd::{AsFd, OwnedFd, RawFd},
         unix::fs::FileExt,
     },
     path::Path,
@@ -16,6 +17,7 @@ use std::{
 };
 
 use arrayvec::{ArrayString, ArrayVec};
+use itoa::Integer;
 use rustix::{
     event::{PollFd, PollFlags, poll},
     fs::{
@@ -24,7 +26,7 @@ use rustix::{
     },
     io::Errno,
     net::{AddressFamily, SocketAddrUnix, SocketType, bind_unix, listen, socket},
-    path::Arg,
+    path::{Arg, DecInt},
     process::{
         Pid, PidfdFlags, Signal, getpid, kill_process, pidfd_open, pidfd_send_signal,
         test_kill_process,
@@ -269,23 +271,41 @@ pub fn acquire_lock_file<
     }
 }
 
+const PROC_SELF_FD_BUF_LEN: usize = "/proc/self/fd/".len() + RawFd::MAX_STR_LEN + 1;
+
+#[inline]
+#[allow(clippy::transmute_ptr_to_ptr)]
+pub fn proc_self_fd_buf<'a, Fd: AsFd>(
+    buf: &'a mut [MaybeUninit<u8>; PROC_SELF_FD_BUF_LEN],
+    fd: &Fd,
+) -> &'a CStr {
+    let (header, fd_buf) = buf.split_at_mut("/proc/self/fd/".len());
+
+    header
+        .copy_from_slice(unsafe { mem::transmute::<&[u8], &[MaybeUninit<u8>]>(b"/proc/self/fd/") });
+
+    let fd_bytes = DecInt::from_fd(fd);
+    let fd_bytes = fd_bytes.as_bytes_with_nul();
+    fd_buf[..fd_bytes.len()]
+        .copy_from_slice(unsafe { mem::transmute::<&[u8], &[MaybeUninit<u8>]>(fd_bytes) });
+
+    let len = header.len() + fd_bytes.len();
+    unsafe {
+        CStr::from_bytes_with_nul_unchecked(mem::transmute::<&[MaybeUninit<u8>], &[u8]>(
+            &buf[..len],
+        ))
+    }
+}
+
 pub fn link_tmp_file<Fd: AsFd, DirFd: AsFd, P: Arg>(
     tmp_file: Fd,
     dirfd: DirFd,
     path: P,
 ) -> rustix::io::Result<()> {
-    const _: () = assert!(RawFd::BITS <= i32::BITS);
-    let mut buf = [0u8; "/proc/self/fd/".len() + "-2147483648".len() + 1];
-    write!(
-        buf.as_mut_slice(),
-        "/proc/self/fd/{}",
-        tmp_file.as_fd().as_raw_fd()
-    )
-    .unwrap();
-
+    let mut buf = [MaybeUninit::uninit(); PROC_SELF_FD_BUF_LEN];
     linkat(
         CWD,
-        unsafe { CStr::from_ptr(buf.as_ptr().cast()) },
+        proc_self_fd_buf(&mut buf, &tmp_file),
         dirfd,
         path,
         AtFlags::SYMLINK_FOLLOW,

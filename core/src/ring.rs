@@ -1,10 +1,12 @@
 use std::{
+    ffi::OsStr,
     fmt::{Debug, Formatter},
     fs, io,
     io::ErrorKind,
+    mem::MaybeUninit,
     ops::Deref,
-    os::fd::{AsFd, AsRawFd},
-    path::PathBuf,
+    os::{fd::AsFd, unix::ffi::OsStrExt},
+    path::{Path, PathBuf},
     ptr,
     ptr::NonNull,
     slice,
@@ -16,7 +18,7 @@ use rustix::{
     path::Arg,
 };
 
-use crate::{Error, IoErr, Result};
+use crate::{Error, IoErr, Result, proc_self_fd_buf};
 
 pub const MAX_ENTRIES: u32 = (1 << 20) - 1;
 
@@ -263,10 +265,12 @@ impl Ring {
         if len < MAGIC.len()
             || unsafe { slice::from_raw_parts(mem.ptr().as_ptr(), MAGIC.len()) } != MAGIC
         {
-            let path = fs::read_link(PathBuf::from(format!(
-                "/proc/self/fd/{}",
-                fd.as_fd().as_raw_fd()
-            )))
+            let path = {
+                let mut buf = [MaybeUninit::uninit(); 26];
+                fs::read_link(Path::new(OsStr::from_bytes(
+                    proc_self_fd_buf(&mut buf, &fd).to_bytes(),
+                )))
+            }
             .unwrap_or_else(|_| PathBuf::from("unknown"));
             return Err(Error::Io {
                 error: io::Error::new(ErrorKind::InvalidData, "Not a Ringboard database."),

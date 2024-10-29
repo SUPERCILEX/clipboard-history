@@ -918,6 +918,7 @@ pub fn clipboard_history_core::init_unix_server<P: core::convert::AsRef<std::pat
 pub fn clipboard_history_core::is_plaintext_mime(mime: &str) -> bool
 pub fn clipboard_history_core::link_tmp_file<Fd: std::os::fd::owned::AsFd, DirFd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg>(tmp_file: Fd, dirfd: DirFd, path: P) -> rustix::io::errno::Result<()>
 pub fn clipboard_history_core::open_buckets<F: core::ops::function::FnMut(&str) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>>(open: F) -> clipboard_history_core::Result<([std::os::fd::owned::OwnedFd; 11], [u64; 11])>
+pub fn clipboard_history_core::proc_self_fd_buf<'a, Fd: std::os::fd::owned::AsFd>(buf: &'a mut [core::mem::maybe_uninit::MaybeUninit<u8>; 26], fd: &Fd) -> &'a core::ffi::c_str::CStr
 pub fn clipboard_history_core::read_at_to_end(file: &std::fs::File, buf: &mut [u8], offset: u64) -> std::io::error::Result<usize>
 pub fn clipboard_history_core::size_to_bucket(bytes: u16) -> u8
 pub type clipboard_history_core::Result<T> = core::result::Result<T, clipboard_history_core::Error>
