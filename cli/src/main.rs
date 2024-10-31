@@ -291,6 +291,9 @@ struct Swap {
 struct Import {
     /// The existing clipboard to import.
     #[arg(required = true)]
+    #[arg(requires_if("rb", "database"))]
+    #[arg(requires_if("ring", "database"))]
+    #[arg(requires_if("ringboard", "database"))]
     #[arg(requires_if("json", "database"))]
     from: ImportClipboard,
 
@@ -316,6 +319,7 @@ enum ImportClipboard {
     GPaste,
 
     /// A sequence of JSON objects in the same format as the dump command.
+    // Make sure to update the Import::from requires_ifs when changing aliases
     #[value(aliases = ["rb", "ring", "ringboard"])]
     Json,
 }
