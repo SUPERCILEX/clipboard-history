@@ -8,14 +8,14 @@ use std::{
 };
 
 use ringboard_core::{
-    AsBytes, IoErr, protocol,
+    AsBytes, IoErr, create_tmp_file, protocol,
     protocol::{
         AddResponse, GarbageCollectResponse, MimeType, MoveToFrontResponse, RemoveResponse,
         Request, Response, RingKind, SwapResponse,
     },
 };
 use rustix::{
-    fs::{AtFlags, CWD, FileType, Mode, OFlags, StatxFlags, openat, statx},
+    fs::{AtFlags, CWD, FileType, Mode, OFlags, StatxFlags, statx},
     net::{
         AddressFamily, RecvAncillaryBuffer, RecvFlags, SendAncillaryBuffer, SendAncillaryMessage,
         SendFlags, SocketAddrUnix, SocketFlags, SocketType, connect_unix, recvmsg, sendmsg,
@@ -104,8 +104,15 @@ impl AddRequest {
         {
             Self::response_add_unchecked(server, to, mime_type, data)
         } else {
-            let file = openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
-                .map_io_err(|| "Failed to create intermediary data file.")?;
+            let file = create_tmp_file(
+                &mut false,
+                CWD,
+                c".",
+                c".ringboard-add-scratchpad",
+                OFlags::RDWR,
+                Mode::empty(),
+            )
+            .map_io_err(|| "Failed to create intermediary data file.")?;
             let mut file = File::from(file);
 
             io::copy(

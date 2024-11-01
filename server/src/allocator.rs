@@ -6,7 +6,8 @@ use std::{
     fmt::Debug,
     fs::File,
     io,
-    io::{ErrorKind, ErrorKind::AlreadyExists, IoSlice, Read, Write},
+    io::{ErrorKind, ErrorKind::AlreadyExists, IoSlice, Read, Seek, SeekFrom, Write},
+    mem,
     mem::ManuallyDrop,
     ops::{Index, IndexMut},
     os::{fd::OwnedFd, unix::fs::FileExt},
@@ -19,7 +20,7 @@ use bitvec::{order::Lsb0, vec::BitVec};
 use log::{debug, error, info, trace, warn};
 use ringboard_core::{
     IoErr, NUM_BUCKETS, RingAndIndex, TEXT_MIMES, bucket_to_length, copy_file_range_all,
-    direct_file_name, link_tmp_file, open_buckets,
+    create_tmp_file, direct_file_name, link_tmp_file, open_buckets,
     protocol::{
         AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
         RemoveResponse, RingKind, SwapResponse, composite_id, decompose_id,
@@ -135,6 +136,8 @@ pub struct Allocator {
 struct AllocatorData {
     buckets: Buckets,
     direct_dir: OwnedFd,
+    scratchpad: File,
+    tmp_file_unsupported: bool,
 }
 
 #[derive(Debug)]
@@ -257,6 +260,19 @@ impl FreeLists {
     }
 }
 
+fn create_scratchpad(tmp_file_unsupported: &mut bool) -> ringboard_core::Result<File> {
+    create_tmp_file(
+        tmp_file_unsupported,
+        CWD,
+        c".",
+        c".scratchpad",
+        OFlags::RDWR,
+        Mode::RUSR | Mode::WUSR,
+    )
+    .map(File::from)
+    .map_io_err(|| "Failed to create scratchpad file.")
+}
+
 impl Allocator {
     pub fn open() -> Result<Self, CliError> {
         let open_ring = |kind: RingKind| -> Result<_, CliError> {
@@ -311,6 +327,8 @@ impl Allocator {
 
         let rings = Rings([favorites_ring, main_ring]);
         let free_lists = FreeLists::load(&rings)?;
+        let mut tmp_file_unsupported = false;
+        let scratchpad = create_scratchpad(&mut tmp_file_unsupported)?;
 
         Ok(Self {
             rings,
@@ -321,6 +339,8 @@ impl Allocator {
                     free_lists,
                 },
                 direct_dir,
+                scratchpad,
+                tmp_file_unsupported,
             },
         })
     }
@@ -794,32 +814,23 @@ impl AllocatorData {
         id: u32,
     ) -> Result<Entry, CliError> {
         debug!("Allocating entry to {to:?} ring at position {id} with mime type {mime_type:?}.");
-        let mut received = File::from(
-            openat(
-                &self.direct_dir,
-                c".",
-                OFlags::RDWR | OFlags::TMPFILE,
-                Mode::RUSR | Mode::WUSR,
-            )
-            .map_io_err(|| "Failed to create data receiver file.")?,
-        );
 
-        let size = io::copy(&mut File::from(data), &mut received)
+        let size = io::copy(&mut File::from(data), &mut self.scratchpad)
             .map_io_err(|| "Failed to copy data to receiver file.")?;
         debug!("Received {size} bytes.");
 
         if TEXT_MIMES.iter().any(|b| mime_type.eq_ignore_ascii_case(b)) {
             if size > 0 && size < 4096 {
-                self.alloc_bucket(received, u16::try_from(size).unwrap())
+                self.alloc_bucket(u16::try_from(size).unwrap())
             } else {
-                self.alloc_direct(received, &MimeType::new(), to, id)
+                self.alloc_direct(size, &MimeType::new(), to, id)
             }
         } else {
-            self.alloc_direct(received, mime_type, to, id)
+            self.alloc_direct(size, mime_type, to, id)
         }
     }
 
-    fn alloc_bucket(&mut self, data: File, size: u16) -> Result<Entry, CliError> {
+    fn alloc_bucket(&mut self, size: u16) -> Result<Entry, CliError> {
         debug!("Allocating {size} byte bucket slot.");
         let bucket = usize::from(size_to_bucket(size));
         let Buckets {
@@ -843,13 +854,16 @@ impl AllocatorData {
 
             let mut offset = u64::from(bucket_index) * u64::from(bucket_len);
             copy_file_range_all(
-                data,
+                &self.scratchpad,
                 Some(&mut 0),
                 &files[bucket],
                 Some(&mut offset),
                 usize::from(size),
             )
             .map_io_err(|| format!("Failed to copy data to bucket {bucket}."))?;
+            self.scratchpad
+                .seek(SeekFrom::Start(0))
+                .map_io_err(|| "Failed to reset scratchpad file offset.")?;
             if size < bucket_len {
                 files[bucket]
                     .write_all_at(
@@ -870,14 +884,23 @@ impl AllocatorData {
     }
 
     fn alloc_direct(
-        &self,
-        data: File,
+        &mut self,
+        size: u64,
         &mime_type: &MimeType,
         to: RingKind,
         id: u32,
     ) -> Result<Entry, CliError> {
         const _: () = assert!(size_of::<RingKind>() <= u8::BITS as usize);
         debug!("Allocating direct entry.");
+
+        if size < 4096 - 1 {
+            ftruncate(&self.scratchpad, size).map_io_err(|| "Failed to trim scratchpad file.")?;
+        }
+
+        let data = mem::replace(
+            &mut self.scratchpad,
+            create_scratchpad(&mut self.tmp_file_unsupported)?,
+        );
 
         if !mime_type.is_empty() {
             fsetxattr(

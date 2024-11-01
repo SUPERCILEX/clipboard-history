@@ -44,7 +44,7 @@ use ringboard_sdk::{
     config::{X11Config, X11V1Config, x11_config_file},
     core::{
         BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, bucket_to_length,
-        copy_file_range_all,
+        copy_file_range_all, create_tmp_file,
         dirs::{data_dir, socket_file},
         protocol::{
             AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
@@ -843,7 +843,7 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
     const OP_TYPE_MOVE_ITEM_TO_END: u8 = 5;
 
     fn generate_entry_file(database: impl AsFd, start: u64, len: usize) -> Result<File, CliError> {
-        let file = openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
+        let file = memfd_create(c"ringboard_import_gch", MemfdFlags::empty())
             .map_io_err(|| "Failed to create data entry file.")?;
 
         let result =
@@ -1481,10 +1481,17 @@ fn dump() -> Result<(), CliError> {
 }
 
 fn migrate_from_ringboard_export(server: OwnedFd, dump_file: PathBuf) -> Result<(), CliError> {
-    fn generate_entry_file(data: &[u8]) -> Result<File, CliError> {
+    fn generate_entry_file(tmp_file_unsupported: &mut bool, data: &[u8]) -> Result<File, CliError> {
         let file = File::from(
-            openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
-                .map_io_err(|| "Failed to create data entry file.")?,
+            create_tmp_file(
+                tmp_file_unsupported,
+                CWD,
+                c".",
+                c".ringboard-import-scratchpad",
+                OFlags::RDWR,
+                Mode::empty(),
+            )
+            .map_io_err(|| "Failed to create data entry file.")?,
         );
 
         file.write_all_at(data, 0)
@@ -1494,13 +1501,14 @@ fn migrate_from_ringboard_export(server: OwnedFd, dump_file: PathBuf) -> Result<
     }
 
     let mut pending_adds = 0;
+    let mut cache = Default::default();
     let mut process = |ExportEntry {
                            id,
                            data,
                            mime_type,
                        }|
      -> Result<(), CliError> {
-        let data = generate_entry_file(match &data {
+        let data = generate_entry_file(&mut cache, match &data {
             ExportData::Human(str) => str.as_bytes(),
             ExportData::Bytes(bytes) => bytes,
         })?;

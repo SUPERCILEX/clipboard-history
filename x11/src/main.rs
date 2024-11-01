@@ -22,7 +22,7 @@ use ringboard_sdk::{
     api::{AddRequest, MoveToFrontRequest, connect_to_server},
     config::{X11Config, X11V1Config, x11_config_file},
     core::{
-        Error, IoErr,
+        Error, IoErr, create_tmp_file,
         dirs::{paste_socket_file, socket_file},
         init_unix_server,
         protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
@@ -31,7 +31,7 @@ use ringboard_sdk::{
 };
 use rustix::{
     event::epoll,
-    fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create, openat},
+    fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
     io::{Errno, read_uninit},
     net::{
         RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, SocketAddrUnix,
@@ -464,9 +464,10 @@ fn handle_x11_event(
     root: Window,
     paste_timer: Option<impl AsFd>,
     last_paste: &mut Option<(PasteFile, PasteAtom)>,
-    (paste_alloc_next, paste_allocations): &mut (
+    (paste_alloc_next, paste_allocations, tmp_file_unsupported): &mut (
         u8,
         [(Window, Option<(Atom, Rc<Mmap>, usize)>); MAX_CONCURRENT_TRANSFERS],
+        bool,
     ),
     clear_selection_mask: &mut u8,
 ) -> Result<(), CliError> {
@@ -939,8 +940,15 @@ fn handle_x11_event(
                         file
                     } else {
                         File::from(
-                            openat(CWD, c".", OFlags::RDWR | OFlags::TMPFILE, Mode::empty())
-                                .map_io_err(|| "Failed to create selection transfer temp file.")?,
+                            create_tmp_file(
+                                tmp_file_unsupported,
+                                CWD,
+                                c".",
+                                c".ringboard-x11-scratchpad",
+                                OFlags::RDWR,
+                                Mode::empty(),
+                            )
+                            .map_io_err(|| "Failed to create selection transfer temp file.")?,
                         )
                     };
 

@@ -15,7 +15,10 @@ use std::{
 
 use arrayvec::{ArrayString, ArrayVec};
 use rustix::{
-    fs::{AtFlags, CWD, Mode, OFlags, StatxFlags, copy_file_range, linkat, openat, statx},
+    fs::{
+        AtFlags, CWD, Mode, OFlags, StatxFlags, copy_file_range, linkat, openat, statx, unlinkat,
+    },
+    io::Errno,
     net::{AddressFamily, SocketAddrUnix, SocketType, bind_unix, listen, socket},
     path::Arg,
     process::Pid,
@@ -94,6 +97,31 @@ pub fn link_tmp_file<Fd: AsFd, DirFd: AsFd, P: Arg>(
         path,
         AtFlags::SYMLINK_FOLLOW,
     )
+}
+
+pub fn create_tmp_file<Fd: AsFd, P1: Arg, P2: Arg + Copy>(
+    tmp_file_unsupported: &mut bool,
+    dirfd: Fd,
+    path: P1,
+    fallback_path: P2,
+    oflags: OFlags,
+    create_mode: Mode,
+) -> rustix::io::Result<OwnedFd> {
+    if !*tmp_file_unsupported {
+        match openat(&dirfd, path, oflags | OFlags::TMPFILE, create_mode) {
+            Err(Errno::NOTSUP) => *tmp_file_unsupported = true,
+            r => return r,
+        };
+    }
+
+    let file = openat(
+        &dirfd,
+        fallback_path,
+        oflags | OFlags::CREATE | OFlags::EXCL,
+        create_mode,
+    )?;
+    unlinkat(dirfd, fallback_path, AtFlags::empty())?;
+    Ok(file)
 }
 
 pub trait AsBytes: Sized {

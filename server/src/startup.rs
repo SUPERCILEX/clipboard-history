@@ -8,9 +8,9 @@ use std::{
 };
 
 use log::warn;
-use ringboard_core::{IoErr, link_tmp_file, read_lock_file_pid};
+use ringboard_core::{IoErr, create_tmp_file, link_tmp_file, read_lock_file_pid};
 use rustix::{
-    fs::{AtFlags, CWD, Mode, OFlags, openat, unlink, unlinkat},
+    fs::{AtFlags, CWD, Mode, OFlags, unlink, unlinkat},
     io::Errno,
     process::test_kill_process,
 };
@@ -31,8 +31,15 @@ impl OwnedServer {
 
 pub fn claim_server_ownership() -> Result<OwnedServer, CliError> {
     let mut lock_file = File::from(
-        openat(CWD, c".", OFlags::WRONLY | OFlags::TMPFILE, Mode::RUSR)
-            .map_io_err(|| "Failed to create server lock temp file.")?,
+        create_tmp_file(
+            &mut false,
+            CWD,
+            c".",
+            c".server.lock",
+            OFlags::WRONLY,
+            Mode::RUSR,
+        )
+        .map_io_err(|| "Failed to create server lock temp file.")?,
     );
 
     writeln!(lock_file, "{}", process::id())

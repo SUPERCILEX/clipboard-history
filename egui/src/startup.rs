@@ -11,10 +11,11 @@ use std::{
 };
 
 use ringboard_sdk::core::{
-    Error as CoreError, IoErr, dirs::push_sockets_prefix, link_tmp_file, read_lock_file_pid,
+    Error as CoreError, IoErr, create_tmp_file, dirs::push_sockets_prefix, link_tmp_file,
+    read_lock_file_pid,
 };
 use rustix::{
-    fs::{CWD, Mode, OFlags, inotify, inotify::ReadFlags, openat, unlink},
+    fs::{CWD, Mode, OFlags, inotify, inotify::ReadFlags, unlink},
     io::Errno,
     path::Arg,
     process::{Signal, getpid, kill_process},
@@ -31,6 +32,7 @@ pub fn maintain_single_instance(
     stop: &AtomicBool,
     mut open: impl FnMut(),
 ) -> Result<(), CoreError> {
+    let mut cache = Default::default();
     let path = sleep_file_name();
     let inotify =
         inotify::init(inotify::CreateFlags::empty()).map_io_err(|| "Failed to create inotify.")?;
@@ -39,7 +41,7 @@ pub fn maintain_single_instance(
             break Ok(());
         }
 
-        kill_old_instances_if_any(&path)?;
+        kill_old_instances_if_any(&mut cache, &path)?;
         let id = inotify::add_watch(
             &inotify,
             &path,
@@ -50,10 +52,20 @@ pub fn maintain_single_instance(
     }
 }
 
-fn kill_old_instances_if_any(path: impl Arg + Copy + Debug) -> Result<(), CoreError> {
+fn kill_old_instances_if_any(
+    tmp_file_unsupported: &mut bool,
+    path: impl Arg + Copy + Debug,
+) -> Result<(), CoreError> {
     let mut lock_file = File::from(
-        openat(CWD, c"/tmp", OFlags::WRONLY | OFlags::TMPFILE, Mode::RUSR)
-            .map_io_err(|| "Failed to create egui sleep temp file.")?,
+        create_tmp_file(
+            tmp_file_unsupported,
+            CWD,
+            c"/tmp",
+            c"/tmp/.ringboard-egui-lock-scratchpad",
+            OFlags::WRONLY,
+            Mode::RUSR,
+        )
+        .map_io_err(|| "Failed to create egui sleep temp file.")?,
     );
 
     writeln!(lock_file, "{}", process::id())
