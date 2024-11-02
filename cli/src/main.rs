@@ -716,7 +716,7 @@ fn swap(server: OwnedFd, Swap { id1, id2 }: Swap) -> Result<(), CliError> {
     } else if let Some(e) = error2 {
         return Err(e.into());
     }
-    println!("Done.");
+    println!("Swapped.");
 
     Ok(())
 }
@@ -726,7 +726,7 @@ fn remove(server: OwnedFd, EntryAction { id }: EntryAction) -> Result<(), CliErr
     if let Some(e) = error {
         return Err(e.into());
     }
-    println!("Done.");
+    println!("Removed.");
 
     Ok(())
 }
@@ -783,7 +783,7 @@ fn wipe() -> Result<(), CliError> {
     }
 
     fuc_engine::remove_dir_all(tmp_data_dir)?;
-    println!("Done.");
+    println!("Wiped.");
 
     Ok(())
 }
