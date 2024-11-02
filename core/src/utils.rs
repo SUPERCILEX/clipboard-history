@@ -223,12 +223,20 @@ impl<T> Debug for DirectFileNameToken<'_, T> {
 }
 
 pub fn direct_file_name(
-    buf: &mut [u8; DIRECT_FILE_NAME_LEN + 1],
+    buf: &mut [MaybeUninit<u8>; DIRECT_FILE_NAME_LEN + 1],
     to: RingKind,
     index: u32,
 ) -> DirectFileNameToken<()> {
-    write!(buf.as_mut_slice(), "{:0>13}\0", composite_id(to, index)).unwrap();
-    DirectFileNameToken(buf.as_mut_slice(), PhantomData)
+    let mut buf = BorrowedBuf::from(buf.as_mut_slice());
+    write!(buf.unfilled(), "{:0>13}\0", composite_id(to, index)).unwrap();
+    DirectFileNameToken(
+        // TODO hack until https://github.com/rust-lang/rust/pull/132532
+        #[allow(clippy::missing_transmute_annotations)]
+        unsafe {
+            std::mem::transmute(buf.filled_mut())
+        },
+        PhantomData,
+    )
 }
 
 pub fn init_unix_server<P: AsRef<Path>>(socket_file: P, kind: SocketType) -> Result<OwnedFd> {

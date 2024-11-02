@@ -3,6 +3,7 @@ use std::{
     fs::File,
     io,
     io::ErrorKind,
+    mem::MaybeUninit,
     ops::{Deref, DerefMut},
     os::{
         fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
@@ -466,7 +467,7 @@ impl Entry {
                 }))
             }
             Kind::File => {
-                let mut buf = Default::default();
+                let mut buf = [MaybeUninit::uninit(); 14];
                 let buf = direct_file_name(&mut buf, self.ring(), self.index());
 
                 let file = openat(&reader.direct, &*buf, OFlags::RDONLY, Mode::empty())

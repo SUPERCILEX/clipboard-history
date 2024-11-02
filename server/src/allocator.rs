@@ -8,7 +8,7 @@ use std::{
     io,
     io::{ErrorKind, ErrorKind::AlreadyExists, IoSlice, Read, Seek, SeekFrom, Write},
     mem,
-    mem::ManuallyDrop,
+    mem::{ManuallyDrop, MaybeUninit},
     ops::{Index, IndexMut},
     os::{fd::OwnedFd, unix::fs::FileExt},
     slice,
@@ -444,9 +444,9 @@ impl Allocator {
                     // Nothing to do, buckets are shared between rings.
                 }
                 Entry::File => {
-                    let mut from_buf = Default::default();
+                    let mut from_buf = [MaybeUninit::uninit(); 14];
                     let from_buf = direct_file_name(&mut from_buf, from, from_id);
-                    let mut to_buf = Default::default();
+                    let mut to_buf = [MaybeUninit::uninit(); 14];
                     let to_buf = direct_file_name(&mut to_buf, to, to_id);
 
                     renameat(direct_dir, &*from_buf, direct_dir, &*to_buf).map_io_err(|| {
@@ -505,9 +505,9 @@ impl Allocator {
                 let from_idx = usize::from(entry1 != Entry::File);
                 let to_idx = usize::from(entry1 == Entry::File);
 
-                let mut from_buf = Default::default();
+                let mut from_buf = [MaybeUninit::uninit(); 14];
                 let from_buf = direct_file_name(&mut from_buf, rings[from_idx], ids[from_idx]);
-                let mut to_buf = Default::default();
+                let mut to_buf = [MaybeUninit::uninit(); 14];
                 let to_buf = direct_file_name(&mut to_buf, rings[to_idx], ids[to_idx]);
 
                 let direct_dir = &self.data.direct_dir;
@@ -912,7 +912,7 @@ impl AllocatorData {
             .map_io_err(|| "Failed to create mime type attribute.")?;
         }
 
-        let mut buf = Default::default();
+        let mut buf = [MaybeUninit::uninit(); 14];
         let buf = direct_file_name(&mut buf, to, id);
         link_tmp_file(data, &self.direct_dir, &*buf)
             .map_io_err(|| format!("Failed to materialize direct allocation: {buf:?}"))?;
@@ -936,7 +936,7 @@ impl AllocatorData {
 
     fn free_direct(&self, to: RingKind, id: u32) -> Result<(), CliError> {
         debug!("Freeing direct allocation.");
-        let mut buf = Default::default();
+        let mut buf = [MaybeUninit::uninit(); 14];
         let buf = direct_file_name(&mut buf, to, id);
         unlinkat(&self.direct_dir, &*buf, AtFlags::empty())
             .map_io_err(|| format!("Failed to remove direct allocation file: {buf:?}"))?;
