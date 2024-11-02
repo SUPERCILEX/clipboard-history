@@ -11,14 +11,14 @@ license.workspace = true
 
 [dependencies]
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
-ratatui = "0.28.1"
-ratatui-image = { version = "2.0.1", features = ["crossterm"] }
+ratatui = "0.29.0"
+ratatui-image = { version = "3.0.0", features = ["crossterm"] }
 regex = "1.11.1"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "ui"] }
-rustix = { version = "0.38.37", features = ["stdio"] }
-thiserror = "1.0.65"
+rustix = { version = "0.38.38", features = ["stdio"] }
+thiserror = "1.0.66"
 tracy-client = { version = "0.17.4", optional = true }
-tui-textarea = "0.6.1"
+tui-textarea = "0.7.0"
 
 [features]
 trace = ["dep:tracy-client"]

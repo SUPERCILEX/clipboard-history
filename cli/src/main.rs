@@ -397,6 +397,8 @@ enum CliError {
     QuickXml(#[from] quick_xml::Error),
     #[error("Serde XML (de)serialization failed")]
     QuickXmlDe(#[from] quick_xml::DeError),
+    #[error("Serde XML (de)serialization failed")]
+    QuickXmlAttr(#[from] quick_xml::events::attributes::AttrError),
     #[error("Serde TOML serialization failed")]
     Toml(#[from] toml::ser::Error),
     #[error("invalid RegEx")]
@@ -432,6 +434,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::SerdeJson(e) => Report::new(e).change_context(wrapper),
             CliError::QuickXml(e) => Report::new(e).change_context(wrapper),
             CliError::QuickXmlDe(e) => Report::new(e).change_context(wrapper),
+            CliError::QuickXmlAttr(e) => Report::new(e).change_context(wrapper),
             CliError::Toml(e) => Report::new(e).change_context(wrapper),
             CliError::Regex(e) => Report::new(e).change_context(wrapper),
             CliError::InternalSearchError => Report::new(wrapper).attach_printable(

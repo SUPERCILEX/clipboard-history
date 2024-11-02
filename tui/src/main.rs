@@ -115,7 +115,7 @@ struct SearchState {
 
 enum ImageState {
     Requested(u64),
-    Loaded(Box<dyn StatefulProtocol>),
+    Loaded(StatefulProtocol),
 }
 
 macro_rules! active_entries {
@@ -215,8 +215,7 @@ impl App {
         .draw(terminal)
         .map_io_err(|| "Failed to write to terminal.")?;
 
-        let mut picker = Picker::from_termios().unwrap_or_else(|_| Picker::new((2, 4)));
-        picker.guess_protocol();
+        let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::from_fontsize((2, 4)));
 
         thread::spawn({
             let sender = response_sender.clone();

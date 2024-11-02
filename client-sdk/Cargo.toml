@@ -18,10 +18,10 @@ memchr = { version = "2.7.4", optional = true }
 regex = { version = "1.11.1", optional = true }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core" }
 rustc-hash = { version = "2.0.0", optional = true }
-rustix = { version = "0.38.37", features = ["net", "fs", "thread"] }
-serde = { version = "1.0.213", features = ["derive"], optional = true }
+rustix = { version = "0.38.38", features = ["net", "fs", "thread"] }
+serde = { version = "1.0.214", features = ["derive"], optional = true }
 smallvec = { version = "2.0.0-alpha.7", optional = true }
-thiserror = "1.0.65"
+thiserror = "1.0.66"
 
 [dev-dependencies]
 supercilex-tests = { version = "0.4.11", default-features = false, features = ["api"] }
