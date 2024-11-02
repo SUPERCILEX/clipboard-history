@@ -379,16 +379,30 @@ fn stream_through_direct_allocations<T>(
     sender: &SyncSender<Result<T, CoreError>>,
     mut f: impl FnMut(&CStr, OwnedFd, &str) -> Result<(), DirectIterError>,
 ) {
-    let direct_dir = match openat(reader.direct(), c".", OFlags::DIRECTORY, Mode::empty())
-        .map_io_err(|| "Failed to open direct dir.")
-        .and_then(|fd| {
+    let (direct_dir, metadata_dir) = {
+        let run = || {
+            let direct_dir = openat(reader.direct(), c".", OFlags::DIRECTORY, Mode::empty())
+                .map_io_err(|| "Failed to open direct dir.")?;
+            let metadata_dir = if let Some(metadata_dir) = reader.metadata() {
+                Some(
+                    openat(metadata_dir, c".", OFlags::DIRECTORY, Mode::empty())
+                        .map_io_err(|| "Failed to open metadata dir.")?,
+                )
+            } else {
+                None
+            };
+
             unshare(UnshareFlags::FILES).map_io_err(|| "Failed to unshare FD table.")?;
-            Ok(fd)
-        }) {
-        Ok(fd) => fd,
-        Err(e) => {
-            let _ = sender.send(Err(e));
-            return;
+
+            Ok((direct_dir, metadata_dir))
+        };
+
+        match run() {
+            Ok(d) => d,
+            Err(e) => {
+                let _ = sender.send(Err(e));
+                return;
+            }
         }
     };
 
@@ -409,7 +423,7 @@ fn stream_through_direct_allocations<T>(
 
             let fd = openat(&direct_dir, file_name, OFlags::RDONLY, Mode::empty())
                 .map_io_err(|| format!("Failed to open direct allocation: {file_name:?}"))?;
-            let mime_type = xattr_mime_type(&fd)?;
+            let mime_type = xattr_mime_type(&fd, metadata_dir.as_ref().map(|d| (d, file_name)))?;
             f(file_name, fd, &mime_type)
         };
 

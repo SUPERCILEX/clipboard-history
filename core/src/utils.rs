@@ -1,13 +1,15 @@
 use std::{
     ffi::CStr,
-    fmt::{Debug, Formatter},
+    fmt::Debug,
     fs,
     fs::File,
+    io,
     io::{BorrowedBuf, ErrorKind, ErrorKind::UnexpectedEof, Read, Write},
-    marker::PhantomData,
     mem::{MaybeUninit, size_of},
-    ops::Deref,
-    os::fd::{AsFd, AsRawFd, OwnedFd, RawFd},
+    os::{
+        fd::{AsFd, AsRawFd, OwnedFd, RawFd},
+        unix::fs::FileExt,
+    },
     path::Path,
     ptr, slice,
     str::FromStr,
@@ -204,39 +206,14 @@ pub const fn bucket_to_length(bucket: usize) -> u16 {
     1 << (bucket + 2)
 }
 
-pub struct DirectFileNameToken<'a, T>(&'a mut [u8], PhantomData<T>);
-
-impl<T> Deref for DirectFileNameToken<'_, T> {
-    type Target = CStr;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { CStr::from_ptr(self.0.as_ptr().cast()) }
-    }
-}
-
-impl<T> Debug for DirectFileNameToken<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        std::str::from_utf8(&self.0[..self.0.len() - 1])
-            .unwrap()
-            .fmt(f)
-    }
-}
-
 pub fn direct_file_name(
     buf: &mut [MaybeUninit<u8>; DIRECT_FILE_NAME_LEN + 1],
     to: RingKind,
     index: u32,
-) -> DirectFileNameToken<()> {
+) -> &CStr {
     let mut buf = BorrowedBuf::from(buf.as_mut_slice());
     write!(buf.unfilled(), "{:0>13}\0", composite_id(to, index)).unwrap();
-    DirectFileNameToken(
-        // TODO hack until https://github.com/rust-lang/rust/pull/132532
-        #[allow(clippy::missing_transmute_annotations)]
-        unsafe {
-            std::mem::transmute(buf.filled_mut())
-        },
-        PhantomData,
-    )
+    unsafe { CStr::from_ptr(buf.filled_mut().as_ptr().cast()) }
 }
 
 pub fn init_unix_server<P: AsRef<Path>>(socket_file: P, kind: SocketType) -> Result<OwnedFd> {
@@ -264,4 +241,22 @@ pub fn init_unix_server<P: AsRef<Path>>(socket_file: P, kind: SocketType) -> Res
             .map_io_err(|| format!("Failed to listen for clients: {socket_file:?}"))?;
     }
     Ok(socket)
+}
+
+pub fn read_at_to_end(file: &File, mut buf: &mut [u8], mut offset: u64) -> io::Result<usize> {
+    loop {
+        if buf.is_empty() {
+            break Ok(buf.len());
+        }
+        match file.read_at(buf, offset) {
+            Ok(0) => break Ok(buf.len()),
+            Ok(n) => {
+                let tmp = buf;
+                buf = &mut tmp[n..];
+                offset += n as u64;
+            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => break Err(e),
+        }
+    }
 }

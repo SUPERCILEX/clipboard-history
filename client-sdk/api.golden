@@ -1057,10 +1057,10 @@ pub const fn clipboard_history_client_sdk::Entry::index(&self) -> u32
 pub fn clipboard_history_client_sdk::Entry::kind(&self) -> clipboard_history_client_sdk::Kind
 pub fn clipboard_history_client_sdk::Entry::mime_type(&self, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_core::protocol::MimeType, clipboard_history_core::Error>
 pub fn clipboard_history_client_sdk::Entry::ring(&self) -> clipboard_history_core::protocol::RingKind
-pub fn clipboard_history_client_sdk::Entry::to_file(&self, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<std::fs::File>, clipboard_history_core::Error>
-pub fn clipboard_history_client_sdk::Entry::to_file_raw(&self, reader: &clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<std::fs::File>>, clipboard_history_core::Error>
-pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<MmapOrSlice<'a>>, clipboard_history_core::Error>
-pub fn clipboard_history_client_sdk::Entry::to_slice_raw<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<MmapOrSlice<'a>>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_file<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<'a, std::fs::File>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_file_raw<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<'a, std::fs::File>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<'a, MmapOrSlice<'a>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_slice_raw<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<'a, MmapOrSlice<'a>>>, clipboard_history_core::Error>
 impl core::clone::Clone for clipboard_history_client_sdk::Entry
 pub fn clipboard_history_client_sdk::Entry::clone(&self) -> clipboard_history_client_sdk::Entry
 impl core::fmt::Debug for clipboard_history_client_sdk::Entry
@@ -1106,6 +1106,7 @@ pub struct clipboard_history_client_sdk::EntryReader
 impl clipboard_history_client_sdk::EntryReader
 pub fn clipboard_history_client_sdk::EntryReader::buckets(&self) -> [&clipboard_history_core::ring::Mmap; 11]
 pub fn clipboard_history_client_sdk::EntryReader::direct(&self) -> std::os::fd::owned::BorrowedFd<'_>
+pub fn clipboard_history_client_sdk::EntryReader::metadata(&self) -> core::option::Option<std::os::fd::owned::BorrowedFd<'_>>
 pub fn clipboard_history_client_sdk::EntryReader::open(database_dir: &mut std::path::PathBuf) -> core::result::Result<Self, clipboard_history_core::Error>
 impl core::fmt::Debug for clipboard_history_client_sdk::EntryReader
 pub fn clipboard_history_client_sdk::EntryReader::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1139,48 +1140,48 @@ pub unsafe fn clipboard_history_client_sdk::EntryReader::deref_mut<'a>(ptr: usiz
 pub unsafe fn clipboard_history_client_sdk::EntryReader::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::EntryReader::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::EntryReader
-pub struct clipboard_history_client_sdk::LoadedEntry<T>
-impl<T> clipboard_history_client_sdk::LoadedEntry<T>
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::backing_file(&self) -> core::option::Option<std::os::fd::owned::BorrowedFd<'_>>
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::into_inner(self) -> T
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::mime_type(&self) -> core::result::Result<clipboard_history_core::protocol::MimeType, clipboard_history_core::Error>
-impl<T: core::fmt::Debug> core::fmt::Debug for clipboard_history_client_sdk::LoadedEntry<T>
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl<T> core::ops::deref::Deref for clipboard_history_client_sdk::LoadedEntry<T>
-pub type clipboard_history_client_sdk::LoadedEntry<T>::Target = T
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::deref(&self) -> &Self::Target
-impl<T> core::ops::deref::DerefMut for clipboard_history_client_sdk::LoadedEntry<T>
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::deref_mut(&mut self) -> &mut Self::Target
-impl<T> core::marker::Freeze for clipboard_history_client_sdk::LoadedEntry<T> where T: core::marker::Freeze
-impl<T> core::marker::Send for clipboard_history_client_sdk::LoadedEntry<T> where T: core::marker::Send
-impl<T> core::marker::Sync for clipboard_history_client_sdk::LoadedEntry<T> where T: core::marker::Sync
-impl<T> core::marker::Unpin for clipboard_history_client_sdk::LoadedEntry<T> where T: core::marker::Unpin
-impl<T> core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::LoadedEntry<T> where T: core::panic::unwind_safe::RefUnwindSafe
-impl<T> core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::LoadedEntry<T> where T: core::panic::unwind_safe::UnwindSafe
-impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::LoadedEntry<T> where U: core::convert::From<T>
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::into(self) -> U
-impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::LoadedEntry<T> where U: core::convert::Into<T>
-pub type clipboard_history_client_sdk::LoadedEntry<T>::Error = core::convert::Infallible
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
-impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::LoadedEntry<T> where U: core::convert::TryFrom<T>
-pub type clipboard_history_client_sdk::LoadedEntry<T>::Error = <U as core::convert::TryFrom<T>>::Error
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
-impl<T> core::any::Any for clipboard_history_client_sdk::LoadedEntry<T> where T: 'static + core::marker::Sized
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::LoadedEntry<T> where T: core::marker::Sized
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::LoadedEntry<T> where T: core::marker::Sized
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::borrow_mut(&mut self) -> &mut T
-impl<T> core::convert::From<T> for clipboard_history_client_sdk::LoadedEntry<T>
-pub fn clipboard_history_client_sdk::LoadedEntry<T>::from(t: T) -> T
-impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::LoadedEntry<T>
-pub type clipboard_history_client_sdk::LoadedEntry<T>::Init = T
-pub const clipboard_history_client_sdk::LoadedEntry<T>::ALIGN: usize
-pub unsafe fn clipboard_history_client_sdk::LoadedEntry<T>::deref<'a>(ptr: usize) -> &'a T
-pub unsafe fn clipboard_history_client_sdk::LoadedEntry<T>::deref_mut<'a>(ptr: usize) -> &'a mut T
-pub unsafe fn clipboard_history_client_sdk::LoadedEntry<T>::drop(ptr: usize)
-pub unsafe fn clipboard_history_client_sdk::LoadedEntry<T>::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
-impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::LoadedEntry<T>
+pub struct clipboard_history_client_sdk::LoadedEntry<'a, T>
+impl<T> clipboard_history_client_sdk::LoadedEntry<'_, T>
+pub fn clipboard_history_client_sdk::LoadedEntry<'_, T>::backing_file(&self) -> core::option::Option<std::os::fd::owned::BorrowedFd<'_>>
+pub fn clipboard_history_client_sdk::LoadedEntry<'_, T>::into_inner(self) -> T
+pub fn clipboard_history_client_sdk::LoadedEntry<'_, T>::mime_type(&self) -> core::result::Result<clipboard_history_core::protocol::MimeType, clipboard_history_core::Error>
+impl<T: core::fmt::Debug> core::fmt::Debug for clipboard_history_client_sdk::LoadedEntry<'_, T>
+pub fn clipboard_history_client_sdk::LoadedEntry<'_, T>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T> core::ops::deref::Deref for clipboard_history_client_sdk::LoadedEntry<'_, T>
+pub type clipboard_history_client_sdk::LoadedEntry<'_, T>::Target = T
+pub fn clipboard_history_client_sdk::LoadedEntry<'_, T>::deref(&self) -> &Self::Target
+impl<T> core::ops::deref::DerefMut for clipboard_history_client_sdk::LoadedEntry<'_, T>
+pub fn clipboard_history_client_sdk::LoadedEntry<'_, T>::deref_mut(&mut self) -> &mut Self::Target
+impl<'a, T> core::marker::Freeze for clipboard_history_client_sdk::LoadedEntry<'a, T> where T: core::marker::Freeze
+impl<'a, T> core::marker::Send for clipboard_history_client_sdk::LoadedEntry<'a, T> where T: core::marker::Send
+impl<'a, T> core::marker::Sync for clipboard_history_client_sdk::LoadedEntry<'a, T> where T: core::marker::Sync
+impl<'a, T> core::marker::Unpin for clipboard_history_client_sdk::LoadedEntry<'a, T> where T: core::marker::Unpin
+impl<'a, T> core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::LoadedEntry<'a, T> where T: core::panic::unwind_safe::RefUnwindSafe
+impl<'a, T> core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::LoadedEntry<'a, T> where T: core::panic::unwind_safe::UnwindSafe
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::LoadedEntry<'a, T> where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::LoadedEntry<'a, T>::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::LoadedEntry<'a, T> where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::LoadedEntry<'a, T>::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::LoadedEntry<'a, T>::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::LoadedEntry<'a, T> where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::LoadedEntry<'a, T>::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::LoadedEntry<'a, T>::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::LoadedEntry<'a, T> where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::LoadedEntry<'a, T>::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::LoadedEntry<'a, T> where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::LoadedEntry<'a, T>::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::LoadedEntry<'a, T> where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::LoadedEntry<'a, T>::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::LoadedEntry<'a, T>
+pub fn clipboard_history_client_sdk::LoadedEntry<'a, T>::from(t: T) -> T
+impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::LoadedEntry<'a, T>
+pub type clipboard_history_client_sdk::LoadedEntry<'a, T>::Init = T
+pub const clipboard_history_client_sdk::LoadedEntry<'a, T>::ALIGN: usize
+pub unsafe fn clipboard_history_client_sdk::LoadedEntry<'a, T>::deref<'a>(ptr: usize) -> &'a T
+pub unsafe fn clipboard_history_client_sdk::LoadedEntry<'a, T>::deref_mut<'a>(ptr: usize) -> &'a mut T
+pub unsafe fn clipboard_history_client_sdk::LoadedEntry<'a, T>::drop(ptr: usize)
+pub unsafe fn clipboard_history_client_sdk::LoadedEntry<'a, T>::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
+impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::LoadedEntry<'a, T>
 pub struct clipboard_history_client_sdk::RingReader<'a>
 impl<'a> clipboard_history_client_sdk::RingReader<'a>
 pub fn clipboard_history_client_sdk::RingReader<'a>::from_id(ring: &'a clipboard_history_core::ring::Ring, kind: clipboard_history_core::protocol::RingKind, write_head: u32, id: u32) -> Self

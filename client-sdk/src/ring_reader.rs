@@ -17,12 +17,14 @@ use arrayvec::ArrayVec;
 use ringboard_core::{
     IoErr, NUM_BUCKETS, PathView, RingAndIndex, bucket_to_length, direct_file_name, open_buckets,
     protocol::{IdNotFoundError, MimeType, RingKind, composite_id, decompose_id},
+    read_at_to_end,
     ring::{InitializedEntry, Mmap, Ring},
     size_to_bucket,
 };
 use rustix::{
     fs::{CWD, MemfdFlags, Mode, OFlags, fgetxattr, memfd_create, openat},
     io::Errno,
+    path::Arg,
 };
 
 #[derive(Debug)]
@@ -259,12 +261,13 @@ pub enum Kind {
     File,
 }
 
-pub struct LoadedEntry<T> {
+pub struct LoadedEntry<'a, T> {
     loaded: T,
+    metadata: Option<(BorrowedFd<'a>, RingAndIndex)>,
     fd: Option<LoadedEntryFd>,
 }
 
-impl<T: Debug> Debug for LoadedEntry<T> {
+impl<T: Debug> Debug for LoadedEntry<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.loaded.fmt(f)
     }
@@ -275,11 +278,26 @@ enum LoadedEntryFd {
     HackySelfReference(BorrowedFd<'static>),
 }
 
-pub fn xattr_mime_type<Fd: AsFd>(fd: Fd) -> Result<MimeType, ringboard_core::Error> {
+pub fn xattr_mime_type<Fd: AsFd, MetadataFd: AsFd, MetadataPath: Arg + Copy + Debug>(
+    fd: Fd,
+    read_from_metadata: Option<(MetadataFd, MetadataPath)>,
+) -> Result<MimeType, ringboard_core::Error> {
     let mut mime_type = [0u8; MimeType::new_const().capacity()];
-    let len = match fgetxattr(fd, c"user.mime_type", &mut mime_type) {
-        Err(Errno::NODATA) => return Ok(MimeType::new_const()),
-        r => r.map_io_err(|| "Failed to read extended attributes.")?,
+    let len = if let Some((metadata_dir, file_name)) = read_from_metadata {
+        let metadata = File::from(
+            match openat(metadata_dir, file_name, OFlags::RDONLY, Mode::empty()) {
+                Err(Errno::NOENT) => return Ok(MimeType::new_const()),
+                r => r.map_io_err(|| format!("Failed to open metadata file: {file_name:?}"))?,
+            },
+        );
+        mime_type.len()
+            - read_at_to_end(&metadata, mime_type.as_mut_slice(), 0)
+                .map_io_err(|| format!("Failed to read metadata file: {file_name:?}"))?
+    } else {
+        match fgetxattr(fd, c"user.mime_type", &mut mime_type) {
+            Err(Errno::NODATA) => return Ok(MimeType::new_const()),
+            r => r.map_io_err(|| "Failed to read extended attributes.")?,
+        }
     };
     let mime_type = str::from_utf8(&mime_type[..len]).map_err(|e| ringboard_core::Error::Io {
         error: io::Error::new(ErrorKind::InvalidInput, e),
@@ -289,7 +307,7 @@ pub fn xattr_mime_type<Fd: AsFd>(fd: Fd) -> Result<MimeType, ringboard_core::Err
     Ok(MimeType::from(mime_type).unwrap())
 }
 
-impl<T> LoadedEntry<T> {
+impl<T> LoadedEntry<'_, T> {
     pub fn into_inner(self) -> T {
         self.loaded
     }
@@ -299,7 +317,14 @@ impl<T> LoadedEntry<T> {
             return Ok(MimeType::new_const());
         };
 
-        xattr_mime_type(fd)
+        let mut file_name = [MaybeUninit::uninit(); 14];
+        xattr_mime_type(
+            fd,
+            self.metadata.map(|(metadata_dir, rai)| {
+                let file_name = direct_file_name(&mut file_name, rai.ring(), rai.index());
+                (metadata_dir, file_name)
+            }),
+        )
     }
 
     pub fn backing_file(&self) -> Option<BorrowedFd> {
@@ -310,7 +335,7 @@ impl<T> LoadedEntry<T> {
     }
 }
 
-impl<T> Deref for LoadedEntry<T> {
+impl<T> Deref for LoadedEntry<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -318,7 +343,7 @@ impl<T> Deref for LoadedEntry<T> {
     }
 }
 
-impl<T> DerefMut for LoadedEntry<T> {
+impl<T> DerefMut for LoadedEntry<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.loaded
     }
@@ -387,15 +412,15 @@ impl Entry {
     pub fn to_slice<'a>(
         &self,
         reader: &'a mut EntryReader,
-    ) -> Result<LoadedEntry<MmapOrSlice<'a>>, ringboard_core::Error> {
+    ) -> Result<LoadedEntry<'a, MmapOrSlice<'a>>, ringboard_core::Error> {
         self.grow_bucket_if_needed(reader)?;
         Ok(self.to_slice_raw(reader)?.unwrap())
     }
 
-    pub fn to_file(
+    pub fn to_file<'a>(
         &self,
-        reader: &mut EntryReader,
-    ) -> Result<LoadedEntry<File>, ringboard_core::Error> {
+        reader: &'a mut EntryReader,
+    ) -> Result<LoadedEntry<'a, File>, ringboard_core::Error> {
         self.grow_bucket_if_needed(reader)?;
         Ok(self.to_file_raw(reader)?.unwrap())
     }
@@ -419,7 +444,7 @@ impl Entry {
     pub fn to_slice_raw<'a>(
         &self,
         reader: &'a EntryReader,
-    ) -> Result<Option<LoadedEntry<MmapOrSlice<'a>>>, ringboard_core::Error> {
+    ) -> Result<Option<LoadedEntry<'a, MmapOrSlice<'a>>>, ringboard_core::Error> {
         match self.kind() {
             Kind::Bucket(entry) => {
                 let Ok(bytes) = bucket_entry_to_slice(reader, entry) else {
@@ -427,6 +452,7 @@ impl Entry {
                 };
                 Ok(Some(LoadedEntry {
                     loaded: bytes.into(),
+                    metadata: reader.metadata.as_ref().map(|m| (m.as_fd(), self.rai)),
                     fd: None,
                 }))
             }
@@ -438,16 +464,17 @@ impl Entry {
                     loaded: Mmap::from(&*file)
                         .map_io_err(|| format!("Failed to mmap data file: {file:?}"))?
                         .into(),
+                    metadata: reader.metadata.as_ref().map(|m| (m.as_fd(), self.rai)),
                     fd: Some(LoadedEntryFd::Owned(file.loaded.into())),
                 }))
             }
         }
     }
 
-    pub fn to_file_raw(
+    pub fn to_file_raw<'a>(
         &self,
-        reader: &EntryReader,
-    ) -> Result<Option<LoadedEntry<File>>, ringboard_core::Error> {
+        reader: &'a EntryReader,
+    ) -> Result<Option<LoadedEntry<'a, File>>, ringboard_core::Error> {
         match self.kind() {
             Kind::Bucket(entry) => {
                 let Ok(bytes) = bucket_entry_to_slice(reader, entry) else {
@@ -463,20 +490,22 @@ impl Entry {
 
                 Ok(Some(LoadedEntry {
                     loaded: file,
+                    metadata: reader.metadata.as_ref().map(|m| (m.as_fd(), self.rai)),
                     fd: None,
                 }))
             }
             Kind::File => {
-                let mut buf = [MaybeUninit::uninit(); 14];
-                let buf = direct_file_name(&mut buf, self.ring(), self.index());
+                let mut file_name = [MaybeUninit::uninit(); 14];
+                let file_name = direct_file_name(&mut file_name, self.ring(), self.index());
 
-                let file = openat(&reader.direct, &*buf, OFlags::RDONLY, Mode::empty())
-                    .map_io_err(|| format!("Failed to open direct file: {buf:?}"))
+                let file = openat(&reader.direct, file_name, OFlags::RDONLY, Mode::empty())
+                    .map_io_err(|| format!("Failed to open direct file: {file_name:?}"))
                     .map(File::from)?;
                 Ok(Some(LoadedEntry {
                     fd: Some(LoadedEntryFd::HackySelfReference(unsafe {
                         BorrowedFd::borrow_raw(file.as_raw_fd())
                     })),
+                    metadata: reader.metadata.as_ref().map(|m| (m.as_fd(), self.rai)),
                     loaded: file,
                 }))
             }
@@ -488,6 +517,7 @@ impl Entry {
 pub struct EntryReader {
     buckets: [Mmap; NUM_BUCKETS],
     direct: OwnedFd,
+    metadata: Option<OwnedFd>,
 }
 
 impl EntryReader {
@@ -497,6 +527,13 @@ impl EntryReader {
             openat(CWD, &*file, OFlags::DIRECTORY | OFlags::PATH, Mode::empty())
                 .map_io_err(|| format!("Failed to open directory: {file:?}"))
         }?;
+        let metadata_dir = {
+            let file = PathView::new(database_dir, "metadata");
+            match openat(CWD, &*file, OFlags::DIRECTORY | OFlags::PATH, Mode::empty()) {
+                Err(Errno::NOENT) => None,
+                r => Some(r.map_io_err(|| format!("Failed to open directory: {file:?}"))?),
+            }
+        };
 
         let buckets = {
             let mut buckets = PathView::new(database_dir, "buckets");
@@ -519,6 +556,7 @@ impl EntryReader {
         Ok(Self {
             buckets,
             direct: direct_dir,
+            metadata: metadata_dir,
         })
     }
 
@@ -534,6 +572,11 @@ impl EntryReader {
     #[must_use]
     pub fn direct(&self) -> BorrowedFd {
         self.direct.as_fd()
+    }
+
+    #[must_use]
+    pub fn metadata(&self) -> Option<BorrowedFd> {
+        self.metadata.as_ref().map(OwnedFd::as_fd)
     }
 }
 

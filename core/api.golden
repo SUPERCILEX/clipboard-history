@@ -694,34 +694,6 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::BucketAndIndex wh
 pub unsafe fn clipboard_history_core::BucketAndIndex::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::BucketAndIndex
 pub fn clipboard_history_core::BucketAndIndex::from(t: T) -> T
-pub struct clipboard_history_core::DirectFileNameToken<'a, T>(_, _)
-impl<T> core::fmt::Debug for clipboard_history_core::DirectFileNameToken<'_, T>
-pub fn clipboard_history_core::DirectFileNameToken<'_, T>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl<T> core::ops::deref::Deref for clipboard_history_core::DirectFileNameToken<'_, T>
-pub type clipboard_history_core::DirectFileNameToken<'_, T>::Target = core::ffi::c_str::CStr
-pub fn clipboard_history_core::DirectFileNameToken<'_, T>::deref(&self) -> &Self::Target
-impl<'a, T> core::marker::Freeze for clipboard_history_core::DirectFileNameToken<'a, T>
-impl<'a, T> core::marker::Send for clipboard_history_core::DirectFileNameToken<'a, T> where T: core::marker::Send
-impl<'a, T> core::marker::Sync for clipboard_history_core::DirectFileNameToken<'a, T> where T: core::marker::Sync
-impl<'a, T> core::marker::Unpin for clipboard_history_core::DirectFileNameToken<'a, T> where T: core::marker::Unpin
-impl<'a, T> core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::DirectFileNameToken<'a, T> where T: core::panic::unwind_safe::RefUnwindSafe
-impl<'a, T> !core::panic::unwind_safe::UnwindSafe for clipboard_history_core::DirectFileNameToken<'a, T>
-impl<T, U> core::convert::Into<U> for clipboard_history_core::DirectFileNameToken<'a, T> where U: core::convert::From<T>
-pub fn clipboard_history_core::DirectFileNameToken<'a, T>::into(self) -> U
-impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::DirectFileNameToken<'a, T> where U: core::convert::Into<T>
-pub type clipboard_history_core::DirectFileNameToken<'a, T>::Error = core::convert::Infallible
-pub fn clipboard_history_core::DirectFileNameToken<'a, T>::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
-impl<T, U> core::convert::TryInto<U> for clipboard_history_core::DirectFileNameToken<'a, T> where U: core::convert::TryFrom<T>
-pub type clipboard_history_core::DirectFileNameToken<'a, T>::Error = <U as core::convert::TryFrom<T>>::Error
-pub fn clipboard_history_core::DirectFileNameToken<'a, T>::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
-impl<T> core::any::Any for clipboard_history_core::DirectFileNameToken<'a, T> where T: 'static + core::marker::Sized
-pub fn clipboard_history_core::DirectFileNameToken<'a, T>::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_core::DirectFileNameToken<'a, T> where T: core::marker::Sized
-pub fn clipboard_history_core::DirectFileNameToken<'a, T>::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::DirectFileNameToken<'a, T> where T: core::marker::Sized
-pub fn clipboard_history_core::DirectFileNameToken<'a, T>::borrow_mut(&mut self) -> &mut T
-impl<T> core::convert::From<T> for clipboard_history_core::DirectFileNameToken<'a, T>
-pub fn clipboard_history_core::DirectFileNameToken<'a, T>::from(t: T) -> T
 pub struct clipboard_history_core::PathView<'a>(_)
 impl<'a> clipboard_history_core::PathView<'a>
 pub fn clipboard_history_core::PathView<'a>::new(path: &'a mut std::path::PathBuf, child: impl core::convert::AsRef<std::path::Path>) -> Self
@@ -864,10 +836,11 @@ pub fn rustix::io::errno::Result<T>::map_io_err<I: core::convert::Into<alloc::bo
 pub const fn clipboard_history_core::bucket_to_length(bucket: usize) -> u16
 pub fn clipboard_history_core::copy_file_range_all<InFd: std::os::fd::owned::AsFd, OutFd: std::os::fd::owned::AsFd>(fd_in: InFd, off_in: core::option::Option<&mut u64>, fd_out: OutFd, off_out: core::option::Option<&mut u64>, len: usize) -> rustix::io::errno::Result<usize>
 pub fn clipboard_history_core::create_tmp_file<Fd: std::os::fd::owned::AsFd, P1: rustix::path::arg::Arg, P2: rustix::path::arg::Arg + core::marker::Copy>(tmp_file_unsupported: &mut bool, dirfd: Fd, path: P1, fallback_path: P2, oflags: rustix::backend::fs::types::OFlags, create_mode: rustix::backend::fs::types::Mode) -> rustix::io::errno::Result<std::os::fd::owned::OwnedFd>
-pub fn clipboard_history_core::direct_file_name(buf: &mut [core::mem::maybe_uninit::MaybeUninit<u8>; 14], to: clipboard_history_core::protocol::RingKind, index: u32) -> clipboard_history_core::DirectFileNameToken<'_, ()>
+pub fn clipboard_history_core::direct_file_name(buf: &mut [core::mem::maybe_uninit::MaybeUninit<u8>; 14], to: clipboard_history_core::protocol::RingKind, index: u32) -> &core::ffi::c_str::CStr
 pub fn clipboard_history_core::init_unix_server<P: core::convert::AsRef<std::path::Path>>(socket_file: P, kind: rustix::net::types::SocketType) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>
 pub fn clipboard_history_core::link_tmp_file<Fd: std::os::fd::owned::AsFd, DirFd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg>(tmp_file: Fd, dirfd: DirFd, path: P) -> rustix::io::errno::Result<()>
 pub fn clipboard_history_core::open_buckets<F: core::ops::function::FnMut(&str) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>>(open: F) -> clipboard_history_core::Result<([std::os::fd::owned::OwnedFd; 11], [u64; 11])>
+pub fn clipboard_history_core::read_at_to_end(file: &std::fs::File, buf: &mut [u8], offset: u64) -> std::io::error::Result<usize>
 pub fn clipboard_history_core::read_lock_file_pid<Fd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(dir: Fd, lock_file: P) -> clipboard_history_core::Result<core::option::Option<rustix::pid::Pid>>
 pub fn clipboard_history_core::size_to_bucket(bytes: u16) -> u8
 pub type clipboard_history_core::Result<T> = core::result::Result<T, clipboard_history_core::Error>

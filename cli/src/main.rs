@@ -50,7 +50,7 @@ use ringboard_sdk::{
             AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
             RemoveResponse, Response, RingKind, SwapResponse, decompose_id,
         },
-        read_lock_file_pid,
+        read_at_to_end, read_lock_file_pid,
         ring::Mmap,
         size_to_bucket,
     },
@@ -593,25 +593,11 @@ fn search(
                 let entry = unsafe { database.get(entry_id)? };
                 let file = entry.to_file_raw(&reader)?.unwrap();
 
-                let remaining = {
-                    let mut buf = buf.as_mut_slice();
-                    let mut offset = u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap();
-                    loop {
-                        if buf.is_empty() {
-                            break Ok(buf.len());
-                        }
-                        match file.read_at(buf, offset) {
-                            Ok(0) => break Ok(buf.len()),
-                            Ok(n) => {
-                                let tmp = buf;
-                                buf = &mut tmp[n..];
-                                offset += n as u64;
-                            }
-                            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-                            Err(e) => break Err(e),
-                        }
-                    }
-                }
+                let remaining = read_at_to_end(
+                    &file,
+                    buf.as_mut_slice(),
+                    u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap(),
+                )
                 .map_io_err(|| format!("failed to read from direct entry {entry_id}."))?;
 
                 print_entry(

@@ -31,9 +31,10 @@ use ringboard_core::{
 };
 use rustix::{
     fs::{
-        AtFlags, CWD, Mode, OFlags, RenameFlags, XattrFlags, fsetxattr, ftruncate, mkdir, openat,
-        renameat, renameat_with, unlinkat,
+        AtFlags, CWD, Mode, OFlags, RenameFlags, XattrFlags, fsetxattr, ftruncate, getxattr, mkdir,
+        openat, renameat, renameat_with, unlinkat,
     },
+    io::Errno,
     path::Arg,
 };
 
@@ -136,6 +137,7 @@ pub struct Allocator {
 struct AllocatorData {
     buckets: Buckets,
     direct_dir: OwnedFd,
+    metadata_dir: Option<OwnedFd>,
     scratchpad: File,
     tmp_file_unsupported: bool,
 }
@@ -292,6 +294,14 @@ impl Allocator {
         create_dir(c"direct")?;
         create_dir(c"buckets")?;
 
+        let xattr_unsupported = matches!(
+            getxattr(c"direct", c"user.mime_type", &mut []),
+            Err(Errno::NOTSUP)
+        );
+        if xattr_unsupported {
+            create_dir(c"metadata")?;
+        }
+
         let (buckets, slot_counts) = {
             let mut path = ArrayString::<{ "buckets/(1024, 2048]".len() + 1 }>::new_const();
             path.push_str("buckets/");
@@ -317,13 +327,16 @@ impl Allocator {
             })
         };
 
-        let direct_dir = openat(
-            CWD,
-            c"direct",
-            OFlags::DIRECTORY | OFlags::PATH,
-            Mode::empty(),
-        )
-        .map_io_err(|| "Failed to open direct directory.")?;
+        let open_dir = |name| {
+            openat(CWD, name, OFlags::DIRECTORY | OFlags::PATH, Mode::empty())
+                .map_io_err(|| format!("Failed to open directory: {name:?}"))
+        };
+        let direct_dir = open_dir(c"direct")?;
+        let metadata_dir = if xattr_unsupported {
+            Some(open_dir(c"metadata")?)
+        } else {
+            None
+        };
 
         let rings = Rings([favorites_ring, main_ring]);
         let free_lists = FreeLists::load(&rings)?;
@@ -339,6 +352,7 @@ impl Allocator {
                     free_lists,
                 },
                 direct_dir,
+                metadata_dir,
                 scratchpad,
                 tmp_file_unsupported,
             },
@@ -432,7 +446,12 @@ impl Allocator {
         }
         writer.write(Entry::Uninitialized, from_id)?;
 
-        let to_id = self.add_internal(to, |to_id, AllocatorData { ref direct_dir, .. }| {
+        let run = |to_id,
+                   AllocatorData {
+                       ref direct_dir,
+                       ref metadata_dir,
+                       ..
+                   }: &mut AllocatorData| {
             debug!(
                 "Moving entry {from_entry:?} from {from:?} ring at position {from_id} to {to:?} \
                  ring at position {to_id}."
@@ -444,21 +463,50 @@ impl Allocator {
                     // Nothing to do, buckets are shared between rings.
                 }
                 Entry::File => {
-                    let mut from_buf = [MaybeUninit::uninit(); 14];
-                    let from_buf = direct_file_name(&mut from_buf, from, from_id);
-                    let mut to_buf = [MaybeUninit::uninit(); 14];
-                    let to_buf = direct_file_name(&mut to_buf, to, to_id);
+                    let mut from_file_name = [MaybeUninit::uninit(); 14];
+                    let from_file_name = direct_file_name(&mut from_file_name, from, from_id);
+                    let mut to_file_name = [MaybeUninit::uninit(); 14];
+                    let to_file_name = direct_file_name(&mut to_file_name, to, to_id);
 
-                    renameat(direct_dir, &*from_buf, direct_dir, &*to_buf).map_io_err(|| {
-                        format!(
-                            "Failed to rename direct allocation file from {from_buf:?} to \
-                             {to_buf:?}."
-                        )
-                    })?;
+                    renameat(direct_dir, from_file_name, direct_dir, to_file_name).map_io_err(
+                        || {
+                            format!(
+                                "Failed to rename direct allocation file from {from_file_name:?} \
+                                 to {to_file_name:?}."
+                            )
+                        },
+                    )?;
+                    if let Some(metadata_dir) = metadata_dir {
+                        renameat(metadata_dir, from_file_name, metadata_dir, to_file_name)
+                            .map_io_err(|| {
+                                format!(
+                                    "Failed to rename metadata file from {from_file_name:?} to \
+                                     {to_file_name:?}."
+                                )
+                            })
+                            .map_err(CliError::from)
+                            .map_err(|e| {
+                                if let Err(e2) =
+                                    renameat(direct_dir, to_file_name, direct_dir, from_file_name)
+                                        .map_io_err(|| {
+                                            format!(
+                                                "Failed to undo renaming direct allocation file \
+                                                 from {to_file_name:?} to {from_file_name:?}."
+                                            )
+                                        })
+                                        .map_err(CliError::from)
+                                {
+                                    CliError::Multiple(vec![e, e2])
+                                } else {
+                                    e
+                                }
+                            })?;
+                    }
                 }
             }
             Ok(from_entry)
-        })?;
+        };
+        let to_id = self.add_internal(to, run)?;
         Ok(MoveToFrontResponse::Success {
             id: composite_id(to, to_id),
         })
@@ -505,10 +553,11 @@ impl Allocator {
                 let from_idx = usize::from(entry1 != Entry::File);
                 let to_idx = usize::from(entry1 == Entry::File);
 
-                let mut from_buf = [MaybeUninit::uninit(); 14];
-                let from_buf = direct_file_name(&mut from_buf, rings[from_idx], ids[from_idx]);
-                let mut to_buf = [MaybeUninit::uninit(); 14];
-                let to_buf = direct_file_name(&mut to_buf, rings[to_idx], ids[to_idx]);
+                let mut from_file_name = [MaybeUninit::uninit(); 14];
+                let from_file_name =
+                    direct_file_name(&mut from_file_name, rings[from_idx], ids[from_idx]);
+                let mut to_file_name = [MaybeUninit::uninit(); 14];
+                let to_file_name = direct_file_name(&mut to_file_name, rings[to_idx], ids[to_idx]);
 
                 let direct_dir = &self.data.direct_dir;
                 let flags = if entry1 == entry2 {
@@ -516,14 +565,50 @@ impl Allocator {
                 } else {
                     RenameFlags::empty()
                 };
-                renameat_with(direct_dir, &*from_buf, direct_dir, &*to_buf, flags).map_io_err(
-                    || {
+                renameat_with(direct_dir, from_file_name, direct_dir, to_file_name, flags)
+                    .map_io_err(|| {
                         format!(
-                            "Failed to rename direct allocation file from {from_buf:?} to \
-                             {to_buf:?}."
+                            "Failed to swap direct allocation files between {from_file_name:?} \
+                             and {to_file_name:?}."
                         )
-                    },
-                )?;
+                    })?;
+                if let Some(metadata_dir) = &self.data.metadata_dir {
+                    renameat_with(
+                        metadata_dir,
+                        from_file_name,
+                        metadata_dir,
+                        to_file_name,
+                        flags,
+                    )
+                    .map_io_err(|| {
+                        format!(
+                            "Failed to swap metadata files between {from_file_name:?} and \
+                             {to_file_name:?}."
+                        )
+                    })
+                    .map_err(CliError::from)
+                    .map_err(|e| {
+                        if let Err(e2) = renameat_with(
+                            direct_dir,
+                            to_file_name,
+                            direct_dir,
+                            from_file_name,
+                            flags,
+                        )
+                        .map_io_err(|| {
+                            format!(
+                                "Failed to undo swapping direct allocation files between \
+                                 {to_file_name:?} and {from_file_name:?}."
+                            )
+                        })
+                        .map_err(CliError::from)
+                        {
+                            CliError::Multiple(vec![e, e2])
+                        } else {
+                            e
+                        }
+                    })?;
+                }
             }
             (Entry::Bucketed(_), Entry::Bucketed(_) | Entry::Uninitialized)
             | (Entry::Uninitialized, Entry::Bucketed(_)) => {
@@ -901,8 +986,25 @@ impl AllocatorData {
             &mut self.scratchpad,
             create_scratchpad(&mut self.tmp_file_unsupported)?,
         );
+        let mut file_name = [MaybeUninit::uninit(); 14];
+        let file_name = direct_file_name(&mut file_name, to, id);
 
-        if !mime_type.is_empty() {
+        if let Some(metadata_dir) = &self.metadata_dir {
+            let mut metadata = File::from(
+                openat(
+                    metadata_dir,
+                    file_name,
+                    OFlags::CREATE | OFlags::WRONLY,
+                    Mode::RUSR,
+                )
+                .map_io_err(|| format!("Failed to create direct metadata file: {file_name:?}"))?,
+            );
+            if !mime_type.is_empty() {
+                metadata.write_all(mime_type.as_bytes()).map_io_err(|| {
+                    format!("Failed to write to direct metadata file: {file_name:?}")
+                })?;
+            }
+        } else if !mime_type.is_empty() {
             fsetxattr(
                 &data,
                 c"user.mime_type",
@@ -912,10 +1014,25 @@ impl AllocatorData {
             .map_io_err(|| "Failed to create mime type attribute.")?;
         }
 
-        let mut buf = [MaybeUninit::uninit(); 14];
-        let buf = direct_file_name(&mut buf, to, id);
-        link_tmp_file(data, &self.direct_dir, &*buf)
-            .map_io_err(|| format!("Failed to materialize direct allocation: {buf:?}"))?;
+        link_tmp_file(data, &self.direct_dir, file_name)
+            .map_io_err(|| format!("Failed to materialize direct allocation: {file_name:?}"))
+            .map_err(CliError::from)
+            .map_err(|e| {
+                if let Some(metadata_dir) = &self.metadata_dir
+                    && let Err(e2) = unlinkat(metadata_dir, file_name, AtFlags::empty())
+                        .map_io_err(|| {
+                            format!(
+                                "Failed to remove metadata file after materialization failure: \
+                                 {file_name:?}"
+                            )
+                        })
+                        .map_err(CliError::from)
+                {
+                    CliError::Multiple(vec![e, e2])
+                } else {
+                    e
+                }
+            })?;
 
         Ok(Entry::File)
     }
@@ -936,10 +1053,17 @@ impl AllocatorData {
 
     fn free_direct(&self, to: RingKind, id: u32) -> Result<(), CliError> {
         debug!("Freeing direct allocation.");
-        let mut buf = [MaybeUninit::uninit(); 14];
-        let buf = direct_file_name(&mut buf, to, id);
-        unlinkat(&self.direct_dir, &*buf, AtFlags::empty())
-            .map_io_err(|| format!("Failed to remove direct allocation file: {buf:?}"))?;
+
+        let mut file_name = [MaybeUninit::uninit(); 14];
+        let file_name = direct_file_name(&mut file_name, to, id);
+
+        unlinkat(&self.direct_dir, file_name, AtFlags::empty())
+            .map_io_err(|| format!("Failed to remove direct allocation file: {file_name:?}"))?;
+        if let Some(metadata_dir) = &self.metadata_dir {
+            unlinkat(metadata_dir, file_name, AtFlags::empty())
+                .map_io_err(|| format!("Failed to remove metadata file: {file_name:?}"))?;
+        }
+
         Ok(())
     }
 }
