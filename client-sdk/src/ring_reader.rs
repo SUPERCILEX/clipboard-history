@@ -277,9 +277,7 @@ enum LoadedEntryFd {
 pub fn xattr_mime_type<Fd: AsFd>(fd: Fd) -> Result<MimeType, ringboard_core::Error> {
     let mut mime_type = [0u8; MimeType::new_const().capacity()];
     let len = match fgetxattr(fd, c"user.mime_type", &mut mime_type) {
-        Err(Errno::NODATA) => {
-            return Ok(MimeType::new());
-        }
+        Err(Errno::NODATA) => return Ok(MimeType::new_const()),
         r => r.map_io_err(|| "Failed to read extended attributes.")?,
     };
     let mime_type = str::from_utf8(&mime_type[..len]).map_err(|e| ringboard_core::Error::Io {
@@ -297,7 +295,7 @@ impl<T> LoadedEntry<T> {
 
     pub fn mime_type(&self) -> Result<MimeType, ringboard_core::Error> {
         let Some(fd) = self.backing_file() else {
-            return Ok(MimeType::new());
+            return Ok(MimeType::new_const());
         };
 
         xattr_mime_type(fd)
@@ -380,7 +378,7 @@ impl Entry {
 
     pub fn mime_type(&self, reader: &mut EntryReader) -> Result<MimeType, ringboard_core::Error> {
         match self.kind() {
-            Kind::Bucket(_) => Ok(MimeType::new()),
+            Kind::Bucket(_) => Ok(MimeType::new_const()),
             Kind::File => self.to_file(reader)?.mime_type(),
         }
     }

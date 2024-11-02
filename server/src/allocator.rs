@@ -823,7 +823,7 @@ impl AllocatorData {
             if size > 0 && size < 4096 {
                 self.alloc_bucket(u16::try_from(size).unwrap())
             } else {
-                self.alloc_direct(size, &MimeType::new(), to, id)
+                self.alloc_direct(size, &MimeType::new_const(), to, id)
             }
         } else {
             self.alloc_direct(size, mime_type, to, id)

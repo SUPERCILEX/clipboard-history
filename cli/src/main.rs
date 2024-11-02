@@ -926,7 +926,7 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
                         &server,
                         data,
                         RingKind::Main,
-                        MimeType::new(),
+                        MimeType::new_const(),
                         Some(&mut translation),
                         &mut pending_adds,
                     )?;
@@ -1593,7 +1593,7 @@ fn generate(
                 &server,
                 data,
                 rng.gen::<GenerateRingKind>().0,
-                MimeType::new(),
+                MimeType::new_const(),
                 None,
                 &mut pending_adds,
             )?;
@@ -1921,7 +1921,7 @@ fn fuzz(
                             buf.clear();
                             mime
                         } else {
-                            MimeType::new()
+                            MimeType::new_const()
                         };
 
                         #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
