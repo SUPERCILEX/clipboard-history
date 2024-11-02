@@ -474,7 +474,11 @@ fn main_ui(ui: &mut Ui, state_: &mut State, requests: &Sender<Command>) {
     let mut try_scroll = false;
 
     if ui.input_mut(|input| input.consume_key(Modifiers::CTRL, Key::R)) {
-        *state_ = State::default();
+        {
+            let was_focused = state.was_focused;
+            *state_ = State::default();
+            state_.ui.was_focused = was_focused;
+        }
         ui.memory_mut(egui::Memory::close_popup);
         refresh(&mut state_.ui);
         return;
