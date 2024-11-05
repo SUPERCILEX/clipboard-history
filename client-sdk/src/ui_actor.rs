@@ -250,26 +250,31 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
     reader_: &mut Option<EntryReader>,
     cache: &mut SearchCache,
 ) -> Result<Option<Message>, CommandError> {
+    let shitty_refresh = |database: &mut DatabaseReader| {
+        let run = |ring: &mut Ring| {
+            let head = ring.write_head();
+            #[allow(clippy::comparison_chain)]
+            // This will trigger every time once the ring has reached capacity and doesn't
+            // work if the ring fully wrapped around while we weren't looking.
+            if head < ring.len() {
+                unsafe {
+                    ring.set_len(ring.capacity());
+                }
+            } else if head > ring.len() {
+                unsafe {
+                    ring.set_len(head);
+                }
+            }
+        };
+
+        run(database.favorites_ring_mut());
+        run(database.main_ring_mut());
+    };
+
     let reader = reader_.as_mut().unwrap();
     match command {
         Command::LoadFirstPage => {
-            // This will trigger every time once the ring has reached capacity and doesn't
-            // work if the ring fully wrapped around while we weren't looking.
-            let shitty_refresh = |ring: &mut Ring| {
-                let head = ring.write_head();
-                #[allow(clippy::comparison_chain)]
-                if head < ring.len() {
-                    unsafe {
-                        ring.set_len(ring.capacity());
-                    }
-                } else if head > ring.len() {
-                    unsafe {
-                        ring.set_len(head);
-                    }
-                }
-            };
-            shitty_refresh(database.favorites_ring_mut());
-            shitty_refresh(database.main_ring_mut());
+            shitty_refresh(database);
 
             let mut entries = Vec::with_capacity(100);
             for entry in database
@@ -332,6 +337,8 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
             RemoveResponse { error: Some(e) } => Err(e.into()),
         },
         Command::Search { query, kind } => {
+            shitty_refresh(database);
+
             let query = match kind {
                 SearchKind::Plain => {
                     if query
