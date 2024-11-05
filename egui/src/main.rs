@@ -16,10 +16,10 @@ use std::{
 use eframe::{
     egui,
     egui::{
-        CentralPanel, Event, FontId, FontTweak, Frame, Image, InputState, Key, Label, Margin,
-        Modifiers, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke,
-        TextEdit, TextFormat, ThemePreference, TopBottomPanel, Ui, Vec2, ViewportBuilder,
-        ViewportCommand, Widget,
+        CentralPanel, Event, FontId, FontTweak, Frame, Image, Key, Label, Margin, Modifiers,
+        PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke, TextEdit,
+        TextFormat, ThemePreference, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand,
+        Widget,
         text::{LayoutJob, LayoutSection},
     },
     epaint::FontFamily,
@@ -305,10 +305,21 @@ impl eframe::App for App {
             handle_message(message, &mut self.state, ctx);
         }
 
+        let up_pressed = ctx
+            .input_mut(|i| i.key_pressed(Key::ArrowUp) || i.consume_key(Modifiers::CTRL, Key::K));
+        let down_pressed = ctx
+            .input_mut(|i| i.key_pressed(Key::ArrowDown) || i.consume_key(Modifiers::CTRL, Key::J));
+
         TopBottomPanel::top("search_bar")
             .frame(Frame::side_top_panel(&ctx.style()).inner_margin(0.))
             .show(ctx, |ui| {
-                search_ui(ui, &mut self.state, &self.requests);
+                search_ui(
+                    ui,
+                    &mut self.state,
+                    &self.requests,
+                    up_pressed,
+                    down_pressed,
+                );
             });
         CentralPanel::default()
             .frame(Frame::central_panel(&ctx.style()).inner_margin(Margin {
@@ -316,7 +327,13 @@ impl eframe::App for App {
                 ..Margin::ZERO
             }))
             .show(ctx, |ui| {
-                main_ui(ui, &mut self.state, &self.requests);
+                main_ui(
+                    ui,
+                    &mut self.state,
+                    &self.requests,
+                    up_pressed,
+                    down_pressed,
+                );
             });
 
         #[cfg(not(feature = "wayland"))]
@@ -349,6 +366,8 @@ fn search_ui(
             },
     }: &mut State,
     requests: &Sender<Command>,
+    up_pressed: bool,
+    down_pressed: bool,
 ) {
     macro_rules! search {
         () => {
@@ -409,7 +428,7 @@ fn search_ui(
             reset(query);
         }
     }
-    if ui.input(|i| i.key_pressed(Key::ArrowUp) || i.key_pressed(Key::ArrowDown)) {
+    if up_pressed || down_pressed {
         response.surrender_focus();
     }
     if ui.input(|input| input.key_pressed(Key::Slash)) {
@@ -436,7 +455,13 @@ fn show_error(ui: &mut Ui, e: &dyn Error) {
     ui.label(format!("Details: {e:#?}"));
 }
 
-fn main_ui(ui: &mut Ui, state_: &mut State, requests: &Sender<Command>) {
+fn main_ui(
+    ui: &mut Ui,
+    state_: &mut State,
+    requests: &Sender<Command>,
+    up_pressed: bool,
+    down_pressed: bool,
+) {
     let State { entries, ui: state } = state_;
     let refresh = |state: &mut UiState| {
         let _ = requests.send(Command::LoadFirstPage);
@@ -485,14 +510,13 @@ fn main_ui(ui: &mut Ui, state_: &mut State, requests: &Sender<Command>) {
     }
     let no_popups_open = ui.memory(|mem| !mem.any_popup_open());
     if !active_entries!(entries, state).is_empty() && no_popups_open {
-        ui.input(|input| {
-            handle_arrow_keys(
-                active_entries!(entries, state),
-                active_highlighted_id!(state),
-                &mut try_scroll,
-                input,
-            );
-        });
+        handle_arrow_keys(
+            active_entries!(entries, state),
+            active_highlighted_id!(state),
+            &mut try_scroll,
+            up_pressed,
+            down_pressed,
+        );
     }
     if ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter))
         && let Some(id) = *active_highlighted_id!(state)
@@ -816,9 +840,10 @@ fn handle_arrow_keys(
     entries: &[UiEntry],
     highlighted_id: &mut Option<u64>,
     try_scroll: &mut bool,
-    input: &InputState,
+    up_pressed: bool,
+    down_pressed: bool,
 ) {
-    if input.key_pressed(Key::ArrowUp) {
+    if up_pressed {
         *try_scroll = true;
         *highlighted_id = if let &mut Some(id) = highlighted_id {
             let idx = entries.iter().position(|e| e.entry.id() == id);
@@ -833,7 +858,7 @@ fn handle_arrow_keys(
             entries.last().map(|e| e.entry.id())
         }
     }
-    if input.key_pressed(Key::ArrowDown) {
+    if down_pressed {
         *try_scroll = true;
         *highlighted_id = if let &mut Some(id) = highlighted_id {
             let idx = entries.iter().position(|e| e.entry.id() == id);
