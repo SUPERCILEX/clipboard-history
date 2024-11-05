@@ -1,4 +1,5 @@
 use std::{
+    cmp::min,
     fmt::{Debug, Formatter},
     fs::File,
     io,
@@ -210,7 +211,9 @@ impl<'a> RingReader<'a> {
             done,
         } = &mut self.iter;
 
-        *old_write_head = write_head;
+        // Since the on-disk ring can be longer than our in-memory known length,
+        // truncate the write head to maintain our invariants: write_head <= len.
+        *old_write_head = min(write_head, self.ring.len());
         *back = self.ring.prev_entry(start);
         *front = self.ring.next_entry(*back);
         *done = false;

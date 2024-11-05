@@ -364,7 +364,7 @@ impl Ring {
             return current;
         }
 
-        if current == 0 {
+        if current == 0 || current > self.len() {
             self.len() - 1
         } else {
             current - 1
