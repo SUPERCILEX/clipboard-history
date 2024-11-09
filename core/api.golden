@@ -694,6 +694,29 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::BucketAndIndex wh
 pub unsafe fn clipboard_history_core::BucketAndIndex::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::BucketAndIndex
 pub fn clipboard_history_core::BucketAndIndex::from(t: T) -> T
+pub struct clipboard_history_core::LeaveBe
+impl core::marker::Freeze for clipboard_history_core::LeaveBe
+impl core::marker::Send for clipboard_history_core::LeaveBe
+impl core::marker::Sync for clipboard_history_core::LeaveBe
+impl core::marker::Unpin for clipboard_history_core::LeaveBe
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::LeaveBe
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::LeaveBe
+impl<T, U> core::convert::Into<U> for clipboard_history_core::LeaveBe where U: core::convert::From<T>
+pub fn clipboard_history_core::LeaveBe::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::LeaveBe where U: core::convert::Into<T>
+pub type clipboard_history_core::LeaveBe::Error = core::convert::Infallible
+pub fn clipboard_history_core::LeaveBe::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::LeaveBe where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::LeaveBe::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::LeaveBe::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_core::LeaveBe where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::LeaveBe::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::LeaveBe where T: core::marker::Sized
+pub fn clipboard_history_core::LeaveBe::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::LeaveBe where T: core::marker::Sized
+pub fn clipboard_history_core::LeaveBe::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::LeaveBe
+pub fn clipboard_history_core::LeaveBe::from(t: T) -> T
 pub struct clipboard_history_core::PathView<'a>(_)
 impl<'a> clipboard_history_core::PathView<'a>
 pub fn clipboard_history_core::PathView<'a>::new(path: &'a mut std::path::PathBuf, child: impl core::convert::AsRef<std::path::Path>) -> Self
@@ -780,6 +803,52 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::RingAndIndex wher
 pub unsafe fn clipboard_history_core::RingAndIndex::clone_to_uninit(&self, dst: *mut T)
 impl<T> core::convert::From<T> for clipboard_history_core::RingAndIndex
 pub fn clipboard_history_core::RingAndIndex::from(t: T) -> T
+pub struct clipboard_history_core::SendKillAndTakeover
+impl core::marker::Freeze for clipboard_history_core::SendKillAndTakeover
+impl core::marker::Send for clipboard_history_core::SendKillAndTakeover
+impl core::marker::Sync for clipboard_history_core::SendKillAndTakeover
+impl core::marker::Unpin for clipboard_history_core::SendKillAndTakeover
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::SendKillAndTakeover
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::SendKillAndTakeover
+impl<T, U> core::convert::Into<U> for clipboard_history_core::SendKillAndTakeover where U: core::convert::From<T>
+pub fn clipboard_history_core::SendKillAndTakeover::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::SendKillAndTakeover where U: core::convert::Into<T>
+pub type clipboard_history_core::SendKillAndTakeover::Error = core::convert::Infallible
+pub fn clipboard_history_core::SendKillAndTakeover::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::SendKillAndTakeover where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::SendKillAndTakeover::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::SendKillAndTakeover::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_core::SendKillAndTakeover where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::SendKillAndTakeover::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::SendKillAndTakeover where T: core::marker::Sized
+pub fn clipboard_history_core::SendKillAndTakeover::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::SendKillAndTakeover where T: core::marker::Sized
+pub fn clipboard_history_core::SendKillAndTakeover::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::SendKillAndTakeover
+pub fn clipboard_history_core::SendKillAndTakeover::from(t: T) -> T
+pub struct clipboard_history_core::SendQuitAndWait
+impl core::marker::Freeze for clipboard_history_core::SendQuitAndWait
+impl core::marker::Send for clipboard_history_core::SendQuitAndWait
+impl core::marker::Sync for clipboard_history_core::SendQuitAndWait
+impl core::marker::Unpin for clipboard_history_core::SendQuitAndWait
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::SendQuitAndWait
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::SendQuitAndWait
+impl<T, U> core::convert::Into<U> for clipboard_history_core::SendQuitAndWait where U: core::convert::From<T>
+pub fn clipboard_history_core::SendQuitAndWait::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::SendQuitAndWait where U: core::convert::Into<T>
+pub type clipboard_history_core::SendQuitAndWait::Error = core::convert::Infallible
+pub fn clipboard_history_core::SendQuitAndWait::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::SendQuitAndWait where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::SendQuitAndWait::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::SendQuitAndWait::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_core::SendQuitAndWait where T: 'static + core::marker::Sized
+pub fn clipboard_history_core::SendQuitAndWait::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::SendQuitAndWait where T: core::marker::Sized
+pub fn clipboard_history_core::SendQuitAndWait::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::SendQuitAndWait where T: core::marker::Sized
+pub fn clipboard_history_core::SendQuitAndWait::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::SendQuitAndWait
+pub fn clipboard_history_core::SendQuitAndWait::from(t: T) -> T
 pub struct clipboard_history_core::StringView<'a>(_, _)
 impl<'a> clipboard_history_core::StringView<'a>
 pub fn clipboard_history_core::StringView<'a>::new(s: &'a mut alloc::string::String) -> Self
@@ -833,6 +902,7 @@ impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_
 pub fn core::result::Result<T, std::io::error::Error>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
 impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_core::Error>> for rustix::io::errno::Result<T>
 pub fn rustix::io::errno::Result<T>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
+pub fn clipboard_history_core::acquire_lock_file<Fd: std::os::fd::owned::AsFd + core::marker::Copy, P1: rustix::path::arg::Arg, P2: rustix::path::arg::Arg + core::marker::Copy, P3: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug, A: LockAlreadyOwnedAction>(tmp_file_unsupported: &mut bool, dirfd: Fd, prepare_path: P1, prepare_fallback_path: P2, path: P3, A) -> clipboard_history_core::Result<<A as >::Output>
 pub const fn clipboard_history_core::bucket_to_length(bucket: usize) -> u16
 pub fn clipboard_history_core::copy_file_range_all<InFd: std::os::fd::owned::AsFd, OutFd: std::os::fd::owned::AsFd>(fd_in: InFd, off_in: core::option::Option<&mut u64>, fd_out: OutFd, off_out: core::option::Option<&mut u64>, len: usize) -> rustix::io::errno::Result<usize>
 pub fn clipboard_history_core::create_tmp_file<Fd: std::os::fd::owned::AsFd, P1: rustix::path::arg::Arg, P2: rustix::path::arg::Arg + core::marker::Copy>(tmp_file_unsupported: &mut bool, dirfd: Fd, path: P1, fallback_path: P2, oflags: rustix::backend::fs::types::OFlags, create_mode: rustix::backend::fs::types::Mode) -> rustix::io::errno::Result<std::os::fd::owned::OwnedFd>
@@ -841,6 +911,5 @@ pub fn clipboard_history_core::init_unix_server<P: core::convert::AsRef<std::pat
 pub fn clipboard_history_core::link_tmp_file<Fd: std::os::fd::owned::AsFd, DirFd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg>(tmp_file: Fd, dirfd: DirFd, path: P) -> rustix::io::errno::Result<()>
 pub fn clipboard_history_core::open_buckets<F: core::ops::function::FnMut(&str) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>>(open: F) -> clipboard_history_core::Result<([std::os::fd::owned::OwnedFd; 11], [u64; 11])>
 pub fn clipboard_history_core::read_at_to_end(file: &std::fs::File, buf: &mut [u8], offset: u64) -> std::io::error::Result<usize>
-pub fn clipboard_history_core::read_lock_file_pid<Fd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg + core::marker::Copy + core::fmt::Debug>(dir: Fd, lock_file: P) -> clipboard_history_core::Result<core::option::Option<rustix::pid::Pid>>
 pub fn clipboard_history_core::size_to_bucket(bytes: u16) -> u8
 pub type clipboard_history_core::Result<T> = core::result::Result<T, clipboard_history_core::Error>

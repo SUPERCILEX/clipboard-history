@@ -1,24 +1,18 @@
 use std::{
     ffi::CString,
     fmt::Debug,
-    fs::File,
-    io::{ErrorKind::AlreadyExists, Write},
     mem::MaybeUninit,
     os::{fd::AsFd, unix::ffi::OsStringExt},
     path::PathBuf,
-    process,
     sync::atomic::{AtomicBool, Ordering},
 };
 
 use ringboard_sdk::core::{
-    Error as CoreError, IoErr, create_tmp_file, dirs::push_sockets_prefix, link_tmp_file,
-    read_lock_file_pid,
+    Error as CoreError, IoErr, SendKillAndTakeover, acquire_lock_file, dirs::push_sockets_prefix,
 };
 use rustix::{
-    fs::{CWD, Mode, OFlags, inotify, inotify::ReadFlags, unlink},
-    io::Errno,
+    fs::{CWD, inotify, inotify::ReadFlags},
     path::Arg,
-    process::{Signal, getpid, kill_process},
 };
 
 pub fn sleep_file_name() -> CString {
@@ -56,51 +50,15 @@ fn kill_old_instances_if_any(
     tmp_file_unsupported: &mut bool,
     path: impl Arg + Copy + Debug,
 ) -> Result<(), CoreError> {
-    let mut lock_file = File::from(
-        create_tmp_file(
-            tmp_file_unsupported,
-            CWD,
-            c"/tmp",
-            c"/tmp/.ringboard-egui-lock-scratchpad",
-            OFlags::WRONLY,
-            Mode::RUSR,
-        )
-        .map_io_err(|| "Failed to create egui sleep temp file.")?,
-    );
-
-    writeln!(lock_file, "{}", process::id())
-        .map_io_err(|| "Failed to write to egui sleep file.")?;
-
-    loop {
-        match link_tmp_file(&lock_file, CWD, path) {
-            Err(e) if e.kind() == AlreadyExists => 'link: {
-                let pid = read_lock_file_pid(CWD, path)?;
-                let Some(pid) = pid else {
-                    break 'link;
-                };
-
-                if pid == getpid() {
-                    return Ok(());
-                }
-
-                match kill_process(pid, Signal::Term) {
-                    Err(Errno::SRCH) => {
-                        // Already dead
-                    }
-                    r => {
-                        r.map_io_err(|| format!("Failed to kill other egui instance: {pid:?}."))?;
-                    }
-                }
-            }
-            r => {
-                r.map_io_err(|| format!("Failed to acquire egui sleep lock: {path:?}",))?;
-                return Ok(());
-            }
-        };
-
-        unlink(path)
-            .map_io_err(|| format!("Failed to remove previous egui sleep file: {path:?}"))?;
-    }
+    acquire_lock_file(
+        tmp_file_unsupported,
+        CWD,
+        c"/tmp",
+        c"/tmp/.ringboard-egui-lock-scratchpad",
+        path,
+        SendKillAndTakeover,
+    )?;
+    Ok(())
 }
 
 fn wait_for_sleep_cancel(

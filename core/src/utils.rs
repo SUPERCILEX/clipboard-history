@@ -17,13 +17,18 @@ use std::{
 
 use arrayvec::{ArrayString, ArrayVec};
 use rustix::{
+    event::{PollFd, PollFlags, poll},
     fs::{
-        AtFlags, CWD, Mode, OFlags, StatxFlags, copy_file_range, linkat, openat, statx, unlinkat,
+        AtFlags, CWD, FlockOperation, Mode, OFlags, StatxFlags, copy_file_range, flock, linkat,
+        openat, statx, unlinkat,
     },
     io::Errno,
     net::{AddressFamily, SocketAddrUnix, SocketType, bind_unix, listen, socket},
     path::Arg,
-    process::Pid,
+    process::{
+        Pid, PidfdFlags, Signal, getpid, kill_process, pidfd_open, pidfd_send_signal,
+        test_kill_process,
+    },
 };
 
 use crate::{
@@ -46,15 +51,17 @@ pub const NUM_BUCKETS: usize = 11;
 // The max composite ID is 2^40 (8 bit ring ID and 32 bit entry ID)
 pub const DIRECT_FILE_NAME_LEN: usize = "1099511627776".len();
 
-pub fn read_lock_file_pid<Fd: AsFd, P: Arg + Copy + Debug>(
-    dir: Fd,
-    lock_file: P,
-) -> Result<Option<Pid>> {
-    let file = openat(dir, lock_file, OFlags::RDONLY, Mode::empty())
-        .map_io_err(|| format!("Failed to open lock file: {lock_file:?}"))?;
-    let mut file = File::from(file);
+enum LockFilePid {
+    Valid(Pid),
+    Deleted,
+    UserReset,
+}
 
-    let mut pid = [MaybeUninit::uninit(); 10]; // 2^32 is 10 chars
+// 2^32 is 10 chars
+const LOCK_FILE_BUF_SIZE: usize = 10;
+
+fn read_lock_file_pid(lock_file: impl Copy + Debug, mut file: &File) -> Result<LockFilePid> {
+    let mut pid = [MaybeUninit::uninit(); LOCK_FILE_BUF_SIZE];
     let mut pid = BorrowedBuf::from(pid.as_mut_slice());
     match file.read_buf_exact(pid.unfilled()) {
         Err(e) if e.kind() == UnexpectedEof => Ok(()),
@@ -63,18 +70,196 @@ pub fn read_lock_file_pid<Fd: AsFd, P: Arg + Copy + Debug>(
     .map_io_err(|| format!("Failed to read lock file: {lock_file:?}"))?;
     let pid = pid.filled();
 
+    if pid.iter().all(|&b| b == b'.') {
+        return Ok(LockFilePid::Deleted);
+    }
+
     let pid = pid
         .as_str()
         .map_io_err(|| format!("Lock file {lock_file:?} corrupted: {pid:?}"))?
         .trim();
     if pid.is_empty() {
-        Ok(None)
+        Ok(LockFilePid::UserReset)
     } else {
         let pid = i32::from_str(pid).map_err(|error| Error::InvalidPidError {
             error,
             context: format!("Lock file {lock_file:?} contains invalid PID: {pid:?}").into(),
         })?;
-        Ok(Pid::from_raw(pid))
+        Ok(Pid::from_raw(pid).map_or(LockFilePid::UserReset, LockFilePid::Valid))
+    }
+}
+
+mod lock_owned {
+    use rustix::process::Pid;
+
+    #[derive(Copy, Clone, Debug)]
+    pub enum LockAlreadyOwnedActionKind {
+        SendQuitAndWait,
+        SendKillAndTakeover,
+        LeaveBe,
+    }
+
+    pub trait LockAlreadyOwnedAction {
+        const KIND: LockAlreadyOwnedActionKind;
+
+        type Output;
+        const NOTHING: Self::Output;
+
+        fn something(output: Pid) -> Self::Output;
+    }
+
+    pub struct SendQuitAndWait;
+    impl LockAlreadyOwnedAction for SendQuitAndWait {
+        const KIND: LockAlreadyOwnedActionKind = LockAlreadyOwnedActionKind::SendQuitAndWait;
+        type Output = ();
+        const NOTHING: Self::Output = ();
+        fn something(_: Pid) -> Self::Output {
+            unreachable!()
+        }
+    }
+
+    pub struct SendKillAndTakeover;
+    impl LockAlreadyOwnedAction for SendKillAndTakeover {
+        const KIND: LockAlreadyOwnedActionKind = LockAlreadyOwnedActionKind::SendKillAndTakeover;
+        type Output = ();
+        const NOTHING: Self::Output = ();
+        fn something(_: Pid) -> Self::Output {
+            unreachable!()
+        }
+    }
+
+    pub struct LeaveBe;
+    impl LockAlreadyOwnedAction for LeaveBe {
+        const KIND: LockAlreadyOwnedActionKind = LockAlreadyOwnedActionKind::LeaveBe;
+        type Output = Option<Pid>;
+        const NOTHING: Self::Output = None;
+
+        fn something(output: Pid) -> Self::Output {
+            Some(output)
+        }
+    }
+}
+pub use lock_owned::{LeaveBe, SendKillAndTakeover, SendQuitAndWait};
+use lock_owned::{LockAlreadyOwnedAction, LockAlreadyOwnedActionKind};
+
+pub fn acquire_lock_file<
+    Fd: AsFd + Copy,
+    P1: Arg,
+    P2: Arg + Copy,
+    P3: Arg + Copy + Debug,
+    A: LockAlreadyOwnedAction,
+>(
+    tmp_file_unsupported: &mut bool,
+    dirfd: Fd,
+    prepare_path: P1,
+    prepare_fallback_path: P2,
+    path: P3,
+    _: A,
+) -> Result<A::Output> {
+    let mut lock_file = File::from(
+        create_tmp_file(
+            tmp_file_unsupported,
+            dirfd,
+            prepare_path,
+            prepare_fallback_path,
+            OFlags::WRONLY,
+            Mode::RUSR | Mode::WUSR,
+        )
+        .map_io_err(|| "Failed to prepare lock file.")?,
+    );
+
+    let me = getpid();
+    writeln!(lock_file, "{}", me.as_raw_nonzero())
+        .map_io_err(|| "Failed to write to prepared lock file.")?;
+
+    loop {
+        match link_tmp_file(&lock_file, dirfd, path) {
+            Err(Errno::EXIST) => {}
+            r => {
+                return r
+                    .map_io_err(|| format!("Failed to materialize lock file: {path:?}"))
+                    .map(|()| A::NOTHING);
+            }
+        };
+
+        let lock_file = 'retry: {
+            let lock_file = match openat(dirfd, path, OFlags::RDWR, Mode::empty()) {
+                Err(Errno::NOENT) => break 'retry None,
+                r => r.map_io_err(|| format!("Failed to open lock file: {path:?}"))?,
+            };
+            flock(&lock_file, FlockOperation::LockExclusive)
+                .map_io_err(|| format!("Failed to acquire lock on lock file: {path:?}"))?;
+            let lock_file = File::from(lock_file);
+
+            let pid = match read_lock_file_pid(path, &lock_file)? {
+                LockFilePid::Valid(pid) => pid,
+                LockFilePid::Deleted => break 'retry None,
+                LockFilePid::UserReset => break 'retry Some(lock_file),
+            };
+
+            if pid == me {
+                return Ok(A::NOTHING);
+            }
+
+            match A::KIND {
+                LockAlreadyOwnedActionKind::SendQuitAndWait => {
+                    let fd = match pidfd_open(pid, PidfdFlags::empty()) {
+                        Err(Errno::SRCH) => break 'retry Some(lock_file),
+                        r => r.map_io_err(|| format!("Failed to open pid file: {pid:?}"))?,
+                    };
+
+                    match pidfd_send_signal(&fd, Signal::Quit) {
+                        Err(Errno::SRCH) => break 'retry None,
+                        r => r.map_io_err(|| {
+                            format!("Failed to send quit to lock file {path:?} owner: {pid:?}")
+                        })?,
+                    };
+
+                    let mut fds = [PollFd::new(&fd, PollFlags::IN)];
+                    poll(&mut fds, -1).map_io_err(|| {
+                        format!("Failed to wait for lock file {path:?} owner to quit: {pid:?}")
+                    })?;
+                    if !fds[0].revents().contains(PollFlags::IN) {
+                        return Err(Error::Io {
+                            error: io::Error::new(ErrorKind::InvalidInput, "Bad poll response."),
+                            context: "Failed to receive PID poll response.".into(),
+                        });
+                    }
+                    None
+                }
+                LockAlreadyOwnedActionKind::SendKillAndTakeover => {
+                    match kill_process(pid, Signal::Term) {
+                        Err(Errno::SRCH) => {
+                            // Already dead
+                        }
+                        r => r.map_io_err(|| {
+                            format!("Failed to kill lock file {path:?} owner: {pid:?}")
+                        })?,
+                    }
+                    Some(lock_file)
+                }
+                LockAlreadyOwnedActionKind::LeaveBe => match test_kill_process(pid) {
+                    Err(Errno::SRCH) => Some(lock_file),
+                    r => {
+                        return r
+                            .map_io_err(|| {
+                                format!("Failed to check lock file {path:?} owner status: {pid:?}")
+                            })
+                            .map(|()| A::something(pid));
+                    }
+                },
+            }
+        };
+
+        if let Some(lock_file) = lock_file {
+            lock_file
+                .write_all_at(&[b'.'; LOCK_FILE_BUF_SIZE], 0)
+                .map_io_err(|| {
+                    format!("Failed to write deletion pattern to previous lock file: {path:?}")
+                })?;
+            unlinkat(dirfd, path, AtFlags::empty())
+                .map_io_err(|| format!("Failed to remove previous lock file: {path:?}"))?;
+        }
     }
 }
 

@@ -43,14 +43,14 @@ use ringboard_sdk::{
     },
     config::{X11Config, X11V1Config, x11_config_file},
     core::{
-        BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, bucket_to_length,
-        copy_file_range_all, create_tmp_file,
+        BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, SendQuitAndWait, acquire_lock_file,
+        bucket_to_length, copy_file_range_all, create_tmp_file,
         dirs::{data_dir, socket_file},
         protocol::{
             AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
             RemoveResponse, Response, RingKind, SwapResponse, decompose_id,
         },
-        read_at_to_end, read_lock_file_pid,
+        read_at_to_end,
         ring::Mmap,
         size_to_bucket,
     },
@@ -59,11 +59,8 @@ use ringboard_sdk::{
 };
 use rustc_hash::FxHasher;
 use rustix::{
-    event::{PollFd, PollFlags, poll},
     fs::{AtFlags, CWD, MemfdFlags, Mode, OFlags, StatxFlags, memfd_create, openat, statx},
-    io::Errno,
     net::{RecvFlags, SendFlags, SocketAddrUnix, SocketFlags},
-    process::{PidfdFlags, Signal, pidfd_open, pidfd_send_signal},
     stdio::stdin,
 };
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeSeq};
@@ -742,31 +739,15 @@ fn wipe() -> Result<(), CliError> {
     .map_io_err(|| format!("Failed to rename dir: {data_dir:?} -> {tmp_data_dir:?}"))?;
 
     tmp_data_dir.push("server.lock");
-    let running_server = read_lock_file_pid(CWD, &tmp_data_dir).ok().flatten();
+    acquire_lock_file(
+        &mut false,
+        CWD,
+        tmp_data_dir.parent().unwrap(),
+        &tmp_data_dir.with_file_name(".nuke.server.lock"),
+        &tmp_data_dir,
+        SendQuitAndWait,
+    )?;
     tmp_data_dir.pop();
-
-    'shutdown: {
-        if let Some(pid) = running_server {
-            let fd = match pidfd_open(pid, PidfdFlags::empty()) {
-                Err(Errno::SRCH) => {
-                    break 'shutdown;
-                }
-                r => r.map_io_err(|| format!("Failed to get FD for server: {pid:?}"))?,
-            };
-
-            pidfd_send_signal(&fd, Signal::Quit)
-                .map_io_err(|| format!("Failed to send shut down signal to server: {pid:?}"))?;
-
-            let mut fds = [PollFd::new(&fd, PollFlags::IN)];
-            poll(&mut fds, -1).map_io_err(|| format!("Failed to wait for server exit: {pid:?}"))?;
-            if !fds[0].revents().contains(PollFlags::IN) {
-                return Err(CliError::Core(CoreError::Io {
-                    error: io::Error::new(ErrorKind::InvalidInput, "Bad poll response."),
-                    context: "Failed to receive server exit response.".into(),
-                }));
-            }
-        }
-    }
 
     fuc_engine::remove_dir_all(tmp_data_dir)?;
     println!("Wiped.");
