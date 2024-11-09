@@ -177,8 +177,10 @@ pub unsafe fn clipboard_history_client_sdk::api::SwapRequest::deref_mut<'a>(ptr:
 pub unsafe fn clipboard_history_client_sdk::api::SwapRequest::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::api::SwapRequest::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::api::SwapRequest
+pub fn clipboard_history_client_sdk::api::connect_to_paste_server(addr: &rustix::backend::net::addr::SocketAddrUnix) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::connect_to_server(addr: &rustix::backend::net::addr::SocketAddrUnix) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::connect_to_server_with(addr: &rustix::backend::net::addr::SocketAddrUnix, flags: rustix::net::types::SocketFlags) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_client_sdk::api::send_paste_buffer(server: impl std::os::fd::owned::AsFd, entry: clipboard_history_client_sdk::Entry, reader: &mut clipboard_history_client_sdk::EntryReader) -> clipboard_history_core::Result<()>
 pub mod clipboard_history_client_sdk::config
 pub enum clipboard_history_client_sdk::config::X11Config
 pub clipboard_history_client_sdk::config::X11Config::V1(clipboard_history_client_sdk::config::X11V1Config)

@@ -23,7 +23,7 @@ use rustix::{
     },
 };
 
-use crate::ClientError;
+use crate::{ClientError, Entry, EntryReader};
 
 macro_rules! response {
     ($t:ty) => {
@@ -80,6 +80,43 @@ pub fn connect_to_server_with(
     }
 
     Ok(socket)
+}
+
+pub fn connect_to_paste_server(addr: &SocketAddrUnix) -> Result<OwnedFd, ClientError> {
+    let sock = socket_with(
+        AddressFamily::UNIX,
+        SocketType::DGRAM,
+        SocketFlags::empty(),
+        None,
+    )
+    .map_io_err(|| format!("Failed to create socket: {addr:?}"))?;
+    connect_unix(&sock, addr).map_io_err(|| format!("Failed to connect to server: {addr:?}"))?;
+    Ok(sock)
+}
+
+pub fn send_paste_buffer(
+    server: impl AsFd,
+    entry: Entry,
+    reader: &mut EntryReader,
+) -> ringboard_core::Result<()> {
+    let file = entry.to_file(reader)?;
+    let mime = file.mime_type()?;
+
+    let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
+    let mut ancillary = SendAncillaryBuffer::new(&mut space);
+    let fds = [file.as_fd()];
+    {
+        let success = ancillary.push(SendAncillaryMessage::ScmRights(&fds));
+        debug_assert!(success);
+    }
+    sendmsg(
+        server,
+        &[IoSlice::new(mime.as_bytes())],
+        &mut ancillary,
+        SendFlags::empty(),
+    )
+    .map_io_err(|| "Failed to send paste entry to paste server.")?;
+    Ok(())
 }
 
 #[repr(transparent)]

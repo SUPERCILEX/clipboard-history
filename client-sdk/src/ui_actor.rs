@@ -3,10 +3,11 @@ use std::{
     cmp::{Ordering, min},
     collections::{BinaryHeap, HashMap},
     hash::BuildHasherDefault,
-    io::{BufReader, IoSlice},
+    io::BufReader,
     iter::once,
     mem,
     os::fd::{AsFd, OwnedFd},
+    path::PathBuf,
     str,
     sync::Arc,
 };
@@ -15,15 +16,15 @@ use image::{DynamicImage, ImageError, ImageReader};
 use regex::bytes::Regex;
 use ringboard_core::dirs::paste_socket_file;
 use rustc_hash::FxHasher;
-use rustix::net::{
-    AddressFamily, SendAncillaryBuffer, SendAncillaryMessage, SendFlags, SocketAddrUnix,
-    SocketFlags, SocketType, sendmsg_unix, socket_with,
-};
+use rustix::net::SocketAddrUnix;
 use thiserror::Error;
 
 use crate::{
     ClientError, DatabaseReader, Entry, EntryReader, Kind,
-    api::{MoveToFrontRequest, RemoveRequest, connect_to_server},
+    api::{
+        MoveToFrontRequest, RemoveRequest, connect_to_paste_server, connect_to_server,
+        send_paste_buffer,
+    },
     core::{
         BucketAndIndex, Error as CoreError, IoErr, RingAndIndex,
         dirs::{data_dir, socket_file},
@@ -157,7 +158,11 @@ pub fn controller<E>(
     commands: impl IntoIterator<Item = Command>,
     mut send: impl FnMut(Message) -> Result<(), E>,
 ) {
-    fn maybe_init_server(cache: &mut Option<OwnedFd>) -> Result<impl AsFd + '_, ClientError> {
+    fn maybe_init_server(
+        socket_file: impl FnOnce() -> PathBuf,
+        connect_to_server: impl FnOnce(&SocketAddrUnix) -> Result<OwnedFd, ClientError>,
+        cache: &mut Option<OwnedFd>,
+    ) -> Result<impl AsFd + '_, ClientError> {
         if cache.is_some() {
             return Ok(cache.as_ref().unwrap());
         }
@@ -170,31 +175,6 @@ pub fn controller<E>(
         };
 
         Ok(cache.insert(server))
-    }
-
-    fn maybe_init_paste_server(
-        cache: &mut Option<(OwnedFd, SocketAddrUnix)>,
-    ) -> Result<(impl AsFd + '_, &SocketAddrUnix), ClientError> {
-        if cache.is_some() {
-            let (sock, addr) = cache.as_ref().unwrap();
-            return Ok((sock, addr));
-        }
-
-        let addr = {
-            let socket_file = paste_socket_file();
-            SocketAddrUnix::new(&socket_file)
-                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
-        };
-        let sock = socket_with(
-            AddressFamily::UNIX,
-            SocketType::DGRAM,
-            SocketFlags::empty(),
-            None,
-        )
-        .map_io_err(|| format!("Failed to create socket: {addr:?}"))?;
-
-        let (sock, addr) = cache.insert((sock, addr));
-        Ok((sock, addr))
     }
 
     let mut server = None;
@@ -223,8 +203,14 @@ pub fn controller<E>(
     for command in once(Command::LoadFirstPage).chain(commands) {
         let result = handle_command(
             command,
-            || maybe_init_server(&mut server),
-            || maybe_init_paste_server(&mut paste_server),
+            || maybe_init_server(socket_file, connect_to_server, &mut server),
+            || {
+                maybe_init_server(
+                    paste_socket_file,
+                    connect_to_paste_server,
+                    &mut paste_server,
+                )
+            },
             &mut send,
             &mut database,
             &mut reader,
@@ -241,10 +227,10 @@ pub fn controller<E>(
     }
 }
 
-fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
+fn handle_command<Server: AsFd, PasteServer: AsFd, E>(
     command: Command,
     server: impl FnOnce() -> Result<Server, ClientError>,
-    paste_server: impl FnOnce() -> Result<(PasteServer, &'a SocketAddrUnix), ClientError>,
+    paste_server: impl FnOnce() -> Result<PasteServer, ClientError>,
     send: impl FnMut(Message) -> Result<(), E>,
     database: &mut DatabaseReader,
     reader_: &mut Option<EntryReader>,
@@ -369,8 +355,8 @@ fn handle_command<'a, Server: AsFd, PasteServer: AsFd, E>(
         }
         Command::Paste(id) => {
             let entry = unsafe { database.get(id)? };
-            let (paste_server, addr) = paste_server()?;
-            send_paste_buffer(paste_server, addr, entry, reader)?;
+            let paste_server = paste_server()?;
+            send_paste_buffer(paste_server, entry, reader)?;
             Ok(Some(Message::Pasted))
         }
     }
@@ -635,31 +621,4 @@ fn do_search<E>(
         .collect();
     *search_result_buf = results;
     entries
-}
-
-fn send_paste_buffer(
-    server: impl AsFd,
-    addr: &SocketAddrUnix,
-    entry: Entry,
-    reader: &mut EntryReader,
-) -> ringboard_core::Result<()> {
-    let file = entry.to_file(reader)?;
-    let mime = file.mime_type()?;
-
-    let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
-    let mut ancillary = SendAncillaryBuffer::new(&mut space);
-    let fds = [file.as_fd()];
-    {
-        let success = ancillary.push(SendAncillaryMessage::ScmRights(&fds));
-        debug_assert!(success);
-    }
-    sendmsg_unix(
-        server,
-        addr,
-        &[IoSlice::new(mime.as_bytes())],
-        &mut ancillary,
-        SendFlags::empty(),
-    )
-    .map_io_err(|| format!("Failed to send paste entry to paste server at {addr:?}."))?;
-    Ok(())
 }
