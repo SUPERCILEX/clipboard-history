@@ -133,6 +133,9 @@ fn main() -> Result<(), eframe::Error> {
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
                 let stop = stop.clone();
+                let command_sender = option_env!("XDG_CURRENT_DESKTOP")
+                    .is_some_and(|de| de.eq_ignore_ascii_case("i3"))
+                    .then(|| command_sender.clone());
                 move || {
                     ctx.send_viewport_cmd(ViewportCommand::Icon(Some(
                         eframe::icon_data::from_png_bytes(include_bytes!("../logo.jpeg"))
@@ -141,6 +144,12 @@ fn main() -> Result<(), eframe::Error> {
                     )));
 
                     if let Err(e) = maintain_single_instance(&stop, || {
+                        // Hack to work around i3 thinking the closed window is focused if it moves
+                        // monitors.
+                        if let Some(command_sender) = &command_sender {
+                            let _ = command_sender.send(Command::LoadFirstPage);
+                        }
+
                         ctx.send_viewport_cmd(ViewportCommand::Visible(true));
                         ctx.send_viewport_cmd(ViewportCommand::Focus);
                     }) {
