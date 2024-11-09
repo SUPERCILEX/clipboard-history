@@ -39,13 +39,13 @@ use ringboard_sdk::{
     ClientError, DatabaseReader, EntryReader, Kind,
     api::{
         AddRequest, GarbageCollectRequest, MoveToFrontRequest, RemoveRequest, SwapRequest,
-        connect_to_server, connect_to_server_with,
+        connect_to_paste_server, connect_to_server, connect_to_server_with, send_paste_buffer,
     },
     config::{X11Config, X11V1Config, x11_config_file},
     core::{
         BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, SendQuitAndWait, acquire_lock_file,
         bucket_to_length, copy_file_range_all, create_tmp_file,
-        dirs::{data_dir, socket_file},
+        dirs::{data_dir, paste_socket_file, socket_file},
         protocol::{
             AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
             RemoveResponse, Response, RingKind, SwapResponse, decompose_id,
@@ -228,6 +228,11 @@ struct Add {
     /// The entry mime type.
     #[clap(short, long, short_alias = 't', alias = "target")]
     mime_type: Option<MimeType>,
+
+    /// Whether to overwrite the system clipboard with this entry.
+    #[clap(short, long)]
+    #[clap(default_value_t = false)]
+    copy: bool,
 }
 
 #[derive(Args, Debug)]
@@ -628,6 +633,7 @@ fn add(
         data_file,
         favorite,
         mime_type,
+        copy,
     }: Add,
 ) -> Result<(), CliError> {
     let AddResponse::Success { id } = {
@@ -659,6 +665,20 @@ fn add(
     };
 
     println!("Entry added: {id}");
+
+    if copy {
+        let (mut database, mut reader) = open_db()?;
+        let entry = unsafe { database.get(id)? };
+
+        let paste_server = {
+            let socket_file = paste_socket_file();
+            let addr = SocketAddrUnix::new(&socket_file)
+                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+            connect_to_paste_server(&addr)?
+        };
+
+        send_paste_buffer(paste_server, entry, &mut reader, false)?;
+    }
 
     Ok(())
 }

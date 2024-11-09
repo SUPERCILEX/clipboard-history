@@ -88,6 +88,9 @@ Options:
   -m, --mime-type <MIME_TYPE>
           The entry mime type
 
+  -c, --copy
+          Whether to overwrite the system clipboard with this entry
+
   -h, --help
           Print help (use `-h` for a summary)
 

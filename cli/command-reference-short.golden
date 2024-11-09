@@ -60,6 +60,7 @@ Arguments:
 Options:
   -f, --favorite               Whether to add the entry to the favorites ring
   -m, --mime-type <MIME_TYPE>  The entry mime type
+  -c, --copy                   Whether to overwrite the system clipboard with this entry
   -h, --help                   Print help (use `--help` for more detail)
 
 ---
