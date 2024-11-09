@@ -71,20 +71,19 @@ Add an entry to the database.
 
 Prints the ID of the newly added entry.
 
-Usage: clipboard-history add [OPTIONS] <DATA_FILE>
+Usage: clipboard-history add [OPTIONS] [DATA_FILE]
 
 Arguments:
-  <DATA_FILE>
+  [DATA_FILE]
           A file containing the data to be added to the entry.
           
           A value of `-` may be supplied to indicate that data should be read from STDIN.
+          
+          [default: -]
 
 Options:
-  -t, --target <TARGET>
-          The target ring
-          
-          [default: main]
-          [possible values: favorites, main]
+  -f, --favorite
+          Whether to add the entry to the favorites ring
 
   -m, --mime-type <MIME_TYPE>
           The entry mime type

@@ -211,39 +211,23 @@ enum Dev {
 }
 
 #[derive(Args, Debug)]
-#[command(arg_required_else_help = true)]
 struct Add {
     /// A file containing the data to be added to the entry.
     ///
     /// A value of `-` may be supplied to indicate that data should be read from
     /// STDIN.
-    #[arg(required = true)]
     #[arg(value_hint = ValueHint::FilePath)]
+    #[clap(default_value = "-")]
     data_file: PathBuf,
 
-    /// The target ring.
-    #[clap(short, long, alias = "ring")]
-    #[clap(default_value = "main")]
-    target: CliRingKind,
+    /// Whether to add the entry to the favorites ring.
+    #[clap(short, long)]
+    #[clap(default_value_t = false)]
+    favorite: bool,
 
     /// The entry mime type.
-    #[clap(short, long)]
+    #[clap(short, long, short_alias = 't', alias = "target")]
     mime_type: Option<MimeType>,
-}
-
-#[derive(ValueEnum, Copy, Clone, Debug)]
-pub enum CliRingKind {
-    Favorites,
-    Main,
-}
-
-impl From<CliRingKind> for RingKind {
-    fn from(value: CliRingKind) -> Self {
-        match value {
-            CliRingKind::Favorites => Self::Favorites,
-            CliRingKind::Main => Self::Main,
-        }
-    }
 }
 
 #[derive(Args, Debug)]
@@ -642,7 +626,7 @@ fn add(
     server: OwnedFd,
     Add {
         data_file,
-        target,
+        favorite,
         mime_type,
     }: Add,
 ) -> Result<(), CliError> {
@@ -658,7 +642,11 @@ fn add(
 
         AddRequest::response(
             server,
-            target.into(),
+            if favorite {
+                RingKind::Favorites
+            } else {
+                RingKind::Main
+            },
             mime_type
                 .or_else(|| {
                     mime_guess::from_path(data_file)
