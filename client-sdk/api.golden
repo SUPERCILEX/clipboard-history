@@ -107,6 +107,51 @@ pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::deref_mut<'
 pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::api::MoveToFrontRequest
+#[repr(C)] pub struct clipboard_history_client_sdk::api::PasteCommand
+pub clipboard_history_client_sdk::api::PasteCommand::mime: clipboard_history_core::protocol::MimeType
+pub clipboard_history_client_sdk::api::PasteCommand::trigger_paste: bool
+impl clipboard_history_core::utils::AsBytes for clipboard_history_client_sdk::api::PasteCommand
+impl core::clone::Clone for clipboard_history_client_sdk::api::PasteCommand
+pub fn clipboard_history_client_sdk::api::PasteCommand::clone(&self) -> clipboard_history_client_sdk::api::PasteCommand
+impl core::fmt::Debug for clipboard_history_client_sdk::api::PasteCommand
+pub fn clipboard_history_client_sdk::api::PasteCommand::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for clipboard_history_client_sdk::api::PasteCommand
+impl core::marker::Freeze for clipboard_history_client_sdk::api::PasteCommand
+impl core::marker::Send for clipboard_history_client_sdk::api::PasteCommand
+impl core::marker::Sync for clipboard_history_client_sdk::api::PasteCommand
+impl core::marker::Unpin for clipboard_history_client_sdk::api::PasteCommand
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::api::PasteCommand
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::api::PasteCommand
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::api::PasteCommand where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::api::PasteCommand::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::api::PasteCommand where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::api::PasteCommand::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::api::PasteCommand::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::api::PasteCommand where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::api::PasteCommand::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::api::PasteCommand::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_client_sdk::api::PasteCommand where T: core::clone::Clone
+pub type clipboard_history_client_sdk::api::PasteCommand::Owned = T
+pub fn clipboard_history_client_sdk::api::PasteCommand::clone_into(&self, target: &mut T)
+pub fn clipboard_history_client_sdk::api::PasteCommand::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_client_sdk::api::PasteCommand where T: 'static + core::marker::Sized
+pub fn clipboard_history_client_sdk::api::PasteCommand::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::api::PasteCommand where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::PasteCommand::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::api::PasteCommand where T: core::marker::Sized
+pub fn clipboard_history_client_sdk::api::PasteCommand::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::api::PasteCommand where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::api::PasteCommand::clone_to_uninit(&self, dst: *mut T)
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::api::PasteCommand
+pub fn clipboard_history_client_sdk::api::PasteCommand::from(t: T) -> T
+impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::api::PasteCommand
+pub type clipboard_history_client_sdk::api::PasteCommand::Init = T
+pub const clipboard_history_client_sdk::api::PasteCommand::ALIGN: usize
+pub unsafe fn clipboard_history_client_sdk::api::PasteCommand::deref<'a>(ptr: usize) -> &'a T
+pub unsafe fn clipboard_history_client_sdk::api::PasteCommand::deref_mut<'a>(ptr: usize) -> &'a mut T
+pub unsafe fn clipboard_history_client_sdk::api::PasteCommand::drop(ptr: usize)
+pub unsafe fn clipboard_history_client_sdk::api::PasteCommand::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
+impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::api::PasteCommand
 pub struct clipboard_history_client_sdk::api::RemoveRequest
 impl clipboard_history_client_sdk::api::RemoveRequest
 pub unsafe fn clipboard_history_client_sdk::api::RemoveRequest::recv<Server: std::os::fd::owned::AsFd>(server: Server, flags: rustix::backend::net::send_recv::RecvFlags) -> core::result::Result<clipboard_history_core::protocol::Response<clipboard_history_core::protocol::RemoveResponse>, clipboard_history_client_sdk::ClientError>
@@ -177,10 +222,11 @@ pub unsafe fn clipboard_history_client_sdk::api::SwapRequest::deref_mut<'a>(ptr:
 pub unsafe fn clipboard_history_client_sdk::api::SwapRequest::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::api::SwapRequest::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::api::SwapRequest
+pub const clipboard_history_client_sdk::api::PASTE_SERVER_PROTOCOL_VERSION: u8
 pub fn clipboard_history_client_sdk::api::connect_to_paste_server(addr: &rustix::backend::net::addr::SocketAddrUnix) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::connect_to_server(addr: &rustix::backend::net::addr::SocketAddrUnix) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
 pub fn clipboard_history_client_sdk::api::connect_to_server_with(addr: &rustix::backend::net::addr::SocketAddrUnix, flags: rustix::net::types::SocketFlags) -> core::result::Result<std::os::fd::owned::OwnedFd, clipboard_history_client_sdk::ClientError>
-pub fn clipboard_history_client_sdk::api::send_paste_buffer(server: impl std::os::fd::owned::AsFd, entry: clipboard_history_client_sdk::Entry, reader: &mut clipboard_history_client_sdk::EntryReader) -> clipboard_history_core::Result<()>
+pub fn clipboard_history_client_sdk::api::send_paste_buffer(server: impl std::os::fd::owned::AsFd, entry: clipboard_history_client_sdk::Entry, reader: &mut clipboard_history_client_sdk::EntryReader, trigger_paste: bool) -> clipboard_history_core::Result<()>
 pub mod clipboard_history_client_sdk::config
 pub enum clipboard_history_client_sdk::config::X11Config
 pub clipboard_history_client_sdk::config::X11Config::V1(clipboard_history_client_sdk::config::X11V1Config)
@@ -913,6 +959,7 @@ pub clipboard_history_client_sdk::ClientError::InvalidResponse
 pub clipboard_history_client_sdk::ClientError::InvalidResponse::context: alloc::borrow::Cow<'static, str>
 pub clipboard_history_client_sdk::ClientError::VersionMismatch
 pub clipboard_history_client_sdk::ClientError::VersionMismatch::actual: u8
+pub clipboard_history_client_sdk::ClientError::VersionMismatch::expected: u8
 impl clipboard_history_client_sdk::ClientError
 pub fn clipboard_history_client_sdk::ClientError::into_report<W: error_stack::context::Context>(self, wrapper: W) -> error_stack::report::Report<W>
 impl core::convert::From<clipboard_history_client_sdk::ClientError> for clipboard_history_client_sdk::ui_actor::CommandError

@@ -75,7 +75,10 @@ pub fn connect_to_server_with(
             recv(&socket, RecvFlags::empty())
         }?;
         if version != protocol::VERSION {
-            return Err(ClientError::VersionMismatch { actual: version });
+            return Err(ClientError::VersionMismatch {
+                expected: protocol::VERSION,
+                actual: version,
+            });
         }
     }
 
@@ -94,10 +97,23 @@ pub fn connect_to_paste_server(addr: &SocketAddrUnix) -> Result<OwnedFd, ClientE
     Ok(sock)
 }
 
+pub const PASTE_SERVER_PROTOCOL_VERSION: u8 = 1;
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct PasteCommand {
+    version: u8,
+    pub trigger_paste: bool,
+    pub mime: MimeType,
+}
+
+impl AsBytes for PasteCommand {}
+
 pub fn send_paste_buffer(
     server: impl AsFd,
     entry: Entry,
     reader: &mut EntryReader,
+    trigger_paste: bool,
 ) -> ringboard_core::Result<()> {
     let file = entry.to_file(reader)?;
     let mime = file.mime_type()?;
@@ -109,9 +125,14 @@ pub fn send_paste_buffer(
         let success = ancillary.push(SendAncillaryMessage::ScmRights(&fds));
         debug_assert!(success);
     }
+    let cmd = PasteCommand {
+        version: PASTE_SERVER_PROTOCOL_VERSION,
+        trigger_paste,
+        mime,
+    };
     sendmsg(
         server,
-        &[IoSlice::new(mime.as_bytes())],
+        &[IoSlice::new(cmd.as_bytes())],
         &mut ancillary,
         SendFlags::empty(),
     )

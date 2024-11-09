@@ -23,7 +23,7 @@ pub enum ClientError {
     #[error("{0}")]
     Core(#[from] ringboard_core::Error),
     #[error("protocol version mismatch")]
-    VersionMismatch { actual: u8 },
+    VersionMismatch { expected: u8, actual: u8 },
     #[error("invalid server response")]
     InvalidResponse { context: Cow<'static, str> },
 }
@@ -37,7 +37,6 @@ impl From<IdNotFoundError> for ClientError {
 #[cfg(feature = "error-stack")]
 mod error_stack_compat {
     use error_stack::{Context, Report};
-    use ringboard_core::protocol;
 
     use crate::ClientError;
 
@@ -46,10 +45,8 @@ mod error_stack_compat {
             match self {
                 Self::Core(e) => e.into_report(wrapper),
                 Self::InvalidResponse { context } => Report::new(wrapper).attach_printable(context),
-                Self::VersionMismatch { actual } => Report::new(wrapper).attach_printable(format!(
-                    "Expected v{} but got v{actual}.",
-                    protocol::VERSION
-                )),
+                Self::VersionMismatch { expected, actual } => Report::new(wrapper)
+                    .attach_printable(format!("Expected v{expected} but got v{actual}.")),
             }
         }
     }

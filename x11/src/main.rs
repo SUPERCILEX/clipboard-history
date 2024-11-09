@@ -11,7 +11,6 @@ use std::{
         unix::fs::FileExt,
     },
     rc::Rc,
-    slice,
     time::Duration,
 };
 
@@ -19,7 +18,11 @@ use arrayvec::ArrayVec;
 use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
-    api::{AddRequest, MoveToFrontRequest, connect_to_server},
+    ClientError,
+    api::{
+        AddRequest, MoveToFrontRequest, PASTE_SERVER_PROTOCOL_VERSION, PasteCommand,
+        connect_to_server,
+    },
     config::{X11Config, X11V1Config, x11_config_file},
     core::{
         Error, IoErr, create_tmp_file,
@@ -444,7 +447,7 @@ fn run() -> Result<(), CliError> {
                         &mut [MaybeUninit::uninit(); 8],
                     )
                     .map_io_err(|| "Failed to clear paste timer.")?;
-                    trigger_paste(&conn, root)?;
+                    do_paste(&conn, root)?;
                 }
                 _ => unreachable!(),
             }
@@ -1021,22 +1024,36 @@ fn handle_paste_event(
     clear_selection_mask: &mut u8,
     auto_paste: bool,
 ) -> Result<(), CliError> {
-    let mut mime = MimeType::new_const();
+    let mut buf = [0; size_of::<PasteCommand>()];
     let mut ancillary = RecvAncillaryBuffer::new(ancillary_buf);
     let msg = recvmsg(
         &paste_socket,
-        &mut [IoSliceMut::new(unsafe {
-            slice::from_raw_parts_mut(mime.as_mut_ptr(), mime.capacity())
-        })],
+        &mut [IoSliceMut::new(&mut buf)],
         &mut ancillary,
         RecvFlags::TRUNC,
     )
     .map_io_err(|| "Failed to recv client msg.")?;
-    debug_assert!(!msg.flags.contains(RecvFlags::TRUNC));
-    debug_assert!(msg.bytes <= mime.capacity());
-    unsafe {
-        mime.set_len(msg.bytes.min(mime.capacity()));
+    let version = buf[0];
+    if version != PASTE_SERVER_PROTOCOL_VERSION {
+        return Err(ClientError::VersionMismatch {
+            expected: PASTE_SERVER_PROTOCOL_VERSION,
+            actual: version,
+        }
+        .into());
     }
+    if msg.bytes != buf.len() {
+        return Err(ClientError::InvalidResponse {
+            context: "Bad paste command.".into(),
+        }
+        .into());
+    }
+    debug_assert!(!msg.flags.contains(RecvFlags::TRUNC));
+
+    let PasteCommand {
+        trigger_paste,
+        mime,
+        ..
+    } = *unsafe { &buf.as_ptr().cast::<PasteCommand>().read_unaligned() };
 
     let mut mime_atom_req = if mime.is_empty() {
         None
@@ -1088,7 +1105,7 @@ fn handle_paste_event(
     conn.set_selection_owner(paste_window, primary_atom, x11rb::CURRENT_TIME)?;
     *clear_selection_mask = 0;
 
-    if auto_paste {
+    if auto_paste && trigger_paste {
         trace!("Preparing to send paste command.");
         let focused_window = conn.get_input_focus()?.reply()?.focus;
         let should_defer = || -> Result<bool, CliError> {
@@ -1119,14 +1136,14 @@ fn handle_paste_event(
         if should_defer().ok() == Some(true) {
             debug!("Waiting for focus event to send paste command.");
         } else {
-            trigger_paste(conn, root)?;
+            do_paste(conn, root)?;
         }
     }
 
     Ok(())
 }
 
-fn trigger_paste(conn: &RustConnection, root: Window) -> Result<(), CliError> {
+fn do_paste(conn: &RustConnection, root: Window) -> Result<(), CliError> {
     let key = |type_, code| conn.xtest_fake_input(type_, code, x11rb::CURRENT_TIME, root, 1, 1, 0);
 
     // Shift + Insert

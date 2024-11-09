@@ -356,7 +356,7 @@ fn handle_command<Server: AsFd, PasteServer: AsFd, E>(
         Command::Paste(id) => {
             let entry = unsafe { database.get(id)? };
             let paste_server = paste_server()?;
-            send_paste_buffer(paste_server, entry, reader)?;
+            send_paste_buffer(paste_server, entry, reader, true)?;
             Ok(Some(Message::Pasted))
         }
     }
