@@ -24,6 +24,9 @@ sed -i "s|ExecStart=ringboard-$XDG_SESSION_TYPE|ExecStart=$(which ringboard-$XDG
 systemctl --user daemon-reload
 systemctl --user enable ringboard-$XDG_SESSION_TYPE --now
 
+killall ringboard-egui ringboard-tui 2> /dev/null
+systemctl --user restart ringboard-server
+
 echo
 echo "--- DONE ---"
 echo
