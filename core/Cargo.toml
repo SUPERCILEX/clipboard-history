@@ -13,8 +13,8 @@ license.workspace = true
 arrayvec = "0.7.6"
 dirs = "5.0.1"
 error-stack = { version = "0.5.0", default-features = false, optional = true }
-rustix = { version = "0.38.38", features = ["fs", "mm", "process", "net", "event", "linux_latest"] }
-thiserror = "1.0.66"
+rustix = { version = "0.38.40", features = ["fs", "mm", "process", "net", "event", "linux_latest"] }
+thiserror = "2.0.3"
 
 [dev-dependencies]
 supercilex-tests = { version = "0.4.11", default-features = false, features = ["api"] }
