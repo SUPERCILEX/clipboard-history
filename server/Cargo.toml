@@ -16,10 +16,10 @@ bitvec = "1.0.1"
 env_logger = { version = "0.11.5", default-features = false }
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
 io-uring = "0.7.1"
-libc = "0.2.162"
+libc = "0.2.164"
 log = { version = "0.4.22", features = ["release_max_level_info"] }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core", features = ["error-stack"] }
-rustix = { version = "0.38.40", features = ["fs", "process", "net", "io_uring"] }
+rustix = { version = "0.38.41", features = ["fs", "process", "net", "io_uring"] }
 sd-notify = { version = "0.4.3", optional = true }
 smallvec = "2.0.0-alpha.7"
 thiserror = "2.0.3"
