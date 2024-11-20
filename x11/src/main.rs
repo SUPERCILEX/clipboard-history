@@ -707,6 +707,7 @@ fn handle_x11_event(
             *state = State::FastPathPendingSelection {
                 selection: event.selection,
             };
+            trace!("Initialized transfer state for atom {transfer_atom}: {state:?}");
 
             conn.convert_selection(
                 transfer_window,
@@ -724,7 +725,7 @@ fn handle_x11_event(
                 );
                 return Ok(());
             };
-            debug!("Stage 2 selection notification received.");
+            trace!("Stage 2 selection notification received for atom {transfer_atom}: {state:?}.");
 
             match state {
                 &mut State::FastPathPendingSelection { selection } => {
@@ -789,6 +790,7 @@ fn handle_x11_event(
                 return Ok(());
             };
 
+            trace!("Processing transfer for atom {transfer_atom}: {state:?}");
             match mem::take(state) {
                 State::TargetsRequest {
                     selection,
