@@ -57,6 +57,7 @@ jobs:
           cargo publish --package clipboard-history-server
           cargo publish --package clipboard-history
           cargo publish --package clipboard-history-x11
+          cargo publish --package wayland-interface-check
           cargo publish --package clipboard-history-egui
           cargo publish --package clipboard-history-tui
 
@@ -125,6 +126,13 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/${{ matrix.target }}/release/ringboard-x11
           asset_name: ${{ matrix.target }}-ringboard-x11
+          tag: ${{ github.ref }}
+      - name: Upload binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/wayland-interface-check
+          asset_name: ${{ matrix.target }}-wayland-interface-check
           tag: ${{ github.ref }}
       - name: Upload binary
         uses: svenstaro/upload-release-action@v2

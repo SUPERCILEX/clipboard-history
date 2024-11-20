@@ -6,6 +6,7 @@ members = [
     "egui",
     "server",
     "tui",
+    "wayland-interface-check",
     "x11",
 ]
 
