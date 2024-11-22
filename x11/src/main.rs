@@ -163,11 +163,8 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
 enum State {
     #[default]
     Free,
-    FastPathPendingSelection {
-        selection: Atom,
-    },
+    FastPathPendingSelection,
     TargetsRequest {
-        selection: Atom,
         allow_plain_text: bool,
     },
     PendingSelection {
@@ -717,9 +714,7 @@ fn handle_x11_event(
 
             info!("Selection notification received.");
             let (state, transfer_window, transfer_atom) = allocator.alloc();
-            *state = State::FastPathPendingSelection {
-                selection: event.selection,
-            };
+            *state = State::FastPathPendingSelection;
             trace!("Initialized transfer state for atom {transfer_atom}: {state:?}");
 
             conn.convert_selection(
@@ -738,77 +733,33 @@ fn handle_x11_event(
                 );
                 return Ok(());
             };
-            trace!("Stage 2 selection notification received for atom {transfer_atom}: {state:?}.");
+            trace!(
+                "Stage 2 selection notification received for atom {}: {state:?}.",
+                event.property
+            );
 
-            match state {
-                &mut State::FastPathPendingSelection { selection } => {
-                    if event.property == x11rb::NONE {
-                        debug!("UTF8_STRING target fast path failed. Retrying with target query.");
-                        *state = State::TargetsRequest {
-                            selection,
-                            allow_plain_text: true,
-                        };
-                        conn.convert_selection(
-                            event.requestor,
-                            selection,
-                            targets_atom,
-                            transfer_atom,
-                            x11rb::CURRENT_TIME,
-                        )?;
-                    }
-                }
-                State::TargetsRequest { .. } => {
-                    if event.property == x11rb::NONE {
-                        warn!("Targets response cancelled.");
-                        *state = State::default();
-                    }
-                }
-                State::PendingSelection { .. } => {
-                    if event.property == x11rb::NONE {
-                        warn!("Selection transfer cancelled.");
-                        *state = State::default();
-                    }
-                }
-                State::Free | State::PendingIncr { .. } => {
-                    // Nothing to do
-                }
-            }
-        }
-        Event::PropertyNotify(event) => {
-            if event.atom == window_name_atom {
-                trace!("Ignoring window name property change.");
-                return Ok(());
-            }
-            if event.state != Property::NEW_VALUE {
-                trace!(
-                    "Ignoring irrelevant property state change: {:?}.",
-                    event.state
-                );
-                return Ok(());
-            }
-            let property = conn.get_property(
-                true,
-                event.window,
-                event.atom,
-                GetPropertyType::ANY,
-                0,
-                u32::MAX,
-            )?;
-            conn.flush()?;
-            let Some((state, transfer_atom)) = allocator.get(event.window) else {
-                warn!(
-                    "Ignoring property notify to unknown requester {}.",
-                    event.window
-                );
-                return Ok(());
+            let property = if event.property == x11rb::NONE {
+                None
+            } else {
+                let property = conn.get_property(
+                    true,
+                    event.requestor,
+                    event.property,
+                    GetPropertyType::ANY,
+                    0,
+                    u32::MAX,
+                )?;
+                conn.flush()?;
+                Some(property)
             };
 
-            trace!("Processing transfer for atom {transfer_atom}: {state:?}");
             match mem::take(state) {
-                State::TargetsRequest {
-                    selection,
-                    allow_plain_text,
-                } => {
+                State::TargetsRequest { allow_plain_text } => {
+                    let Some(property) = property else {
+                        warn!("Targets response cancelled.");
+                        return Ok(());
+                    };
+
                     let property = property.reply()?;
                     if property.type_ == incr_atom {
                         warn!("Ignoring abusive TARGETS property.");
@@ -861,22 +812,48 @@ fn handle_x11_event(
                         mime_type: target_mime,
                     };
                     conn.convert_selection(
-                        event.window,
-                        selection,
+                        event.requestor,
+                        event.selection,
                         target,
                         transfer_atom,
                         x11rb::CURRENT_TIME,
                     )?;
                 }
-                s @ (State::FastPathPendingSelection { .. } | State::PendingSelection { .. }) => {
+                s @ (State::FastPathPendingSelection | State::PendingSelection { .. }) => {
+                    let Some(property) = property else {
+                        match s {
+                            State::FastPathPendingSelection => {
+                                debug!(
+                                    "UTF8_STRING target fast path failed. Retrying with target \
+                                     query."
+                                );
+                                *state = State::TargetsRequest {
+                                    allow_plain_text: true,
+                                };
+                                conn.convert_selection(
+                                    event.requestor,
+                                    event.selection,
+                                    targets_atom,
+                                    transfer_atom,
+                                    x11rb::CURRENT_TIME,
+                                )?;
+                            }
+                            State::PendingSelection { .. } => {
+                                warn!("Selection transfer cancelled.");
+                            }
+                            _ => unreachable!(),
+                        }
+                        return Ok(());
+                    };
+
                     let (mime_atom, mime_type, fast_path) = match s {
-                        State::FastPathPendingSelection { selection } => {
-                            (utf8_string_atom, MimeType::new_const(), Some(selection))
+                        State::FastPathPendingSelection => {
+                            (utf8_string_atom, MimeType::new_const(), true)
                         }
                         State::PendingSelection {
                             mime_atom,
                             mime_type,
-                        } => (mime_atom, mime_type, None),
+                        } => (mime_atom, mime_type, false),
                         _ => unreachable!(),
                     };
 
@@ -893,18 +870,17 @@ fn handle_x11_event(
                         if property.value.is_empty()
                             || property.value.iter().all(u8::is_ascii_whitespace)
                         {
-                            if let Some(selection) = fast_path {
+                            if fast_path {
                                 debug!(
                                     "UTF8_STRING target fast path empty or blank. Retrying with \
                                      target query."
                                 );
                                 *state = State::TargetsRequest {
-                                    selection,
                                     allow_plain_text: false,
                                 };
                                 conn.convert_selection(
-                                    event.window,
-                                    selection,
+                                    event.requestor,
+                                    event.selection,
                                     targets_atom,
                                     transfer_atom,
                                     x11rb::CURRENT_TIME,
@@ -948,12 +924,72 @@ fn handle_x11_event(
                         info!("Small selection transfer complete.");
                     }
                 }
-                State::PendingIncr {
-                    mime_atom,
-                    mime_type,
-                    file,
-                    written,
-                } => {
+                s @ (State::PendingIncr { .. } | State::Free) => {
+                    let property_name = if property.is_some() {
+                        Some(conn.get_atom_name(event.property)?.reply()?)
+                    } else {
+                        None
+                    };
+                    let property_name = property_name
+                        .as_ref()
+                        .map(|reply| reply.name.to_string_lossy());
+                    error!(
+                        "Received selection notification for {} atom {:?}.",
+                        if matches!(s, State::Free) {
+                            "free"
+                        } else {
+                            "incr"
+                        },
+                        property_name.as_deref().unwrap_or("<none>")
+                    );
+                }
+            }
+        }
+        Event::PropertyNotify(event) => {
+            if event.atom == window_name_atom {
+                trace!("Ignoring window name property change.");
+                return Ok(());
+            }
+            if event.state != Property::NEW_VALUE {
+                trace!(
+                    "Ignoring irrelevant property state change: {:?}.",
+                    event.state
+                );
+                return Ok(());
+            }
+            let Some((state, _)) = allocator.get(event.window) else {
+                warn!(
+                    "Ignoring property notify to unknown requester {}.",
+                    event.window
+                );
+                return Ok(());
+            };
+
+            trace!(
+                "Processing property notification for atom {}: {state:?}",
+                event.atom
+            );
+            match state {
+                State::PendingIncr { .. } => {
+                    let State::PendingIncr {
+                        mime_atom,
+                        mime_type,
+                        file,
+                        written,
+                    } = mem::take(state)
+                    else {
+                        unreachable!()
+                    };
+                    let property = conn.get_property(
+                        true,
+                        event.window,
+                        event.atom,
+                        GetPropertyType::ANY,
+                        0,
+                        u32::MAX,
+                    )?;
+                    conn.flush()?;
+
                     let file = if let Some(file) = file {
                         file
                     } else {
@@ -1008,6 +1044,11 @@ fn handle_x11_event(
                             written: written + u64::try_from(property.value.len()).unwrap(),
                         }
                     }
+                }
+                State::FastPathPendingSelection
+                | State::TargetsRequest { .. }
+                | State::PendingSelection { .. } => {
+                    trace!("Ignoring already processed property.");
                 }
                 State::Free => {
                     error!(

@@ -18,3 +18,9 @@ call.
 - Target prioritization is implemented in [`best_target.rs`](src/best_target.rs).
 - Best effort duplicate entry avoidance is provided with content hashing up to 4096 bytes and length
   hashing thereafter.
+
+## Developer resources
+
+- X.org specification:
+  https://x.org/releases/X11R7.6/doc/xorg-docs/specs/ICCCM/icccm.html#peer_to_peer_communication_by_means_of_selections
+- XFIXES specification: https://www.x.org/releases/current/doc/fixesproto/fixesproto.txt
