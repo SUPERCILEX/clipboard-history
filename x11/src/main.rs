@@ -496,12 +496,14 @@ fn handle_x11_event(
             target,
             property,
         }) => {
-            if cfg!(debug_assertions) {
-                debug!(
-                    "Paste request received for target {}.",
-                    conn.get_atom_name(target)?.reply()?.name.to_string_lossy()
-                );
-            }
+            debug!(
+                "Paste request received for target {:?} on {} clipboard.",
+                conn.get_atom_name(target)?.reply()?.name.to_string_lossy(),
+                conn.get_atom_name(selection)?
+                    .reply()?
+                    .name
+                    .to_string_lossy()
+            );
             let reply = |property| {
                 conn.send_event(
                     false,
@@ -518,6 +520,24 @@ fn handle_x11_event(
                     },
                 )?;
                 Ok(())
+            };
+
+            let property = if property == x11rb::NONE {
+                debug!("Obsolete client detected.");
+                target
+            } else {
+                property
+            };
+            if property == x11rb::NONE {
+                warn!("Invalid paste request: no property provided to place the data.");
+                return reply(x11rb::NONE);
+            }
+
+            let reply = |reply_property| {
+                if reply_property == x11rb::NONE {
+                    conn.delete_property(requestor, property)?;
+                }
+                reply(reply_property)
             };
 
             if ![clipboard_atom, primary_atom].contains(&selection) {
@@ -551,13 +571,6 @@ fn handle_x11_event(
                 debug!("Unsupported target.");
                 return reply(x11rb::NONE);
             }
-
-            let property = if property == x11rb::NONE {
-                debug!("Obsolete client detected.");
-                target
-            } else {
-                property
-            };
 
             if target == targets_atom {
                 debug!("Responding to paste request with TARGETS.");
