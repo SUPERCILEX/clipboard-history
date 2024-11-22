@@ -2,6 +2,8 @@
 #![feature(if_let_guard)]
 
 use std::{
+    borrow::Cow,
+    fmt::Display,
     fs::File,
     io::{ErrorKind, IoSliceMut, Read},
     mem,
@@ -471,6 +473,16 @@ fn handle_x11_event(
     ),
     clear_selection_mask: &mut u8,
 ) -> Result<(), CliError> {
+    fn debug_get_atom_name(conn: &RustConnection, atom: Atom) -> Result<impl Display, CliError> {
+        if atom == x11rb::NONE {
+            Ok(Cow::Borrowed("NONE"))
+        } else {
+            Ok(String::from_utf8(conn.get_atom_name(atom)?.reply()?.name)
+                .map(Cow::Owned)
+                .unwrap_or(Cow::Borrowed("INVALID")))
+        }
+    }
+
     let &Atoms {
         _NET_WM_NAME: window_name_atom,
         UTF8_STRING: utf8_string_atom,
@@ -494,12 +506,9 @@ fn handle_x11_event(
             property,
         }) => {
             debug!(
-                "Paste request received for target {:?} on {} clipboard.",
-                conn.get_atom_name(target)?.reply()?.name.to_string_lossy(),
-                conn.get_atom_name(selection)?
-                    .reply()?
-                    .name
-                    .to_string_lossy()
+                "Paste request received for target {target}<{}> on {selection}<{}> selection.",
+                debug_get_atom_name(conn, target)?,
+                debug_get_atom_name(conn, selection)?
             );
             let reply = |property| {
                 conn.send_event(
@@ -734,8 +743,9 @@ fn handle_x11_event(
                 return Ok(());
             };
             trace!(
-                "Stage 2 selection notification received for atom {}: {state:?}.",
-                event.property
+                "Stage 2 selection notification received for atom {}<{}>: {state:?}.",
+                event.property,
+                debug_get_atom_name(conn, event.property)?,
             );
 
             let property = if event.property == x11rb::NONE {
@@ -925,22 +935,15 @@ fn handle_x11_event(
                     }
                 }
                 s @ (State::PendingIncr { .. } | State::Free) => {
-                    let property_name = if property.is_some() {
-                        Some(conn.get_atom_name(event.property)?.reply()?)
-                    } else {
-                        None
-                    };
-                    let property_name = property_name
-                        .as_ref()
-                        .map(|reply| reply.name.to_string_lossy());
                     error!(
-                        "Received selection notification for {} atom {:?}.",
+                        "Received selection notification for {} atom {}<{}>.",
                         if matches!(s, State::Free) {
                             "free"
                         } else {
                             "incr"
                         },
-                        property_name.as_deref().unwrap_or("<none>")
+                        event.property,
+                        debug_get_atom_name(conn, event.property)?,
                     );
                 }
             }
@@ -966,8 +969,9 @@ fn handle_x11_event(
             };
 
             trace!(
-                "Processing property notification for atom {}: {state:?}",
-                event.atom
+                "Processing property notification for atom {}<{}>: {state:?}",
+                event.atom,
+                debug_get_atom_name(conn, event.atom)?,
             );
             match state {
                 State::PendingIncr { .. } => {
@@ -1052,11 +1056,9 @@ fn handle_x11_event(
                 }
                 State::Free => {
                     error!(
-                        "Received property notification for free atom {}.",
-                        conn.get_atom_name(event.atom)?
-                            .reply()?
-                            .name
-                            .to_string_lossy()
+                        "Received property notification for free atom {}<{}>.",
+                        event.atom,
+                        debug_get_atom_name(conn, event.atom)?,
                     );
                 }
             }
