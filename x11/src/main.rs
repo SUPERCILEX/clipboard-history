@@ -30,7 +30,9 @@ use ringboard_sdk::{
         Error, IoErr, create_tmp_file,
         dirs::{paste_socket_file, socket_file},
         init_unix_server,
-        protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
+        protocol::{
+            AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, Response, RingKind,
+        },
         ring::Mmap,
     },
 };
@@ -39,7 +41,7 @@ use rustix::{
     fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
     io::{Errno, read_uninit},
     net::{
-        RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, SocketAddrUnix,
+        RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, SendFlags, SocketAddrUnix,
         SocketType, recvmsg,
     },
     path::Arg,
@@ -433,6 +435,8 @@ fn run() -> Result<(), CliError> {
                     &conn,
                     &atoms,
                     root,
+                    &server,
+                    &mut deduplicator,
                     paste_window,
                     &paste_socket,
                     &mut ancillary_buf,
@@ -1052,7 +1056,7 @@ fn handle_x11_event(
                 State::FastPathPendingSelection
                 | State::TargetsRequest { .. }
                 | State::PendingSelection { .. } => {
-                    trace!("Ignoring already processed property.");
+                    trace!("Ignoring property to be processed in selection notification.");
                 }
                 State::Free => {
                     error!(
@@ -1075,6 +1079,8 @@ fn handle_paste_event(
     conn: &RustConnection,
     atoms: &Atoms,
     root: Window,
+    server: impl AsFd,
+    deduplicator: &mut CopyDeduplication,
     paste_window: Window,
     paste_socket: impl AsFd,
     ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
@@ -1082,6 +1088,38 @@ fn handle_paste_event(
     clear_selection_mask: &mut u8,
     auto_paste: bool,
 ) -> Result<(), CliError> {
+    struct MoveToFrontGuard<'a, 'b, Server: AsFd>(
+        Server,
+        &'a mut Option<(PasteFile, PasteAtom)>,
+        &'b mut CopyDeduplication,
+    );
+
+    impl<Server: AsFd> Drop for MoveToFrontGuard<'_, '_, Server> {
+        fn drop(&mut self) {
+            let Ok(MoveToFrontResponse::Success { id }) =
+                unsafe { MoveToFrontRequest::recv(&self.0, RecvFlags::empty()) }.map(
+                    |Response {
+                         sequence_number: _,
+                         value,
+                     }| value,
+                )
+            else {
+                return;
+            };
+            let Some((file, _)) = self.1 else {
+                return;
+            };
+
+            let data = match file {
+                PasteFile::Small(mmap) => mmap,
+                PasteFile::Large(mmap) => &**mmap,
+            };
+            let data_hash =
+                CopyDeduplication::hash(CopyData::Slice(data), u64::try_from(data.len()).unwrap());
+            self.2.remember(data_hash, id);
+        }
+    }
+
     let mut buf = [0; size_of::<PasteCommand>()];
     let mut ancillary = RecvAncillaryBuffer::new(ancillary_buf);
     let msg = recvmsg(
@@ -1110,8 +1148,12 @@ fn handle_paste_event(
     let PasteCommand {
         trigger_paste,
         mime,
+        id,
         ..
     } = *unsafe { &buf.as_ptr().cast::<PasteCommand>().read_unaligned() };
+
+    MoveToFrontRequest::send(&server, id, None, SendFlags::empty())?;
+    let move_to_front_guard = MoveToFrontGuard(server, last_paste, deduplicator);
 
     let mut mime_atom_req = if mime.is_empty() {
         None
@@ -1127,7 +1169,7 @@ fn handle_paste_event(
             for fd in received_fds {
                 let data = Mmap::from(fd).map_io_err(|| "Failed to mmap paste file.")?;
                 info!("Received paste buffer of length {}.", data.len());
-                *last_paste = Some((
+                *move_to_front_guard.1 = Some((
                     if data.len() > MAX_TRANSFER_SIZE {
                         PasteFile::Large(Rc::new(data))
                     } else {
@@ -1209,6 +1251,7 @@ fn do_paste(conn: &RustConnection, root: Window) -> Result<(), CliError> {
     key(KEY_PRESS_EVENT, 118)?;
     key(KEY_RELEASE_EVENT, 118)?;
     key(KEY_RELEASE_EVENT, 50)?;
+    conn.flush()?;
     info!("Sent paste command.");
 
     Ok(())

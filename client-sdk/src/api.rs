@@ -97,13 +97,14 @@ pub fn connect_to_paste_server(addr: &SocketAddrUnix) -> Result<OwnedFd, ClientE
     Ok(sock)
 }
 
-pub const PASTE_SERVER_PROTOCOL_VERSION: u8 = 1;
+pub const PASTE_SERVER_PROTOCOL_VERSION: u8 = 2;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct PasteCommand {
     version: u8,
     pub trigger_paste: bool,
+    pub id: u64,
     pub mime: MimeType,
 }
 
@@ -128,6 +129,7 @@ pub fn send_paste_buffer(
     let cmd = PasteCommand {
         version: PASTE_SERVER_PROTOCOL_VERSION,
         trigger_paste,
+        id: entry.id(),
         mime,
     };
     sendmsg(
