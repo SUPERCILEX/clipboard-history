@@ -1,6 +1,6 @@
 [package]
 name = "wayland-interface-check"
-version = "0.1.0"
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description = "Binary to answer the question, \"Is this Wayland interface available?\""
