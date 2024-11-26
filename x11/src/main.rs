@@ -1116,6 +1116,7 @@ fn handle_paste_event(
             };
             let data_hash =
                 CopyDeduplication::hash(CopyData::Slice(data), u64::try_from(data.len()).unwrap());
+            debug!("Pasted entry promoted to front.");
             self.2.remember(data_hash, id);
         }
     }
