@@ -1,4 +1,4 @@
-# Wayland interface check
+# Wayland Interface Check
 
 <a href="https://crates.io/crates/wayland-interface-check">![Crates.io Version](https://img.shields.io/crates/v/wayland-interface-check)</a>
 

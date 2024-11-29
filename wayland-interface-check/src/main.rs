@@ -1,7 +1,11 @@
 #![feature(exitcode_exit_method)]
 
 use std::{
-    collections::HashSet, env, ffi::OsString, hash::BuildHasherDefault, os::unix::ffi::OsStringExt,
+    collections::HashSet,
+    env,
+    ffi::{OsStr, OsString},
+    hash::BuildHasherDefault,
+    os::unix::ffi::OsStringExt,
     process::ExitCode,
 };
 
@@ -12,8 +16,17 @@ use wayland_client::{
 };
 
 fn main() -> ExitCode {
+    let mut verbose = false;
     let interfaces = env::args_os()
         .skip(1)
+        .filter(|arg| {
+            if arg == OsStr::new("--verbose") {
+                verbose = true;
+                false
+            } else {
+                true
+            }
+        })
         .map(OsString::into_vec)
         .collect::<HashSet<_, _>>();
     if interfaces.is_empty() {
@@ -28,21 +41,27 @@ fn main() -> ExitCode {
     let mut event_queue = conn.new_event_queue();
     let qh = event_queue.handle();
 
-    let mut state = State(interfaces);
+    let mut state = State {
+        verbose,
+        interfaces,
+    };
 
     display.get_registry(&qh, ());
     let Ok(_) = event_queue.roundtrip(&mut state) else {
         return ExitCode::FAILURE;
     };
 
-    if state.0.is_empty() {
+    if state.interfaces.is_empty() {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
     }
 }
 
-struct State(HashSet<Vec<u8>, BuildHasherDefault<FxHasher>>);
+struct State {
+    verbose: bool,
+    interfaces: HashSet<Vec<u8>, BuildHasherDefault<FxHasher>>,
+}
 
 impl Dispatch<WlRegistry, ()> for State {
     fn event(
@@ -56,11 +75,14 @@ impl Dispatch<WlRegistry, ()> for State {
         if let wl_registry::Event::Global {
             name: _,
             interface,
-            version: _,
+            version,
         } = event
         {
-            this.0.remove(interface.as_bytes());
-            if this.0.is_empty() {
+            if this.verbose {
+                println!("{interface}:v{version}");
+            }
+            this.interfaces.remove(interface.as_bytes());
+            if this.interfaces.is_empty() {
                 ExitCode::SUCCESS.exit_process()
             }
         }
