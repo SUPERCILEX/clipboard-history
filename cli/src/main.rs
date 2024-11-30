@@ -735,29 +735,35 @@ fn wipe() -> Result<(), CliError> {
         std::process::exit(1)
     };
 
-    let data_dir = data_dir();
-    let mut tmp_data_dir = data_dir.with_extension("tmp");
-    match fs::rename(&data_dir, &tmp_data_dir) {
+    let mut data_dir = data_dir();
+
+    data_dir.push(".nuke.server.lock");
+    let mut extra_buffer = data_dir.clone();
+    data_dir.pop();
+
+    data_dir.push("server.lock");
+    acquire_lock_file(
+        &mut false,
+        CWD,
+        data_dir.parent().unwrap(),
+        &extra_buffer,
+        &data_dir,
+        SendQuitAndWait,
+    )?;
+    data_dir.pop();
+
+    extra_buffer.pop();
+    extra_buffer.set_extension("tmp");
+    match fs::rename(&data_dir, &extra_buffer) {
         Err(e) if e.kind() == ErrorKind::NotFound => {
             println!("Nothing to delete");
             return Ok(());
         }
         r => r,
     }
-    .map_io_err(|| format!("Failed to rename dir: {data_dir:?} -> {tmp_data_dir:?}"))?;
+    .map_io_err(|| format!("Failed to rename dir: {data_dir:?} -> {extra_buffer:?}"))?;
 
-    tmp_data_dir.push("server.lock");
-    acquire_lock_file(
-        &mut false,
-        CWD,
-        tmp_data_dir.parent().unwrap(),
-        &tmp_data_dir.with_file_name(".nuke.server.lock"),
-        &tmp_data_dir,
-        SendQuitAndWait,
-    )?;
-    tmp_data_dir.pop();
-
-    fuc_engine::remove_dir_all(tmp_data_dir)?;
+    fuc_engine::remove_dir_all(extra_buffer)?;
     println!("Wiped.");
 
     Ok(())
