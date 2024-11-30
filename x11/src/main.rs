@@ -196,7 +196,7 @@ impl TransferAtomAllocator {
     fn alloc(&mut self) -> (&mut State, Window, Atom) {
         const _: () = assert!(MAX_CONCURRENT_TRANSFERS.is_power_of_two());
 
-        let next = usize::from(self.next);
+        let next = usize::from(self.next) & (MAX_CONCURRENT_TRANSFERS - 1);
 
         if !matches!(self.states[next], State::Free) {
             warn!("Too many ongoing transfers, dropping old transfer.");
@@ -205,7 +205,7 @@ impl TransferAtomAllocator {
         let transfer_window = self.windows[next];
         let transfer_atom = Self::transfer_atom(next);
 
-        self.next = u8::try_from(next.wrapping_add(1) & (MAX_CONCURRENT_TRANSFERS - 1)).unwrap();
+        self.next = self.next.wrapping_add(1);
         (state, transfer_window, transfer_atom)
     }
 
