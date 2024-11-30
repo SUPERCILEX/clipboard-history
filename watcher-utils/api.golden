@@ -1,0 +1,33 @@
+pub mod clipboard_history_watcher_utils
+pub mod clipboard_history_watcher_utils::best_target
+pub struct clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
+impl<Id: AsId<Idcore::cmp::Eq>> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::add_mime(&mut self, mime: &clipboard_history_core::protocol::MimeType, id: Id)
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::best(self) -> core::option::Option<(Id, clipboard_history_core::protocol::MimeType)>
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::block_text(&mut self)
+impl<Id: core::default::Default> core::default::Default for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::default() -> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
+impl<Id: core::fmt::Debug> core::fmt::Debug for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<Id> core::marker::Freeze for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where Id: core::marker::Freeze
+impl<Id> core::marker::Send for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where Id: core::marker::Send
+impl<Id> core::marker::Sync for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where Id: core::marker::Sync
+impl<Id> core::marker::Unpin for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where Id: core::marker::Unpin
+impl<Id> core::panic::unwind_safe::RefUnwindSafe for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where Id: core::panic::unwind_safe::RefUnwindSafe
+impl<Id> core::panic::unwind_safe::UnwindSafe for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where Id: core::panic::unwind_safe::UnwindSafe
+impl<T, U> core::convert::Into<U> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where U: core::convert::From<T>
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where U: core::convert::Into<T>
+pub type clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::Error = core::convert::Infallible
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where U: core::convert::TryFrom<T>
+pub type clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where T: 'static + core::marker::Sized
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where T: core::marker::Sized
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where T: core::marker::Sized
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::from(t: T) -> T

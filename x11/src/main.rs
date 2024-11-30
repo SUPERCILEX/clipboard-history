@@ -36,6 +36,7 @@ use ringboard_sdk::{
         ring::Mmap,
     },
 };
+use ringboard_watcher_utils::best_target::BestMimeTypeFinder;
 use rustix::{
     event::epoll,
     fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
@@ -72,12 +73,8 @@ use x11rb::{
     x11_utils::X11Error,
 };
 
-use crate::{
-    best_target::BestMimeTypeFinder,
-    deduplication::{CopyData, CopyDeduplication},
-};
+use crate::deduplication::{CopyData, CopyDeduplication};
 
-mod best_target;
 mod deduplication;
 
 #[derive(Error, Debug)]

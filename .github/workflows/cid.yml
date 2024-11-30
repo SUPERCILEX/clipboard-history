@@ -58,6 +58,7 @@ jobs:
           cargo publish --package clipboard-history
           cargo publish --package clipboard-history-x11
           cargo publish --package wayland-interface-check
+          cargo publish --package clipboard-history-watcher-utils
           cargo publish --package clipboard-history-egui
           cargo publish --package clipboard-history-tui
 

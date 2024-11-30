@@ -1,0 +1,16 @@
+[package]
+name = "clipboard-history-watcher-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Shared utilities between ringboard watchers."
+repository.workspace = true
+keywords = ["ringboard", "clipboard", "tools", "sdk"]
+categories = ["command-line-utilities", "development-tools", "filesystem"]
+license.workspace = true
+
+[dependencies]
+ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
+
+[dev-dependencies]
+supercilex-tests = { version = "0.4.11", default-features = false, features = ["api"] }

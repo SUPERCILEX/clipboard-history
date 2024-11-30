@@ -110,6 +110,11 @@ Each submodule contains its own README with details on the submodule.
   - [`egui/`](egui): The egui Ringboard client displays clipboard entries in a standard GUI.
   - [`server/`](server): The Ringboard server writes data to the Ringboard database.
   - [`tui/`](tui): The ratatui Ringboard client displays clipboard entries in your terminal.
+  - [`watcher-utils/`](watcher-utils): The watcher utils are shared code between the Wayland and X11
+    watchers.
   - [`wayland/`](wayland): The Wayland clipboard watcher sends new clipboard entries to the
     Ringboard server.
+  - [`wayland-interface-check/`](wayland-interface-check): The Wayland interface checker allows the
+    installation script to use the X11 watcher as a fallback if the user's Wayland compositor does
+    not support the necessary interfaces.
   - [`x11/`](x11): The X11 clipboard watcher sends new clipboard entries to the Ringboard server.
