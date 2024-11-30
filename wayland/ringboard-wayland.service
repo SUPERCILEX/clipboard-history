@@ -1,0 +1,17 @@
+[Unit]
+Description=Wayland Ringboard clipboard listener
+Documentation=https://github.com/SUPERCILEX/clipboard-history
+Requires=ringboard-server.service
+After=ringboard-server.service
+BindsTo=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=exec
+Environment=RUST_LOG=trace
+ExecStart=ringboard-wayland
+Restart=on-failure
+Slice=ringboard.slice
+
+[Install]
+WantedBy=graphical-session.target

@@ -718,11 +718,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "clipboard-history-watcher-utils"
+version = "0.8.1"
+dependencies = [
+ "clipboard-history-client-sdk",
+ "supercilex-tests",
+]
+
+[[package]]
+name = "clipboard-history-wayland"
+version = "0.8.1"
+dependencies = [
+ "clipboard-history-client-sdk",
+ "clipboard-history-watcher-utils",
+ "env_logger",
+ "error-stack",
+ "log",
+ "rustc-hash 2.0.0",
+ "rustix",
+ "thiserror 2.0.3",
+ "wayland-client",
+ "wayland-protocols-wlr",
+]
+
+[[package]]
 name = "clipboard-history-x11"
 version = "0.8.1"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
+ "clipboard-history-watcher-utils",
  "env_logger",
  "error-stack",
  "log",

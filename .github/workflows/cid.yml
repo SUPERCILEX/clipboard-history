@@ -59,6 +59,7 @@ jobs:
           cargo publish --package clipboard-history-x11
           cargo publish --package wayland-interface-check
           cargo publish --package clipboard-history-watcher-utils
+          cargo publish --package clipboard-history-wayland
           cargo publish --package clipboard-history-egui
           cargo publish --package clipboard-history-tui
 
@@ -68,6 +69,8 @@ jobs:
           cargo publish --package ringboard --allow-dirty
           sed -i 's/name = "clipboard-history-x11"/name = "ringboard-x11"/' x11/Cargo.toml
           cargo publish --package ringboard-x11 --allow-dirty
+          sed -i 's/name = "clipboard-history-wayland"/name = "ringboard-wayland"/' wayland/Cargo.toml
+          cargo publish --package ringboard-wayland --allow-dirty
           sed -i 's/name = "clipboard-history-egui"/name = "ringboard-egui"/' egui/Cargo.toml
           cargo publish --package ringboard-egui --allow-dirty
           sed -i 's/name = "clipboard-history-tui"/name = "ringboard-tui"/' tui/Cargo.toml
@@ -134,6 +137,13 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/${{ matrix.target }}/release/wayland-interface-check
           asset_name: ${{ matrix.target }}-wayland-interface-check
+          tag: ${{ github.ref }}
+      - name: Upload binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/ringboard-wayland
+          asset_name: ${{ matrix.target }}-ringboard-wayland
           tag: ${{ github.ref }}
       - name: Upload binary
         uses: svenstaro/upload-release-action@v2
