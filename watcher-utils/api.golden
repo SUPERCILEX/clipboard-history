@@ -1,7 +1,7 @@
 pub mod clipboard_history_watcher_utils
 pub mod clipboard_history_watcher_utils::best_target
 pub struct clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
-impl<Id: AsId<Idcore::cmp::Eq>> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
+impl<Id: id::AsId<Idcore::cmp::Eq>> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::add_mime(&mut self, mime: &clipboard_history_core::protocol::MimeType, id: Id)
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::best(self) -> core::option::Option<(Id, clipboard_history_core::protocol::MimeType)>
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::block_text(&mut self)

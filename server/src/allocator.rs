@@ -19,8 +19,8 @@ use bitcode::{Decode, Encode};
 use bitvec::{order::Lsb0, vec::BitVec};
 use log::{debug, error, info, trace, warn};
 use ringboard_core::{
-    IoErr, NUM_BUCKETS, RingAndIndex, TEXT_MIMES, bucket_to_length, copy_file_range_all,
-    create_tmp_file, direct_file_name, link_tmp_file, open_buckets,
+    IoErr, NUM_BUCKETS, RingAndIndex, bucket_to_length, copy_file_range_all, create_tmp_file,
+    direct_file_name, is_plaintext_mime, link_tmp_file, open_buckets,
     protocol::{
         AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
         RemoveResponse, RingKind, SwapResponse, composite_id, decompose_id,
@@ -904,7 +904,7 @@ impl AllocatorData {
             .map_io_err(|| "Failed to copy data to receiver file.")?;
         debug!("Received {size} bytes.");
 
-        if TEXT_MIMES.iter().any(|b| mime_type.eq_ignore_ascii_case(b)) {
+        if is_plaintext_mime(mime_type) {
             if size > 0 && size < 4096 {
                 self.alloc_bucket(u16::try_from(size).unwrap())
             } else {

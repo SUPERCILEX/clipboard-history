@@ -895,7 +895,6 @@ impl<T> core::convert::From<T> for clipboard_history_core::StringView<'a>
 pub fn clipboard_history_core::StringView<'a>::from(t: T) -> T
 pub const clipboard_history_core::DIRECT_FILE_NAME_LEN: usize
 pub const clipboard_history_core::NUM_BUCKETS: usize
-pub const clipboard_history_core::TEXT_MIMES: &[&str]
 pub trait clipboard_history_core::AsBytes: core::marker::Sized
 pub fn clipboard_history_core::AsBytes::as_bytes(&self) -> &[u8]
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::AddResponse
@@ -916,6 +915,7 @@ pub fn clipboard_history_core::copy_file_range_all<InFd: std::os::fd::owned::AsF
 pub fn clipboard_history_core::create_tmp_file<Fd: std::os::fd::owned::AsFd, P1: rustix::path::arg::Arg, P2: rustix::path::arg::Arg + core::marker::Copy>(tmp_file_unsupported: &mut bool, dirfd: Fd, path: P1, fallback_path: P2, oflags: rustix::backend::fs::types::OFlags, create_mode: rustix::backend::fs::types::Mode) -> rustix::io::errno::Result<std::os::fd::owned::OwnedFd>
 pub fn clipboard_history_core::direct_file_name(buf: &mut [core::mem::maybe_uninit::MaybeUninit<u8>; 14], to: clipboard_history_core::protocol::RingKind, index: u32) -> &core::ffi::c_str::CStr
 pub fn clipboard_history_core::init_unix_server<P: core::convert::AsRef<std::path::Path>>(socket_file: P, kind: rustix::net::types::SocketType) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>
+pub fn clipboard_history_core::is_plaintext_mime(mime: &str) -> bool
 pub fn clipboard_history_core::link_tmp_file<Fd: std::os::fd::owned::AsFd, DirFd: std::os::fd::owned::AsFd, P: rustix::path::arg::Arg>(tmp_file: Fd, dirfd: DirFd, path: P) -> rustix::io::errno::Result<()>
 pub fn clipboard_history_core::open_buckets<F: core::ops::function::FnMut(&str) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>>(open: F) -> clipboard_history_core::Result<([std::os::fd::owned::OwnedFd; 11], [u64; 11])>
 pub fn clipboard_history_core::read_at_to_end(file: &std::fs::File, buf: &mut [u8], offset: u64) -> std::io::error::Result<usize>

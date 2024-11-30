@@ -21,8 +21,9 @@ use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
     api::{AddRequest, connect_to_server},
     core::{
-        Error, IoErr, TEXT_MIMES, create_tmp_file,
+        Error, IoErr, create_tmp_file,
         dirs::socket_file,
+        is_plaintext_mime,
         protocol::{AddResponse, IdNotFoundError, MimeType, RingKind},
         ring::Mmap,
     },
@@ -212,7 +213,7 @@ fn copy_thread(
         debug!("Received command: {command:?}");
         match command {
             CopyCommand::Copy { mime_type, data } => {
-                let file = if TEXT_MIMES.contains(&mime_type.as_str()) {
+                let file = if is_plaintext_mime(&mime_type) {
                     memfd_create(c"ringboard_wayland_copy", MemfdFlags::empty())
                         .map_io_err(|| "Failed to create copy file.")?
                 } else {

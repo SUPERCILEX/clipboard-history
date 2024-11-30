@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use ringboard_sdk::core::{TEXT_MIMES, protocol::MimeType};
+use ringboard_sdk::core::{is_plaintext_mime, protocol::MimeType};
 
 #[derive(Debug)]
 struct SeenMime<Id> {
@@ -47,9 +47,8 @@ mod id {
         }
     }
 }
-use id::AsId;
 
-impl<Id: AsId<Id: Eq>> BestMimeTypeFinder<Id> {
+impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
     pub fn add_mime(&mut self, mime: &MimeType, id: Id) {
         let Self {
             seen:
@@ -64,7 +63,7 @@ impl<Id: AsId<Id: Eq>> BestMimeTypeFinder<Id> {
             block_text,
         } = *self;
 
-        let target = if TEXT_MIMES.iter().any(|b| mime.eq_ignore_ascii_case(b)) {
+        let target = if is_plaintext_mime(mime) {
             if block_text {
                 return;
             }
@@ -98,7 +97,7 @@ impl<Id: AsId<Id: Eq>> BestMimeTypeFinder<Id> {
             });
         }
 
-        if self.seen.best().map(AsId::as_id) == Some(id_) {
+        if self.seen.best().map(id::AsId::as_id) == Some(id_) {
             *best_mime = *mime;
         }
     }

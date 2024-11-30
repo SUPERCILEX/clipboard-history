@@ -36,16 +36,22 @@ use crate::{
     protocol::{RingKind, composite_id},
 };
 
-pub const TEXT_MIMES: &[&str] = &[
-    "",
-    "text",
-    "string",
-    "utf8_string",
-    "text/plain",
-    "text/plain;charset=utf-8",
-    "text/plain;charset=us-ascii",
-    "text/plain;charset=unicode",
-];
+#[must_use]
+pub fn is_plaintext_mime(mime: &str) -> bool {
+    const TEXT_MIMES: &[&str] = &[
+        "",
+        "text",
+        "string",
+        "utf8_string",
+        "text/plain",
+        "text/plain;charset=utf-8",
+        "text/plain;charset=us-ascii",
+        "text/plain;charset=unicode",
+    ];
+
+    TEXT_MIMES.iter().any(|b| mime.eq_ignore_ascii_case(b))
+}
+
 pub const NUM_BUCKETS: usize = 11;
 
 // The max composite ID is 2^40 (8 bit ring ID and 32 bit entry ID)

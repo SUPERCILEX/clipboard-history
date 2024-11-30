@@ -20,8 +20,7 @@ use arrayvec::ArrayVec;
 use memchr::memmem::Finder;
 use regex::bytes::Regex;
 use ringboard_core::{
-    DIRECT_FILE_NAME_LEN, Error as CoreError, IoErr, TEXT_MIMES, bucket_to_length, ring::Mmap,
-    size_to_bucket,
+    DIRECT_FILE_NAME_LEN, Error as CoreError, IoErr, bucket_to_length, ring::Mmap, size_to_bucket,
 };
 use rustix::{
     fs::{Mode, OFlags, RawDir, openat},
@@ -454,7 +453,7 @@ fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, CoreError> {
 }
 
 fn is_searchable_mime(mime: &str) -> bool {
-    TEXT_MIMES.contains(&mime) || mime.starts_with("text/") || mime == "application/xml"
+    mime.is_empty() || mime.starts_with("text/") || mime == "application/xml"
 }
 
 fn mime_search_impl(
