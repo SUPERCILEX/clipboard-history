@@ -3,20 +3,12 @@
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
-    fs::File,
     hash::BuildHasherDefault,
-    io,
-    io::{Seek, SeekFrom},
     mem,
     mem::ManuallyDrop,
     ops::Deref,
     os::fd::{AsFd, OwnedFd},
     ptr,
-    sync::{
-        mpsc,
-        mpsc::{Receiver, SyncSender, TrySendError},
-    },
-    thread,
 };
 
 use error_stack::Report;
@@ -38,7 +30,7 @@ use rustix::{
     fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
     io::Errno,
     net::SocketAddrUnix,
-    pipe::pipe,
+    pipe::{SpliceFlags, pipe, splice},
 };
 use smallvec::SmallVec;
 use thiserror::Error;
@@ -58,9 +50,9 @@ enum CliError {
     Core(#[from] Error),
     #[error("{0}")]
     Sdk(#[from] ringboard_sdk::ClientError),
-    #[error("{0}")]
+    #[error("Wayland connection: {0}")]
     WaylandConnection(#[from] ConnectError),
-    #[error("{0}")]
+    #[error("Wayland dispatch: {0}")]
     WaylandDispatch(#[from] DispatchError),
     #[error("{message}: {interface}")]
     BadWaylandGlobal {
@@ -114,39 +106,40 @@ fn run() -> Result<(), CliError> {
         env!("CARGO_PKG_VERSION")
     );
 
-    let (error_send, error_recv) = mpsc::sync_channel(0);
-    let (server_send, server_recv) = mpsc::sync_channel(0);
-    let (copy_send, copy_recv) = mpsc::sync_channel(0);
-
-    thread::spawn({
-        let error_send = error_send.clone();
-        move || {
-            if let Err(e) = ringboard_server_thread(server_recv) {
-                let _ = error_send.send(e);
-            }
-        }
-    });
-    thread::spawn(move || {
-        if let Err(e) = copy_thread(copy_recv, server_send) {
-            let _ = error_send.send(e);
-        }
-    });
+    let server = {
+        let socket_file = socket_file();
+        let addr = SocketAddrUnix::new(&socket_file)
+            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+        connect_to_server(&addr)?
+    };
+    debug!("Ringboard connection established.");
 
     let conn = Connection::connect_to_env()?;
     debug!("Wayland connection established.");
 
+    let epoll =
+        epoll::create(epoll::CreateFlags::empty()).map_io_err(|| "Failed to create epoll.")?;
+    epoll::add(
+        &epoll,
+        &conn,
+        epoll::EventData::new_u64(4),
+        epoll::EventFlags::IN,
+    )
+    .map_io_err(|| "Failed to register epoll interest in Wayland socket.")?;
+    let mut app = App {
+        inner: AppDefault::default(),
+        epoll,
+    };
+
     let mut event_queue = conn.new_event_queue();
-    let mut app = App::default();
-    app.copy = Some(copy_send);
-
     conn.display().get_registry(&event_queue.handle(), ());
+    drop(conn);
     event_queue.roundtrip(&mut app)?;
-    debug!("Registered Wayland global listener.");
 
-    if let Some(e) = app.error {
+    if let Some(e) = app.inner.error {
         return Err(e);
     }
-    if app.manager.is_none() {
+    if app.inner.manager.is_none() {
         return Err(CliError::BadWaylandGlobal {
             message: "compositor does not implement necessary interface",
             interface: "zwlr_data_control_manager_v1",
@@ -154,38 +147,31 @@ fn run() -> Result<(), CliError> {
     };
     debug!("Wayland globals initialized.");
 
-    let epoll =
-        epoll::create(epoll::CreateFlags::empty()).map_io_err(|| "Failed to create epoll.")?;
-    epoll::add(
-        &epoll,
-        conn,
-        epoll::EventData::new_u64(0),
-        epoll::EventFlags::IN,
-    )
-    .map_io_err(|| "Failed to register epoll interest in Wayland socket.")?;
     let mut epoll_events = epoll::EventVec::with_capacity(1 + OFFER_BUFFERS);
 
     info!("Starting event loop.");
     loop {
-        if let Some(e) = app.error {
+        if let Some(e) = app.inner.error {
             return Err(e);
         }
-        if let Some(manager) = &app.manager {
-            for (name, seat) in app.pending_seats.drain(..) {
+        if let Some(manager) = &app.inner.manager {
+            for (name, seat) in app.inner.pending_seats.drain(..) {
                 let device = manager.get_data_device(&seat, &event_queue.handle(), name);
-                app.seats.add(name, seat.into_inner(), device);
+                app.inner.seats.add(name, seat.into_inner(), device);
+                debug!("Listening for clipboard events on seat {name}.");
             }
         }
         event_queue.flush().map_err(DispatchError::from)?;
 
         trace!("Waiting for event.");
-        match epoll::wait(&epoll, &mut epoll_events, -1) {
+        match epoll::wait(&app.epoll, &mut epoll_events, -1) {
             Err(Errno::INTR) => continue,
             r => r.map_io_err(|| "Failed to wait for epoll events.")?,
         };
         for epoll::Event { flags: _, data } in &epoll_events {
             match data.u64() {
-                0 => {
+                4 => {
+                    trace!("Wayland event received.");
                     let count = event_queue
                         .prepare_read()
                         .unwrap()
@@ -195,9 +181,12 @@ fn run() -> Result<(), CliError> {
                     event_queue.dispatch_pending(&mut app)?;
                     trace!("Dispatched {count} events.");
                 }
-                1..=4 => {
-                    // TODO
-                }
+                idx @ 0..4 => app.inner.pending_offers.continue_transfer(
+                    &mut app.inner.tmp_file_unsupported,
+                    &server,
+                    &app.epoll,
+                    usize::try_from(idx).unwrap(),
+                )?,
                 _ => unreachable!(),
             }
         }
@@ -261,86 +250,6 @@ impl<T: Destroyable> Drop for AutoDestroy<T> {
     }
 }
 
-#[derive(Debug)]
-enum RingboardServerCommand {
-    Add { mime_type: MimeType, file: File },
-}
-
-fn ringboard_server_thread(recv: Receiver<RingboardServerCommand>) -> Result<(), CliError> {
-    let server = {
-        let socket_file = socket_file();
-        let addr = SocketAddrUnix::new(&socket_file)
-            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
-        connect_to_server(&addr)?
-    };
-    debug!("Ringboard connection established.");
-
-    for command in recv {
-        debug!("Received command: {command:?}");
-        match command {
-            RingboardServerCommand::Add { mime_type, file } => {
-                // TODO dedup
-                let AddResponse::Success { id } =
-                    AddRequest::response_add_unchecked(&server, RingKind::Main, mime_type, file)?;
-            }
-        }
-    }
-    Ok(())
-}
-
-#[derive(Debug)]
-enum CopyCommand {
-    Copy { mime_type: MimeType, data: OwnedFd },
-}
-
-fn copy_thread(
-    recv: Receiver<CopyCommand>,
-    server: SyncSender<RingboardServerCommand>,
-) -> Result<(), CliError> {
-    let mut tmp_file_unsupported = false;
-    for command in recv {
-        debug!("Received command: {command:?}");
-        match command {
-            CopyCommand::Copy { mime_type, data } => {
-                let file = if is_plaintext_mime(&mime_type) {
-                    memfd_create(c"ringboard_wayland_copy", MemfdFlags::empty())
-                        .map_io_err(|| "Failed to create copy file.")?
-                } else {
-                    create_tmp_file(
-                        &mut tmp_file_unsupported,
-                        CWD,
-                        c".",
-                        c".ringboard-wayland-scratchpad",
-                        OFlags::RDWR,
-                        Mode::empty(),
-                    )
-                    .map_io_err(|| "Failed to create copy temp file.")?
-                };
-                let mut file = File::from(file);
-
-                let len = io::copy(&mut File::from(data), &mut file)
-                    .map_io_err(|| "Failed to copy from wayland peer to copy file.")?;
-                if len == 0
-                    || Mmap::new(&file, usize::try_from(len).unwrap())
-                        .map_io_err(|| "Failed to mmap copy file")?
-                        .iter()
-                        .all(u8::is_ascii_whitespace)
-                {
-                    // TODO consider handling Chrome being dumb and returning an empty buffer for
-                    //  text when a chromium/ mime is available
-                    warn!("Dropping empty or blank selection.");
-                    continue;
-                }
-                file.seek(SeekFrom::Start(0))
-                    .map_io_err(|| "Failed to reset copy file offset.")?;
-
-                let _ = server.send(RingboardServerCommand::Add { mime_type, file });
-            }
-        }
-    }
-    Ok(())
-}
-
 #[derive(Default, Debug)]
 struct Seats {
     first: Option<(
@@ -388,9 +297,19 @@ const OFFER_BUFFERS: usize = 4;
 
 #[derive(Default, Debug)]
 struct PendingOffers {
-    ids: [Option<AutoDestroy<ZwlrDataControlOfferV1>>; OFFER_BUFFERS],
-    offers: [BestMimeTypeFinder<String>; OFFER_BUFFERS],
+    offers: [Option<AutoDestroy<ZwlrDataControlOfferV1>>; OFFER_BUFFERS],
+    mimes: [BestMimeTypeFinder<String>; OFFER_BUFFERS],
+    transfers: [Option<Transfer>; OFFER_BUFFERS],
     next: u8,
+}
+
+#[derive(Debug)]
+struct Transfer {
+    read: OwnedFd,
+    data: OwnedFd,
+    len: u64,
+
+    mime: MimeType,
 }
 
 impl PendingOffers {
@@ -398,14 +317,22 @@ impl PendingOffers {
         const _: () = assert!(OFFER_BUFFERS.is_power_of_two());
 
         let idx = usize::from(self.next) & (OFFER_BUFFERS - 1);
-        if let Some(id) = &self.ids[idx] {
+        if let Some(id) = &self.offers[idx] {
             warn!("Dropping old offer: {:?}", id.id());
         }
 
-        self.ids[idx] = Some(AutoDestroy(offer));
-        self.offers[idx] = BestMimeTypeFinder::default();
+        let Self {
+            offers,
+            mimes,
+            transfers,
+            next,
+        } = self;
 
-        self.next = self.next.wrapping_add(1);
+        offers[idx] = Some(AutoDestroy(offer));
+        mimes[idx] = BestMimeTypeFinder::default();
+        transfers[idx] = None;
+
+        *next = next.wrapping_add(1);
     }
 
     fn add_mime(&mut self, offer: &ZwlrDataControlOfferV1, mime: String) {
@@ -421,43 +348,186 @@ impl PendingOffers {
             return;
         };
 
-        self.offers[idx].add_mime(&mime_type, mime);
+        self.mimes[idx].add_mime(&mime_type, mime);
     }
 
-    fn consume(
+    fn start_transfer(
         &mut self,
+        tmp_file_unsupported: &mut bool,
+        epoll: impl AsFd,
         offer: &ZwlrDataControlOfferV1,
-    ) -> Option<(
-        AutoDestroy<ZwlrDataControlOfferV1>,
-        BestMimeTypeFinder<String>,
-    )> {
+    ) -> Result<(), CliError> {
         let Some(idx) = self.find(offer) else {
-            error!("Failed to copy offer that does not exist: {:?}", offer.id());
-            return None;
+            error!(
+                "Failed to start transfer for offer that does not exist: {:?}",
+                offer.id()
+            );
+            return Ok(());
         };
 
-        Some((
-            self.ids[idx].take().unwrap(),
-            mem::take(&mut self.offers[idx]),
-        ))
+        let Some(mime) = self.mimes[idx].pop_best() else {
+            warn!("No usable mimes returned, dropping offer.");
+            self.reset(idx);
+            return Ok(());
+        };
+        self.start_transfer_(tmp_file_unsupported, epoll, idx, mime)
+    }
+
+    fn start_transfer_(
+        &mut self,
+        tmp_file_unsupported: &mut bool,
+        epoll: impl AsFd,
+        idx: usize,
+        mime: String,
+    ) -> Result<(), CliError> {
+        info!("Starting transfer for peer {idx} of mime {mime:?}.");
+        let mime_type = MimeType::from(&mime).unwrap();
+
+        let data = if is_plaintext_mime(&mime) {
+            memfd_create(c"ringboard_wayland_copy", MemfdFlags::empty())
+                .map_io_err(|| "Failed to create copy file.")?
+        } else {
+            create_tmp_file(
+                tmp_file_unsupported,
+                CWD,
+                c".",
+                c".ringboard-wayland-scratchpad",
+                OFlags::RDWR,
+                Mode::empty(),
+            )
+            .map_io_err(|| "Failed to create copy temp file.")?
+        };
+
+        let (read, write) = pipe().map_io_err(|| "Failed to create pipe.")?;
+        self.offers[idx]
+            .as_ref()
+            .unwrap()
+            .receive(mime, write.as_fd());
+
+        epoll::add(
+            epoll,
+            &read,
+            epoll::EventData::new_u64(u64::try_from(idx).unwrap()),
+            epoll::EventFlags::IN,
+        )
+        .map_io_err(|| "Failed to register epoll interest in read end of data transfer pipe.")?;
+        self.transfers[idx] = Some(Transfer {
+            read,
+            data,
+            len: 0,
+            mime: mime_type,
+        });
+
+        Ok(())
+    }
+
+    fn continue_transfer(
+        &mut self,
+        tmp_file_unsupported: &mut bool,
+        server: impl AsFd,
+        epoll: impl AsFd,
+        idx: usize,
+    ) -> Result<(), CliError> {
+        let Self {
+            offers: _,
+            mimes,
+            transfers,
+            next: _,
+        } = self;
+
+        let Some(Transfer {
+            read,
+            data,
+            len,
+            mime,
+        }) = &mut transfers[idx]
+        else {
+            error!("Received poll notification for non-existent peer: {idx}.");
+            return Ok(());
+        };
+
+        let count = {
+            let count = usize::MAX / 2 - usize::try_from(*len).unwrap();
+            splice(read, None, &data, Some(len), count, SpliceFlags::empty())
+        }
+        .map_io_err(|| "Failed to splice data from peer into transfer file.")?;
+        if count != 0 {
+            debug!("Received {count} bytes from peer {idx}.");
+            return Ok(());
+        }
+        let len = *len;
+
+        if len == 0
+            || Mmap::new(&data, usize::try_from(len).unwrap())
+                .map_io_err(|| "Failed to mmap copy file")?
+                .iter()
+                .all(u8::is_ascii_whitespace)
+        {
+            warn!("Dropping empty or blank selection for peer {idx} on mime {mime:?}.");
+            if let Some(mime) = mimes[idx].pop_best() {
+                self.start_transfer_(tmp_file_unsupported, epoll, idx, mime)?;
+            } else {
+                self.reset(idx);
+            }
+            return Ok(());
+        }
+
+        let AddResponse::Success { id } =
+            AddRequest::response_add_unchecked(&server, RingKind::Main, *mime, data)?;
+        let _ = id; // TODO
+        info!("Transfer for peer {idx} on mime {mime:?} complete.");
+        self.reset(idx);
+
+        Ok(())
+    }
+
+    fn consume(&mut self, offer: &ZwlrDataControlOfferV1) {
+        let Some(idx) = self.find(offer) else {
+            error!(
+                "Failed to consume offer that does not exist: {:?}",
+                offer.id()
+            );
+            return;
+        };
+        self.reset(idx);
+    }
+
+    fn reset(&mut self, idx: usize) {
+        let Self {
+            offers,
+            mimes,
+            transfers,
+            next: _,
+        } = self;
+
+        offers[idx].take();
+        mem::take(&mut mimes[idx]);
+        transfers[idx].take();
     }
 
     fn find(&self, offer: &ZwlrDataControlOfferV1) -> Option<usize> {
-        self.ids
+        self.offers
             .iter()
             .position(|id| id.as_ref().map(|id| id.id()) == Some(offer.id()))
     }
 }
 
 #[derive(Default, Debug)]
-struct App {
+struct AppDefault {
     manager: Option<AutoDestroy<ZwlrDataControlManagerV1>>,
     seats: Seats,
     pending_offers: PendingOffers,
 
-    error: Option<CliError>,
     pending_seats: SmallVec<(u32, AutoDestroy<WlSeat>), 1>,
-    copy: Option<SyncSender<CopyCommand>>,
+    tmp_file_unsupported: bool,
+
+    error: Option<CliError>,
+}
+
+#[derive(Debug)]
+struct App {
+    inner: AppDefault,
+    epoll: OwnedFd,
 }
 
 impl Dispatch<WlRegistry, ()> for App {
@@ -487,23 +557,26 @@ impl Dispatch<WlRegistry, ()> for App {
             } = event
                 && interface == T::interface().name
             {
-                match object {
-                    Some(_) => {
-                        *error = Some(CliError::BadWaylandGlobal {
-                            message: "duplicate global found",
-                            interface: T::interface().name,
-                        });
-                    }
-                    None => {
-                        let interface = registry.bind(name, version, qhandle, ());
-                        *object = Some(AutoDestroy(interface));
-                    }
+                if object.is_some() {
+                    *error = Some(CliError::BadWaylandGlobal {
+                        message: "duplicate global found",
+                        interface: T::interface().name,
+                    });
+                } else {
+                    let interface = registry.bind(name, version, qhandle, ());
+                    *object = Some(AutoDestroy(interface));
                 }
             }
         }
 
         trace!("Registry event: {event:?}");
-        singleton(registry, qh, &mut this.manager, &mut this.error, &event);
+        singleton(
+            registry,
+            qh,
+            &mut this.inner.manager,
+            &mut this.inner.error,
+            &event,
+        );
         match event {
             Event::Global {
                 name,
@@ -512,10 +585,10 @@ impl Dispatch<WlRegistry, ()> for App {
             } => {
                 if interface == WlSeat::interface().name {
                     let seat: WlSeat = registry.bind(name, version, qh, ());
-                    this.pending_seats.push((name, AutoDestroy(seat)))
+                    this.inner.pending_seats.push((name, AutoDestroy(seat)));
                 }
             }
-            Event::GlobalRemove { name } => this.seats.remove(name),
+            Event::GlobalRemove { name } => this.inner.seats.remove(name),
             _ => debug_assert!(false, "Unhandled registry event: {event:?}"),
         }
     }
@@ -565,7 +638,7 @@ impl Dispatch<ZwlrDataControlDeviceV1, u32> for App {
             match event {
                 Event::DataOffer { id } => {
                     trace!("Received data offer event: {:?}", id.id());
-                    this.pending_offers.init(id);
+                    this.inner.pending_offers.init(id);
                 }
                 Event::Selection { id } => {
                     debug!(
@@ -573,27 +646,11 @@ impl Dispatch<ZwlrDataControlDeviceV1, u32> for App {
                         id.as_ref().map(wayland_client::Proxy::id)
                     );
                     let Some(id) = id else { return Ok(()) };
-                    // TODO add info logs everywhere (copy x11)
-                    let Some((id_, finder)) = this.pending_offers.consume(&id) else {
-                        return Ok(());
-                    };
-                    debug_assert_eq!(*id_, id);
-                    let Some((mime_id, mime_type)) = finder.best() else {
-                        warn!("No usable mimes returned, dropping offer.");
-                        return Ok(());
-                    };
-                    debug_assert_eq!(mime_id, mime_type.as_str());
-
-                    let (read, write) = pipe().map_io_err(|| "Failed to create pipe.")?;
-                    id.receive(mime_id, write.as_fd());
-                    if let Err(e) = this.copy.as_ref().unwrap().try_send(CopyCommand::Copy {
-                        mime_type,
-                        data: read,
-                    }) {
-                        let (TrySendError::Full(cmd) | TrySendError::Disconnected(cmd)) = e;
-                        warn!("Copy thread busy… creating temporary thread.");
-                        // TODO
-                    }
+                    this.inner.pending_offers.start_transfer(
+                        &mut this.inner.tmp_file_unsupported,
+                        &this.epoll,
+                        &id,
+                    )?;
                 }
                 Event::PrimarySelection { id } => {
                     trace!(
@@ -601,15 +658,15 @@ impl Dispatch<ZwlrDataControlDeviceV1, u32> for App {
                         id.as_ref().map(wayland_client::Proxy::id)
                     );
                     let Some(id) = id else { return Ok(()) };
-                    this.pending_offers.consume(&id);
+                    this.inner.pending_offers.consume(&id);
                 }
-                Event::Finished => this.seats.remove(seat),
+                Event::Finished => this.inner.seats.remove(seat),
                 _ => debug_assert!(false, "Unhandled data control device event: {event:?}"),
             }
             Ok(())
         };
 
-        this.error = run().err();
+        this.inner.error = run().err();
     }
 
     event_created_child!(Self, ZwlrDataControlDeviceV1, [
@@ -632,7 +689,7 @@ impl Dispatch<ZwlrDataControlOfferV1, ()> for App {
                     "Received mime type offer for id {:?}: {mime_type:?}",
                     id.id()
                 );
-                this.pending_offers.add_mime(id, mime_type);
+                this.inner.pending_offers.add_mime(id, mime_type);
             }
             _ => debug_assert!(false, "Unhandled data control offer event: {event:?}"),
         }

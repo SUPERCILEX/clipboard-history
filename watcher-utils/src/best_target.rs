@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use ringboard_sdk::core::{is_plaintext_mime, protocol::MimeType};
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 struct SeenMime<Id> {
     id: Id,
     has_params: bool,
@@ -10,11 +10,8 @@ struct SeenMime<Id> {
 
 #[derive(Default, Debug)]
 struct KnownSeenMimes<Id> {
-    text: Option<SeenMime<Id>>,
-    image: Option<SeenMime<Id>>,
-    x_special: Option<SeenMime<Id>>,
-    chromium_custom: Option<SeenMime<Id>>,
-    other: Option<SeenMime<Id>>,
+    mimes: [Option<SeenMime<Id>>; 5],
+    always_none: Option<SeenMime<Id>>,
 }
 
 #[derive(Default, Debug)]
@@ -53,11 +50,15 @@ impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
         let Self {
             seen:
                 KnownSeenMimes {
-                    ref mut text,
-                    ref mut image,
-                    ref mut x_special,
-                    ref mut chromium_custom,
-                    ref mut other,
+                    mimes:
+                        [
+                            ref mut text,
+                            ref mut image,
+                            ref mut x_special,
+                            ref mut chromium_custom,
+                            ref mut other,
+                        ],
+                    always_none: _,
                 },
             ref mut best_mime,
             block_text,
@@ -97,51 +98,44 @@ impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
             });
         }
 
-        if self.seen.best().map(id::AsId::as_id) == Some(id_) {
+        if self
+            .seen
+            .best()
+            .as_ref()
+            .map(|SeenMime { id, has_params: _ }| id)
+            .map(id::AsId::as_id)
+            == Some(id_)
+        {
             *best_mime = *mime;
         }
     }
+}
 
+impl<Id> BestMimeTypeFinder<Id> {
     pub fn block_text(&mut self) {
         self.block_text = true;
     }
 
-    pub fn best(self) -> Option<(Id, MimeType)> {
-        self.seen.into_best().map(|id| (id, self.best_mime))
+    pub fn pop_best(&mut self) -> Option<Id> {
+        self.seen
+            .best()
+            .take()
+            .map(|SeenMime { id, has_params: _ }| id)
+    }
+}
+
+impl<Id: Copy> BestMimeTypeFinder<Id> {
+    pub fn best(mut self) -> Option<(Id, MimeType)> {
+        (*self.seen.best()).map(|SeenMime { id, has_params: _ }| (id, self.best_mime))
     }
 }
 
 impl<Id> KnownSeenMimes<Id> {
-    fn best(&self) -> Option<&Id> {
-        let Self {
-            text,
-            image,
-            x_special,
-            chromium_custom,
-            other,
-        } = self;
-
-        text.as_ref()
-            .or(image.as_ref())
-            .or(x_special.as_ref())
-            .or(chromium_custom.as_ref())
-            .or(other.as_ref())
-            .map(|SeenMime { id, has_params: _ }| id)
-    }
-
-    fn into_best(self) -> Option<Id> {
-        let Self {
-            text,
-            image,
-            x_special,
-            chromium_custom,
-            other,
-        } = self;
-
-        text.or(image)
-            .or(x_special)
-            .or(chromium_custom)
-            .or(other)
-            .map(|SeenMime { id, has_params: _ }| id)
+    fn best(&mut self) -> &mut Option<SeenMime<Id>> {
+        let Self { mimes, always_none } = self;
+        mimes
+            .iter_mut()
+            .find(|m| m.is_some())
+            .unwrap_or(always_none)
     }
 }
