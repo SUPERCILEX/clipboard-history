@@ -10,7 +10,7 @@ struct SeenMime<Id> {
 
 #[derive(Default, Debug)]
 struct KnownSeenMimes<Id> {
-    mimes: [Option<SeenMime<Id>>; 5],
+    mimes: [Option<SeenMime<Id>>; 6],
     always_none: Option<SeenMime<Id>>,
 }
 
@@ -18,7 +18,7 @@ struct KnownSeenMimes<Id> {
 pub struct BestMimeTypeFinder<Id> {
     seen: KnownSeenMimes<Id>,
     best_mime: MimeType,
-    block_text: bool,
+    block_plain_text: bool,
 }
 
 mod id {
@@ -52,29 +52,32 @@ impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
                 KnownSeenMimes {
                     mimes:
                         [
-                            ref mut text,
+                            ref mut plain,
                             ref mut image,
                             ref mut x_special,
                             ref mut chromium_custom,
+                            ref mut any_text,
                             ref mut other,
                         ],
                     always_none: _,
                 },
             ref mut best_mime,
-            block_text,
+            block_plain_text,
         } = *self;
 
         let target = if is_plaintext_mime(mime) {
-            if block_text {
+            if block_plain_text {
                 return;
             }
-            text
+            plain
         } else if mime.starts_with("image/") {
             image
         } else if mime.starts_with("x-special/") {
             x_special
-        } else if mime.starts_with("chromium/") {
+        } else if mime == "chromium/x-web-custom-data" {
             chromium_custom
+        } else if mime.starts_with("text/") {
+            any_text
         } else if mime.chars().next().map_or(true, char::is_lowercase) {
             other
         } else {
@@ -112,8 +115,8 @@ impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
 }
 
 impl<Id> BestMimeTypeFinder<Id> {
-    pub fn block_text(&mut self) {
-        self.block_text = true;
+    pub fn block_plain_text(&mut self) {
+        self.block_plain_text = true;
     }
 
     pub fn pop_best(&mut self) -> Option<Id> {

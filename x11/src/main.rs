@@ -788,7 +788,7 @@ fn handle_x11_event(
                             "Blocking plain text as it returned a blank or empty result on the \
                              fast path."
                         );
-                        finder.block_text();
+                        finder.block_plain_text();
                     }
                     loop {
                         let atom = value.next();
