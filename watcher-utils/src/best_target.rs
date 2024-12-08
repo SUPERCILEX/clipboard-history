@@ -78,7 +78,7 @@ impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
             chromium_custom
         } else if mime.starts_with("text/") {
             any_text
-        } else if mime.chars().next().map_or(true, char::is_lowercase) {
+        } else if mime.chars().next().is_none_or(char::is_lowercase) {
             other
         } else {
             return;

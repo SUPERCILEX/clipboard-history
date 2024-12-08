@@ -100,7 +100,7 @@ pub mod types {
             if Self::DATA_START
                 .checked_add(msghdr_name_len)
                 .and_then(|acc| acc.checked_add(msghdr_control_len))
-                .map_or(true, |header_len| buffer.len() < header_len)
+                .is_none_or(|header_len| buffer.len() < header_len)
             {
                 return Err(());
             }
