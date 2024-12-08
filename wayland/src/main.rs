@@ -14,16 +14,19 @@ use std::{
 use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
-    api::{AddRequest, connect_to_server},
+    api::{AddRequest, MoveToFrontRequest, connect_to_server},
     core::{
         Error, IoErr, create_tmp_file,
         dirs::socket_file,
         is_plaintext_mime,
-        protocol::{AddResponse, IdNotFoundError, MimeType, RingKind},
+        protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
         ring::Mmap,
     },
 };
-use ringboard_watcher_utils::best_target::BestMimeTypeFinder;
+use ringboard_watcher_utils::{
+    best_target::BestMimeTypeFinder,
+    deduplication::{CopyData, CopyDeduplication},
+};
 use rustc_hash::FxHasher;
 use rustix::{
     event::epoll,
@@ -149,6 +152,8 @@ fn run() -> Result<(), CliError> {
 
     let mut epoll_events = epoll::EventVec::with_capacity(1 + OFFER_BUFFERS);
 
+    let mut deduplicator = CopyDeduplication::new()?;
+
     info!("Starting event loop.");
     loop {
         if let Some(e) = app.inner.error {
@@ -169,8 +174,9 @@ fn run() -> Result<(), CliError> {
             r => r.map_io_err(|| "Failed to wait for epoll events.")?,
         };
         for epoll::Event { flags: _, data } in &epoll_events {
+            const OFFER_BUFFERS_U64: u64 = OFFER_BUFFERS as u64;
             match data.u64() {
-                4 => {
+                OFFER_BUFFERS_U64 => {
                     trace!("Wayland event received.");
                     let count = event_queue
                         .prepare_read()
@@ -181,10 +187,11 @@ fn run() -> Result<(), CliError> {
                     event_queue.dispatch_pending(&mut app)?;
                     trace!("Dispatched {count} events.");
                 }
-                idx @ 0..4 => app.inner.pending_offers.continue_transfer(
+                idx @ ..OFFER_BUFFERS_U64 => app.inner.pending_offers.continue_transfer(
                     &mut app.inner.tmp_file_unsupported,
                     &server,
                     &app.epoll,
+                    &mut deduplicator,
                     usize::try_from(idx).unwrap(),
                 )?,
                 _ => unreachable!(),
@@ -318,7 +325,7 @@ impl PendingOffers {
 
         let idx = usize::from(self.next) & (OFFER_BUFFERS - 1);
         if let Some(id) = &self.offers[idx] {
-            warn!("Dropping old offer: {:?}", id.id());
+            warn!("Dropping old offer for peer {idx}: {:?}", id.id());
         }
 
         let Self {
@@ -336,7 +343,7 @@ impl PendingOffers {
     }
 
     fn add_mime(&mut self, offer: &ZwlrDataControlOfferV1, mime: String) {
-        let Ok(mime_type) = MimeType::from(mime.as_str()) else {
+        let Ok(mime_type) = MimeType::from(&mime) else {
             warn!("Mime {mime:?} too long, ignoring.");
             return;
         };
@@ -365,12 +372,7 @@ impl PendingOffers {
             return Ok(());
         };
 
-        let Some(mime) = self.mimes[idx].pop_best() else {
-            warn!("No usable mimes returned, dropping offer.");
-            self.reset(idx);
-            return Ok(());
-        };
-        self.start_transfer_(tmp_file_unsupported, epoll, idx, mime)
+        self.start_transfer_(tmp_file_unsupported, epoll, idx)
     }
 
     fn start_transfer_(
@@ -378,8 +380,13 @@ impl PendingOffers {
         tmp_file_unsupported: &mut bool,
         epoll: impl AsFd,
         idx: usize,
-        mime: String,
     ) -> Result<(), CliError> {
+        let Some(mime) = self.mimes[idx].pop_best() else {
+            warn!("No usable mimes returned, dropping offer.");
+            self.reset(idx);
+            return Ok(());
+        };
+
         info!("Starting transfer for peer {idx} of mime {mime:?}.");
         let mime_type = MimeType::from(&mime).unwrap();
 
@@ -426,21 +433,15 @@ impl PendingOffers {
         tmp_file_unsupported: &mut bool,
         server: impl AsFd,
         epoll: impl AsFd,
+        deduplicator: &mut CopyDeduplication,
         idx: usize,
     ) -> Result<(), CliError> {
-        let Self {
-            offers: _,
-            mimes,
-            transfers,
-            next: _,
-        } = self;
-
         let Some(Transfer {
             read,
             data,
             len,
             mime,
-        }) = &mut transfers[idx]
+        }) = &mut self.transfers[idx]
         else {
             error!("Received poll notification for non-existent peer: {idx}.");
             return Ok(());
@@ -457,24 +458,32 @@ impl PendingOffers {
         }
         let len = *len;
 
-        if len == 0
-            || Mmap::new(&data, usize::try_from(len).unwrap())
-                .map_io_err(|| "Failed to mmap copy file")?
-                .iter()
-                .all(u8::is_ascii_whitespace)
-        {
+        let mmap;
+        if len == 0 || {
+            mmap = Mmap::new(&data, usize::try_from(len).unwrap())
+                .map_io_err(|| "Failed to mmap copy file")?;
+            mmap.iter().all(u8::is_ascii_whitespace)
+        } {
             warn!("Dropping empty or blank selection for peer {idx} on mime {mime:?}.");
-            if let Some(mime) = mimes[idx].pop_best() {
-                self.start_transfer_(tmp_file_unsupported, epoll, idx, mime)?;
-            } else {
-                self.reset(idx);
-            }
+            self.start_transfer_(tmp_file_unsupported, epoll, idx)?;
             return Ok(());
+        }
+
+        let data_hash = CopyDeduplication::hash(CopyData::Slice(&mmap), len);
+        if let Some(existing) = deduplicator.check(data_hash, CopyData::Slice(&mmap)) {
+            info!("Promoting duplicate entry from peer {idx} on mime {mime:?} to front.");
+            if let MoveToFrontResponse::Success { id } =
+                MoveToFrontRequest::response(&server, existing, None)?
+            {
+                deduplicator.remember(data_hash, id);
+                self.reset(idx);
+                return Ok(());
+            }
         }
 
         let AddResponse::Success { id } =
             AddRequest::response_add_unchecked(&server, RingKind::Main, *mime, data)?;
-        let _ = id; // TODO
+        deduplicator.remember(data_hash, id);
         info!("Transfer for peer {idx} on mime {mime:?} complete.");
         self.reset(idx);
 
@@ -666,7 +675,10 @@ impl Dispatch<ZwlrDataControlDeviceV1, u32> for App {
             Ok(())
         };
 
-        this.inner.error = run().err();
+        let err = run().err();
+        if this.inner.error.is_none() {
+            this.inner.error = err;
+        }
     }
 
     event_created_child!(Self, ZwlrDataControlDeviceV1, [

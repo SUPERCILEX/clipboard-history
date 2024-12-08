@@ -95,6 +95,7 @@ impl CopyDeduplication {
         })
     }
 
+    #[must_use]
     pub fn hash(data: CopyData, len: u64) -> u64 {
         let mut data_hasher = FxHasher::default();
         if len >= 4096 {

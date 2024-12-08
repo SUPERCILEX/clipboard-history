@@ -36,7 +36,10 @@ use ringboard_sdk::{
         ring::Mmap,
     },
 };
-use ringboard_watcher_utils::best_target::BestMimeTypeFinder;
+use ringboard_watcher_utils::{
+    best_target::BestMimeTypeFinder,
+    deduplication::{CopyData, CopyDeduplication},
+};
 use rustix::{
     event::epoll,
     fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
@@ -72,10 +75,6 @@ use x11rb::{
     wrapper::ConnectionExt as WrapperConnExt,
     x11_utils::X11Error,
 };
-
-use crate::deduplication::{CopyData, CopyDeduplication};
-
-mod deduplication;
 
 #[derive(Error, Debug)]
 enum CliError {
