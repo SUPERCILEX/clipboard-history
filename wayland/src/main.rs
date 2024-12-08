@@ -8,7 +8,10 @@ use std::{
     io,
     io::{Seek, SeekFrom},
     mem,
+    mem::ManuallyDrop,
+    ops::Deref,
     os::fd::{AsFd, OwnedFd},
+    ptr,
     sync::{
         mpsc,
         mpsc::{Receiver, SyncSender, TrySendError},
@@ -31,10 +34,13 @@ use ringboard_sdk::{
 use ringboard_watcher_utils::best_target::BestMimeTypeFinder;
 use rustc_hash::FxHasher;
 use rustix::{
+    event::epoll,
     fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
+    io::Errno,
     net::SocketAddrUnix,
     pipe::pipe,
 };
+use smallvec::SmallVec;
 use thiserror::Error;
 use wayland_client::{
     ConnectError, Connection, Dispatch, DispatchError, Proxy, QueueHandle, event_created_child,
@@ -130,45 +136,128 @@ fn run() -> Result<(), CliError> {
     debug!("Wayland connection established.");
 
     let mut event_queue = conn.new_event_queue();
-    let mut app = {
-        let mut init = Init {
-            qh: event_queue.handle(),
-            manager: None,
-        };
+    let mut app = App::default();
+    app.copy = Some(copy_send);
 
-        let mut event_queue = conn.new_event_queue();
-        conn.display().get_registry(&event_queue.handle(), ());
-        event_queue.roundtrip(&mut init)?;
+    conn.display().get_registry(&event_queue.handle(), ());
+    event_queue.roundtrip(&mut app)?;
+    debug!("Registered Wayland global listener.");
 
-        let Some(manager) = init.manager else {
-            return Err(CliError::BadWaylandGlobal {
-                message: "compositor does not implement necessary interface",
-                interface: "zwlr_data_control_manager_v1",
-            });
-        };
-        let manager = manager?;
-
-        App {
-            manager,
-            seats: Seats::default(),
-            pending_offers: PendingOffers::default(),
-
-            error: None,
-            copy: copy_send,
-        }
+    if let Some(e) = app.error {
+        return Err(e);
+    }
+    if app.manager.is_none() {
+        return Err(CliError::BadWaylandGlobal {
+            message: "compositor does not implement necessary interface",
+            interface: "zwlr_data_control_manager_v1",
+        });
     };
     debug!("Wayland globals initialized.");
-    conn.display().get_registry(&event_queue.handle(), ());
 
-    event_queue.roundtrip(&mut app)?;
+    let epoll =
+        epoll::create(epoll::CreateFlags::empty()).map_io_err(|| "Failed to create epoll.")?;
+    epoll::add(
+        &epoll,
+        conn,
+        epoll::EventData::new_u64(0),
+        epoll::EventFlags::IN,
+    )
+    .map_io_err(|| "Failed to register epoll interest in Wayland socket.")?;
+    let mut epoll_events = epoll::EventVec::with_capacity(1 + OFFER_BUFFERS);
+
+    info!("Starting event loop.");
     loop {
         if let Some(e) = app.error {
             return Err(e);
         }
-        if let Ok(e) = error_recv.try_recv() {
-            return Err(e);
+        if let Some(manager) = &app.manager {
+            for (name, seat) in app.pending_seats.drain(..) {
+                let device = manager.get_data_device(&seat, &event_queue.handle(), name);
+                app.seats.add(name, seat.into_inner(), device);
+            }
         }
-        event_queue.blocking_dispatch(&mut app)?;
+        event_queue.flush().map_err(DispatchError::from)?;
+
+        trace!("Waiting for event.");
+        match epoll::wait(&epoll, &mut epoll_events, -1) {
+            Err(Errno::INTR) => continue,
+            r => r.map_io_err(|| "Failed to wait for epoll events.")?,
+        };
+        for epoll::Event { flags: _, data } in &epoll_events {
+            match data.u64() {
+                0 => {
+                    let count = event_queue
+                        .prepare_read()
+                        .unwrap()
+                        .read()
+                        .map_err(DispatchError::from)?;
+                    trace!("Prepared {count} events.");
+                    event_queue.dispatch_pending(&mut app)?;
+                    trace!("Dispatched {count} events.");
+                }
+                1..=4 => {
+                    // TODO
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+}
+
+trait Destroyable {
+    fn destroy(&self);
+}
+
+impl Destroyable for WlSeat {
+    fn destroy(&self) {
+        self.release();
+    }
+}
+
+impl Destroyable for ZwlrDataControlManagerV1 {
+    fn destroy(&self) {
+        self.destroy();
+    }
+}
+
+impl Destroyable for ZwlrDataControlDeviceV1 {
+    fn destroy(&self) {
+        self.destroy();
+    }
+}
+
+impl Destroyable for ZwlrDataControlOfferV1 {
+    fn destroy(&self) {
+        self.destroy();
+    }
+}
+
+struct AutoDestroy<T: Destroyable>(T);
+
+impl<T: Destroyable> AutoDestroy<T> {
+    fn into_inner(self) -> T {
+        let this = ManuallyDrop::new(self);
+        unsafe { ptr::read(&this.0) }
+    }
+}
+
+impl<T: Destroyable + Debug> Debug for AutoDestroy<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        (**self).fmt(f)
+    }
+}
+
+impl<T: Destroyable> Deref for AutoDestroy<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: Destroyable> Drop for AutoDestroy<T> {
+    fn drop(&mut self) {
+        self.destroy();
     }
 }
 
@@ -252,80 +341,25 @@ fn copy_thread(
     Ok(())
 }
 
-#[derive(Debug)]
-struct Init {
-    qh: QueueHandle<App>,
-    manager: Option<Result<ZwlrDataControlManagerV1, CliError>>,
-}
-
-impl Dispatch<WlRegistry, ()> for Init {
-    fn event(
-        Self { qh, manager }: &mut Self,
-        registry: &WlRegistry,
-        event: <WlRegistry as Proxy>::Event,
-        (): &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        use wl_registry::Event;
-
-        fn singleton<T: Proxy + 'static>(
-            registry: &WlRegistry,
-            qhandle: &QueueHandle<App>,
-            object: &mut Option<Result<T, CliError>>,
-            event: &Event,
-        ) where
-            App: Dispatch<T, ()>,
-        {
-            if let &Event::Global {
-                name,
-                ref interface,
-                version,
-            } = event
-                && interface == T::interface().name
-            {
-                if let Some(Ok(_)) = object {
-                    *object = Some(Err(CliError::BadWaylandGlobal {
-                        message: "duplicate global found",
-                        interface: T::interface().name,
-                    }));
-                } else if object.is_none() {
-                    let interface = registry.bind(name, version, qhandle, ());
-                    *object = Some(Ok(interface));
-                }
-            }
-        }
-
-        singleton(registry, qh, manager, &event);
-    }
-}
-
-struct ZwlrDataControlDeviceV1AutoDestroy(ZwlrDataControlDeviceV1);
-
-impl Debug for ZwlrDataControlDeviceV1AutoDestroy {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Drop for ZwlrDataControlDeviceV1AutoDestroy {
-    fn drop(&mut self) {
-        self.0.destroy();
-    }
-}
-
 #[derive(Default, Debug)]
 struct Seats {
-    first: Option<(u32, ZwlrDataControlDeviceV1AutoDestroy)>,
-    others: HashMap<u32, ZwlrDataControlDeviceV1AutoDestroy, BuildHasherDefault<FxHasher>>,
+    first: Option<(
+        u32,
+        (AutoDestroy<WlSeat>, AutoDestroy<ZwlrDataControlDeviceV1>),
+    )>,
+    others: HashMap<
+        u32,
+        (AutoDestroy<WlSeat>, AutoDestroy<ZwlrDataControlDeviceV1>),
+        BuildHasherDefault<FxHasher>,
+    >,
 }
 
 impl Seats {
-    fn add(&mut self, seat: u32, device: ZwlrDataControlDeviceV1) {
-        let device = ZwlrDataControlDeviceV1AutoDestroy(device);
+    fn add(&mut self, seat: u32, seat_obj: WlSeat, device: ZwlrDataControlDeviceV1) {
+        let value = (AutoDestroy(seat_obj), AutoDestroy(device));
         if self.first.is_none() {
-            self.first = Some((seat, device));
-        } else if self.others.insert(seat, device).is_some() {
+            self.first = Some((seat, value));
+        } else if self.others.insert(seat, value).is_some() {
             error!("Duplicate seat: {seat}");
         }
     }
@@ -350,25 +384,11 @@ impl Seats {
     }
 }
 
-struct ZwlrDataControlOfferV1AutoDestroy(ZwlrDataControlOfferV1);
-
-impl Debug for ZwlrDataControlOfferV1AutoDestroy {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Drop for ZwlrDataControlOfferV1AutoDestroy {
-    fn drop(&mut self) {
-        self.0.destroy();
-    }
-}
-
 const OFFER_BUFFERS: usize = 4;
 
 #[derive(Default, Debug)]
 struct PendingOffers {
-    ids: [Option<ZwlrDataControlOfferV1AutoDestroy>; OFFER_BUFFERS],
+    ids: [Option<AutoDestroy<ZwlrDataControlOfferV1>>; OFFER_BUFFERS],
     offers: [BestMimeTypeFinder<String>; OFFER_BUFFERS],
     next: u8,
 }
@@ -379,10 +399,10 @@ impl PendingOffers {
 
         let idx = usize::from(self.next) & (OFFER_BUFFERS - 1);
         if let Some(id) = &self.ids[idx] {
-            warn!("Dropping old offer: {:?}", id.0.id());
+            warn!("Dropping old offer: {:?}", id.id());
         }
 
-        self.ids[idx] = Some(ZwlrDataControlOfferV1AutoDestroy(offer));
+        self.ids[idx] = Some(AutoDestroy(offer));
         self.offers[idx] = BestMimeTypeFinder::default();
 
         self.next = self.next.wrapping_add(1);
@@ -408,7 +428,7 @@ impl PendingOffers {
         &mut self,
         offer: &ZwlrDataControlOfferV1,
     ) -> Option<(
-        ZwlrDataControlOfferV1AutoDestroy,
+        AutoDestroy<ZwlrDataControlOfferV1>,
         BestMimeTypeFinder<String>,
     )> {
         let Some(idx) = self.find(offer) else {
@@ -425,18 +445,19 @@ impl PendingOffers {
     fn find(&self, offer: &ZwlrDataControlOfferV1) -> Option<usize> {
         self.ids
             .iter()
-            .position(|id| id.as_ref().map(|id| id.0.id()) == Some(offer.id()))
+            .position(|id| id.as_ref().map(|id| id.id()) == Some(offer.id()))
     }
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 struct App {
-    manager: ZwlrDataControlManagerV1,
+    manager: Option<AutoDestroy<ZwlrDataControlManagerV1>>,
     seats: Seats,
     pending_offers: PendingOffers,
 
     error: Option<CliError>,
-    copy: SyncSender<CopyCommand>,
+    pending_seats: SmallVec<(u32, AutoDestroy<WlSeat>), 1>,
+    copy: Option<SyncSender<CopyCommand>>,
 }
 
 impl Dispatch<WlRegistry, ()> for App {
@@ -449,7 +470,40 @@ impl Dispatch<WlRegistry, ()> for App {
         qh: &QueueHandle<Self>,
     ) {
         use wl_registry::Event;
+
+        fn singleton<T: Destroyable + Proxy + 'static>(
+            registry: &WlRegistry,
+            qhandle: &QueueHandle<App>,
+            object: &mut Option<AutoDestroy<T>>,
+            error: &mut Option<CliError>,
+            event: &Event,
+        ) where
+            App: Dispatch<T, ()>,
+        {
+            if let &Event::Global {
+                name,
+                ref interface,
+                version,
+            } = event
+                && interface == T::interface().name
+            {
+                match object {
+                    Some(_) => {
+                        *error = Some(CliError::BadWaylandGlobal {
+                            message: "duplicate global found",
+                            interface: T::interface().name,
+                        });
+                    }
+                    None => {
+                        let interface = registry.bind(name, version, qhandle, ());
+                        *object = Some(AutoDestroy(interface));
+                    }
+                }
+            }
+        }
+
         trace!("Registry event: {event:?}");
+        singleton(registry, qh, &mut this.manager, &mut this.error, &event);
         match event {
             Event::Global {
                 name,
@@ -458,8 +512,7 @@ impl Dispatch<WlRegistry, ()> for App {
             } => {
                 if interface == WlSeat::interface().name {
                     let seat: WlSeat = registry.bind(name, version, qh, ());
-                    let device = this.manager.get_data_device(&seat, qh, name);
-                    this.seats.add(name, device);
+                    this.pending_seats.push((name, AutoDestroy(seat)))
                 }
             }
             Event::GlobalRemove { name } => this.seats.remove(name),
@@ -524,7 +577,7 @@ impl Dispatch<ZwlrDataControlDeviceV1, u32> for App {
                     let Some((id_, finder)) = this.pending_offers.consume(&id) else {
                         return Ok(());
                     };
-                    debug_assert_eq!(id_.0, id);
+                    debug_assert_eq!(*id_, id);
                     let Some((mime_id, mime_type)) = finder.best() else {
                         warn!("No usable mimes returned, dropping offer.");
                         return Ok(());
@@ -533,7 +586,7 @@ impl Dispatch<ZwlrDataControlDeviceV1, u32> for App {
 
                     let (read, write) = pipe().map_io_err(|| "Failed to create pipe.")?;
                     id.receive(mime_id, write.as_fd());
-                    if let Err(e) = this.copy.try_send(CopyCommand::Copy {
+                    if let Err(e) = this.copy.as_ref().unwrap().try_send(CopyCommand::Copy {
                         mime_type,
                         data: read,
                     }) {

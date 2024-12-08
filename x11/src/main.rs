@@ -377,9 +377,9 @@ fn run() -> Result<(), CliError> {
         paste_timer.as_ref().map(OwnedFd::as_fd),
     ]
     .iter()
+    .flatten()
     .enumerate()
     {
-        let Some(fd) = fd else { continue };
         epoll::add(
             &epoll,
             fd,
