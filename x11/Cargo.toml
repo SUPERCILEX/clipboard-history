@@ -16,8 +16,8 @@ error-stack = { version = "0.5.0", default-features = false, features = ["std"] 
 log = { version = "0.4.22", features = ["release_max_level_info"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "config"] }
 ringboard-watcher-utils = { package = "clipboard-history-watcher-utils", version = "0", path = "../watcher-utils" }
-rustix = { version = "0.38.41", features = ["fs", "time"] }
-thiserror = "2.0.3"
+rustix = { version = "0.38.42", features = ["fs", "time"] }
+thiserror = "2.0.6"
 toml = { version = "0.8.19", default-features = false, features = ["parse"] }
 x11rb = { version = "0.13.1", features = ["xfixes", "xtest"] }
 
