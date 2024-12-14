@@ -447,16 +447,44 @@ impl PendingOffers {
             return Ok(());
         };
 
-        let count = {
-            let count = usize::MAX / 2 - usize::try_from(*len).unwrap();
-            splice(read, None, &data, Some(len), count, SpliceFlags::empty())
-        }
-        .map_io_err(|| "Failed to splice data from peer into transfer file.")?;
-        if count != 0 {
-            debug!("Received {count} bytes from peer {idx}.");
-            return Ok(());
+        {
+            let log_bytes_received = |count| debug!("Received {count} bytes from peer {idx}.");
+
+            let mut total = 0;
+            loop {
+                match {
+                    let max_remaining = usize::MAX / 2 - usize::try_from(*len).unwrap();
+                    splice(
+                        &read,
+                        None,
+                        &data,
+                        Some(len),
+                        max_remaining,
+                        if total == 0 {
+                            SpliceFlags::empty()
+                        } else {
+                            SpliceFlags::NONBLOCK
+                        },
+                    )
+                } {
+                    Err(Errno::AGAIN) => {
+                        log_bytes_received(total);
+                        return Ok(());
+                    }
+                    r => {
+                        let count =
+                            r.map_io_err(|| "Failed to splice data from peer into transfer file.")?;
+                        log_bytes_received(count);
+                        if count == 0 {
+                            break;
+                        }
+                        total += count;
+                    }
+                }
+            }
         }
         let len = *len;
+        debug!("Finished transferring {len} bytes from peer {idx}.");
 
         let mmap;
         if len == 0 || {
