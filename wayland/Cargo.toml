@@ -18,7 +18,7 @@ ringboard-watcher-utils = { package = "clipboard-history-watcher-utils", version
 rustc-hash = "2.1.0"
 rustix = { version = "0.38.42", features = ["pipe", "event"] }
 smallvec = "2.0.0-alpha.8"
-thiserror = "2.0.6"
+thiserror = "2.0.7"
 wayland-client = "0.31.7"
 wayland-protocols-wlr = { version = "0.3.5", features = ["client"] }
 

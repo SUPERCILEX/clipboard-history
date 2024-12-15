@@ -26,11 +26,11 @@ pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::try
 impl<T, U> core::convert::TryInto<U> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where U: core::convert::TryFrom<T>
 pub type clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::Error = <U as core::convert::TryFrom<T>>::Error
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
-impl<T> core::any::Any for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where T: 'static + core::marker::Sized
+impl<T> core::any::Any for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where T: 'static + ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where T: core::marker::Sized
+impl<T> core::borrow::Borrow<T> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where T: ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where T: core::marker::Sized
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id> where T: ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::from(t: T) -> T
@@ -61,11 +61,11 @@ impl<T> alloc::borrow::ToOwned for clipboard_history_watcher_utils::deduplicatio
 pub type clipboard_history_watcher_utils::deduplication::CopyData<'a>::Owned = T
 pub fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::clone_into(&self, target: &mut T)
 pub fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::to_owned(&self) -> T
-impl<T> core::any::Any for clipboard_history_watcher_utils::deduplication::CopyData<'a> where T: 'static + core::marker::Sized
+impl<T> core::any::Any for clipboard_history_watcher_utils::deduplication::CopyData<'a> where T: 'static + ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_watcher_utils::deduplication::CopyData<'a> where T: core::marker::Sized
+impl<T> core::borrow::Borrow<T> for clipboard_history_watcher_utils::deduplication::CopyData<'a> where T: ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_watcher_utils::deduplication::CopyData<'a> where T: core::marker::Sized
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_watcher_utils::deduplication::CopyData<'a> where T: ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::borrow_mut(&mut self) -> &mut T
 impl<T> core::clone::CloneToUninit for clipboard_history_watcher_utils::deduplication::CopyData<'a> where T: core::clone::Clone
 pub unsafe fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::clone_to_uninit(&self, dst: *mut u8)
@@ -91,11 +91,11 @@ pub fn clipboard_history_watcher_utils::deduplication::CopyDeduplication::try_fr
 impl<T, U> core::convert::TryInto<U> for clipboard_history_watcher_utils::deduplication::CopyDeduplication where U: core::convert::TryFrom<T>
 pub type clipboard_history_watcher_utils::deduplication::CopyDeduplication::Error = <U as core::convert::TryFrom<T>>::Error
 pub fn clipboard_history_watcher_utils::deduplication::CopyDeduplication::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
-impl<T> core::any::Any for clipboard_history_watcher_utils::deduplication::CopyDeduplication where T: 'static + core::marker::Sized
+impl<T> core::any::Any for clipboard_history_watcher_utils::deduplication::CopyDeduplication where T: 'static + ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::deduplication::CopyDeduplication::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_watcher_utils::deduplication::CopyDeduplication where T: core::marker::Sized
+impl<T> core::borrow::Borrow<T> for clipboard_history_watcher_utils::deduplication::CopyDeduplication where T: ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::deduplication::CopyDeduplication::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_watcher_utils::deduplication::CopyDeduplication where T: core::marker::Sized
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_watcher_utils::deduplication::CopyDeduplication where T: ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::deduplication::CopyDeduplication::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_watcher_utils::deduplication::CopyDeduplication
 pub fn clipboard_history_watcher_utils::deduplication::CopyDeduplication::from(t: T) -> T
