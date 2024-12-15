@@ -1113,7 +1113,7 @@ fn handle_paste_event(
     }
 
     let (
-        PasteCommand {
+        cmd @ PasteCommand {
             trigger_paste,
             id,
             mime,
@@ -1121,6 +1121,7 @@ fn handle_paste_event(
         },
         fd,
     ) = read_paste_command(paste_socket, ancillary_buf)?;
+    debug!("Received paste command: {cmd:?}");
 
     MoveToFrontRequest::send(&server, id, None, SendFlags::empty())?;
     let move_to_front_guard = MoveToFrontGuard(server, last_paste, deduplicator);
