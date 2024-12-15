@@ -4,47 +4,55 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
     hash::BuildHasherDefault,
+    io::ErrorKind::WouldBlock,
     mem,
     mem::ManuallyDrop,
     ops::Deref,
     os::fd::{AsFd, OwnedFd},
     ptr,
+    rc::Rc,
 };
 
+use arrayvec::ArrayVec;
 use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
-    api::{AddRequest, MoveToFrontRequest, connect_to_server},
+    api::{AddRequest, MoveToFrontRequest, PasteCommand, connect_to_server},
     core::{
         Error, IoErr, create_tmp_file,
-        dirs::socket_file,
-        is_plaintext_mime,
+        dirs::{paste_socket_file, socket_file},
+        init_unix_server, is_plaintext_mime,
         protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
         ring::Mmap,
     },
+    is_text_mime,
 };
 use ringboard_watcher_utils::{
     best_target::BestMimeTypeFinder,
     deduplication::{CopyData, CopyDeduplication},
+    utils::read_paste_command,
 };
 use rustc_hash::FxHasher;
 use rustix::{
     event::epoll,
     fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
     io::Errno,
-    net::SocketAddrUnix,
+    net::{SocketAddrUnix, SocketType},
     pipe::{SpliceFlags, pipe, splice},
 };
 use smallvec::SmallVec;
 use thiserror::Error;
 use wayland_client::{
-    ConnectError, Connection, Dispatch, DispatchError, Proxy, QueueHandle, event_created_child,
+    ConnectError, Connection, Dispatch, DispatchError, Proxy, QueueHandle,
+    backend::WaylandError,
+    event_created_child,
     protocol::{wl_registry, wl_registry::WlRegistry, wl_seat, wl_seat::WlSeat},
 };
 use wayland_protocols_wlr::data_control::v1::client::{
     zwlr_data_control_device_v1::{self, ZwlrDataControlDeviceV1},
     zwlr_data_control_manager_v1::ZwlrDataControlManagerV1,
     zwlr_data_control_offer_v1::{self, ZwlrDataControlOfferV1},
+    zwlr_data_control_source_v1::{self, ZwlrDataControlSourceV1},
 };
 
 #[derive(Error, Debug)]
@@ -120,15 +128,24 @@ fn run() -> Result<(), CliError> {
     let conn = Connection::connect_to_env()?;
     debug!("Wayland connection established.");
 
+    let paste_socket = init_unix_server(paste_socket_file(), SocketType::DGRAM)?;
+    debug!("Initialized paste server");
+
+    let mut ancillary_buf = [0; rustix::cmsg_space!(ScmRights(1))];
+
     let epoll =
         epoll::create(epoll::CreateFlags::empty()).map_io_err(|| "Failed to create epoll.")?;
-    epoll::add(
-        &epoll,
-        &conn,
-        epoll::EventData::new_u64(4),
-        epoll::EventFlags::IN,
-    )
-    .map_io_err(|| "Failed to register epoll interest in Wayland socket.")?;
+    for (i, fd) in [conn.as_fd(), paste_socket.as_fd()].iter().enumerate() {
+        epoll::add(
+            &epoll,
+            fd,
+            epoll::EventData::new_u64(
+                u64::try_from(i + IN_TRANSFER_BUFFERS + OUT_TRANSFER_BUFFERS).unwrap(),
+            ),
+            epoll::EventFlags::IN,
+        )
+        .map_io_err(|| "Failed to register epoll interest.")?;
+    }
     let mut app = App {
         inner: AppDefault::default(),
         epoll,
@@ -151,7 +168,7 @@ fn run() -> Result<(), CliError> {
     };
     debug!("Wayland globals initialized.");
 
-    let mut epoll_events = epoll::EventVec::with_capacity(1 + OFFER_BUFFERS);
+    let mut epoll_events = epoll::EventVec::with_capacity(4);
 
     let mut deduplicator = CopyDeduplication::new()?;
 
@@ -175,25 +192,38 @@ fn run() -> Result<(), CliError> {
             r => r.map_io_err(|| "Failed to wait for epoll events.")?,
         };
         for epoll::Event { flags: _, data } in &epoll_events {
-            const OFFER_BUFFERS_U64: u64 = OFFER_BUFFERS as u64;
+            const OUT_START_IDX: u64 = IN_TRANSFER_BUFFERS as u64;
+            const WAYLAND_IDX: u64 = OUT_START_IDX + OUT_TRANSFER_BUFFERS as u64;
+            const PASTE_SERVER_IDX: u64 = WAYLAND_IDX + 1;
             match data.u64() {
-                OFFER_BUFFERS_U64 => {
-                    trace!("Wayland event received.");
-                    let count = event_queue
-                        .prepare_read()
-                        .unwrap()
-                        .read()
-                        .map_err(DispatchError::from)?;
-                    trace!("Prepared {count} events.");
-                    event_queue.dispatch_pending(&mut app)?;
-                    trace!("Dispatched {count} events.");
-                }
-                idx @ ..OFFER_BUFFERS_U64 => app.inner.pending_offers.continue_transfer(
+                idx @ ..OUT_START_IDX => app.inner.pending_offers.continue_transfer(
                     &mut app.inner.tmp_file_unsupported,
                     &server,
                     &app.epoll,
                     &mut deduplicator,
                     usize::try_from(idx).unwrap(),
+                )?,
+                idx @ OUT_START_IDX..WAYLAND_IDX => app
+                    .inner
+                    .outgoing_transfers
+                    .continue_transfer(usize::try_from(idx).unwrap() - OUT_TRANSFER_BUFFERS)?,
+                WAYLAND_IDX => {
+                    trace!("Wayland event received.");
+                    let count = match event_queue.prepare_read().unwrap().read() {
+                        Err(WaylandError::Io(e)) if e.kind() == WouldBlock => continue,
+                        r => r.map_err(DispatchError::from)?,
+                    };
+                    trace!("Prepared {count} events.");
+                    event_queue.dispatch_pending(&mut app)?;
+                    trace!("Dispatched {count} events.");
+                }
+                PASTE_SERVER_IDX => handle_paste_event(
+                    &paste_socket,
+                    &mut ancillary_buf,
+                    &qh,
+                    app.inner.manager.as_ref(),
+                    &app.inner.seats,
+                    &mut app.inner.sources,
                 )?,
                 _ => unreachable!(),
             }
@@ -224,6 +254,12 @@ impl Destroyable for ZwlrDataControlDeviceV1 {
 }
 
 impl Destroyable for ZwlrDataControlOfferV1 {
+    fn destroy(&self) {
+        self.destroy();
+    }
+}
+
+impl Destroyable for ZwlrDataControlSourceV1 {
     fn destroy(&self) {
         self.destroy();
     }
@@ -452,7 +488,7 @@ impl PendingOffers {
         };
 
         {
-            let log_bytes_received = |count| debug!("Received {count} bytes from peer {idx}.");
+            let log_bytes_received = |count| trace!("Received {count} bytes from peer {idx}.");
 
             let mut total = 0;
             loop {
@@ -558,6 +594,9 @@ struct AppDefault {
     manager: Option<AutoDestroy<ZwlrDataControlManagerV1>>,
     seats: Seats,
     pending_offers: PendingOffers,
+
+    sources: Sources,
+    outgoing_transfers: OutgoingTransfers,
 
     pending_seats: SmallVec<(u32, AutoDestroy<WlSeat>), 1>,
     tmp_file_unsupported: bool,
@@ -687,11 +726,16 @@ impl Dispatch<ZwlrDataControlDeviceV1, u32> for App {
                         id.as_ref().map(wayland_client::Proxy::id)
                     );
                     let Some(id) = id else { return Ok(()) };
-                    this.inner.pending_offers.start_transfer(
-                        &mut this.inner.tmp_file_unsupported,
-                        &this.epoll,
-                        &id,
-                    )?;
+                    if this.inner.sources.open[1].is_some() {
+                        debug!("Ignoring self selection.");
+                        this.inner.pending_offers.consume(&id);
+                    } else {
+                        this.inner.pending_offers.start_transfer(
+                            &mut this.inner.tmp_file_unsupported,
+                            &this.epoll,
+                            &id,
+                        )?;
+                    }
                 }
                 Event::PrimarySelection { id } => {
                     trace!(
@@ -737,6 +781,289 @@ impl Dispatch<ZwlrDataControlOfferV1, ()> for App {
                 this.inner.pending_offers.add_mime(id, mime_type);
             }
             _ => debug_assert!(false, "Unhandled data control offer event: {event:?}"),
+        }
+    }
+}
+
+#[derive(Default, Debug)]
+struct Sources {
+    mime: MimeType,
+    fd: Option<MaybeRc<OwnedFd>>,
+    open: [Option<AutoDestroy<ZwlrDataControlSourceV1>>; 2],
+}
+
+const OUT_TRANSFER_BUFFERS: usize = 4;
+
+#[derive(Default, Debug)]
+struct OutgoingTransfers {
+    transfers: [Option<OutgoingTransfer>; OUT_TRANSFER_BUFFERS],
+    next: u8,
+}
+
+#[derive(Debug)]
+struct MaybeRc<T> {
+    rc: Option<Rc<T>>,
+    raw: Option<T>,
+}
+
+impl<T> MaybeRc<T> {
+    const fn new(t: T) -> Self {
+        Self {
+            rc: None,
+            raw: Some(t),
+        }
+    }
+
+    fn convert_rc(&mut self) -> Rc<T> {
+        let Self { rc, raw } = self;
+        match (&rc, raw.take()) {
+            (Some(rc), None) => rc.clone(),
+            (None, Some(raw)) => {
+                let new = Rc::new(raw);
+                *rc = Some(new.clone());
+                new
+            }
+            (Some(_), Some(_)) | (None, None) => unreachable!(),
+        }
+    }
+}
+
+impl<T> Deref for MaybeRc<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        let Self { rc, raw } = self;
+        match (rc, raw) {
+            (Some(rc), None) => rc,
+            (None, Some(raw)) => raw,
+            (Some(_), Some(_)) | (None, None) => unreachable!(),
+        }
+    }
+}
+
+impl OutgoingTransfers {
+    fn begin(
+        &mut self,
+        epoll: impl AsFd,
+        data: &mut MaybeRc<OwnedFd>,
+        write: OwnedFd,
+    ) -> Result<(), CliError> {
+        const _: () = assert!(OUT_TRANSFER_BUFFERS.is_power_of_two());
+
+        let mut len = 0;
+        if Self::transfer(&**data, &write, &mut len)? {
+            info!("Fast path paste completed.");
+            return Ok(());
+        }
+
+        let Self { transfers, next } = self;
+
+        let idx = usize::from(*next) & (OUT_TRANSFER_BUFFERS - 1);
+        if transfers[idx].is_some() {
+            warn!("Dropping old outgoing transfer for peer {idx}.");
+        }
+
+        epoll::add(
+            epoll,
+            &write,
+            epoll::EventData::new_u64(u64::try_from(IN_TRANSFER_BUFFERS + idx).unwrap()),
+            epoll::EventFlags::OUT,
+        )
+        .map_io_err(|| {
+            "Failed to register epoll interest in write end of outgoing transfer pipe."
+        })?;
+        transfers[idx] = Some(OutgoingTransfer {
+            data: data.convert_rc(),
+            write,
+            len,
+        });
+
+        *next = next.wrapping_add(1);
+
+        Ok(())
+    }
+
+    fn continue_transfer(&mut self, idx: usize) -> Result<(), CliError> {
+        let Some(OutgoingTransfer { data, write, len }) = &mut self.transfers[idx] else {
+            error!("Received poll notification for non-existent transfer peer: {idx}.");
+            return Ok(());
+        };
+        debug!("Continuing transfer to peer {idx}.");
+
+        if Self::transfer(data, write, len)? {
+            info!("Finished transfer to peer {idx}.");
+            self.transfers[idx].take();
+        }
+        Ok(())
+    }
+
+    fn transfer(data: impl AsFd, write: impl AsFd, len: &mut u64) -> Result<bool, CliError> {
+        loop {
+            let max_remaining = usize::MAX / 2 - usize::try_from(*len).unwrap();
+            match splice(
+                &data,
+                Some(len),
+                &write,
+                None,
+                max_remaining,
+                SpliceFlags::NONBLOCK,
+            ) {
+                Err(Errno::AGAIN) => {
+                    return Ok(false);
+                }
+                r => {
+                    let count =
+                        r.map_io_err(|| "Failed to splice data from data file into peer.")?;
+                    trace!("Sent {count} bytes.");
+                    if count == 0 {
+                        debug!("Finished sending {len} bytes.");
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct OutgoingTransfer {
+    data: Rc<OwnedFd>,
+    write: OwnedFd,
+    len: u64,
+}
+
+fn handle_paste_event(
+    paste_socket: impl AsFd,
+    ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
+
+    qh: &QueueHandle<App>,
+    manager: Option<&AutoDestroy<ZwlrDataControlManagerV1>>,
+    seats: &Seats,
+    sources: &mut Sources,
+) -> Result<(), CliError> {
+    let (
+        cmd @ PasteCommand {
+            trigger_paste,
+            id,
+            mime,
+            ..
+        },
+        fd,
+    ) = read_paste_command(paste_socket, ancillary_buf)?;
+    debug!("Received paste command: {cmd:?}");
+
+    let Some(manager) = manager else {
+        debug!("No manager for paste.");
+        return Ok(());
+    };
+    // TODO at some point we should handle multiple seats, but eh for now
+    let Some((_, (_, device))) = seats.first.as_ref() else {
+        warn!("Received paste command with no seats to paste into, ignoring.");
+        return Ok(());
+    };
+
+    let Some(fd) = fd else {
+        info!("Clearing selections.");
+        device.set_primary_selection(None);
+        device.set_selection(None);
+        return Ok(());
+    };
+
+    let Sources {
+        mime: mime_,
+        fd: fd_,
+        open,
+    } = sources;
+    *mime_ = mime;
+    *fd_ = Some(MaybeRc::new(fd));
+
+    let supported_mimes = generate_supported_mimes(&mime);
+    trace!("Offering mimes: {supported_mimes:?}");
+    for (i, slot) in open.iter_mut().enumerate() {
+        let source = AutoDestroy(manager.create_data_source(qh, i));
+        for mime in &supported_mimes {
+            source.offer(mime.to_string());
+        }
+        match i {
+            0 => device.set_primary_selection(Some(&source)),
+            1 => device.set_selection(Some(&source)),
+            _ => unreachable!(),
+        }
+        *slot = Some(source);
+    }
+    info!("Claimed selection ownership.");
+
+    Ok(())
+}
+
+fn generate_supported_mimes(mime: &str) -> ArrayVec<&str, 8> {
+    let mut supported_mimes = ArrayVec::new_const();
+    if !mime.is_empty() {
+        supported_mimes.push(mime);
+    }
+    if is_text_mime(mime) {
+        supported_mimes
+            .try_extend_from_slice(&[
+                "UTF8_STRING",
+                "TEXT",
+                "STRING",
+                "text/plain",
+                "text/plain;charset=utf-8",
+                "text/plain;charset=us-ascii",
+                "text/plain;charset=unicode",
+            ])
+            .unwrap();
+    }
+    supported_mimes
+}
+
+impl Dispatch<ZwlrDataControlSourceV1, usize> for App {
+    fn event(
+        this: &mut Self,
+        _: &ZwlrDataControlSourceV1,
+        event: <ZwlrDataControlSourceV1 as Proxy>::Event,
+        &id: &usize,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        use zwlr_data_control_source_v1::Event;
+
+        let Sources {
+            mime,
+            fd: data,
+            open,
+        } = &mut this.inner.sources;
+        match event {
+            Event::Send { mime_type, fd } => {
+                if !generate_supported_mimes(mime).contains(&mime_type.as_str()) {
+                    debug!("Rejecting transfer for mime that was not offered: {mime_type:?}");
+                    return;
+                }
+                let Some(data) = data else {
+                    debug!("Possible bug? No data available, but transfer was requested.");
+                    return;
+                };
+
+                let err = this
+                    .inner
+                    .outgoing_transfers
+                    .begin(&this.epoll, data, fd)
+                    .err();
+                if this.inner.error.is_none() {
+                    this.inner.error = err;
+                }
+            }
+            Event::Cancelled => {
+                debug!("Releasing ownership of {} selection.", match id {
+                    0 => "primary",
+                    1 => "clipboard",
+                    _ => unreachable!(),
+                });
+                open[id].take();
+                if open.iter().all(Option::is_none) {
+                    data.take();
+                }
+            }
+            _ => debug_assert!(false, "Unhandled data control source event: {event:?}"),
         }
     }
 }

@@ -733,6 +733,7 @@ dependencies = [
 name = "clipboard-history-wayland"
 version = "0.8.1"
 dependencies = [
+ "arrayvec",
  "clipboard-history-client-sdk",
  "clipboard-history-watcher-utils",
  "env_logger",
