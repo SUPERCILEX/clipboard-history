@@ -31,6 +31,7 @@ use ringboard_sdk::{
         },
         ring::Mmap,
     },
+    is_text_mime,
 };
 use ringboard_watcher_utils::{
     best_target::BestMimeTypeFinder,
@@ -1147,7 +1148,7 @@ fn handle_paste_event(
             } else if let Some(r) = mime_atom_req.take() {
                 *mime_atom.insert(PasteAtom {
                     atom: r.reply()?.atom,
-                    is_text: mime.starts_with("text/"),
+                    is_text: is_text_mime(&mime),
                 })
             } else {
                 PasteAtom {

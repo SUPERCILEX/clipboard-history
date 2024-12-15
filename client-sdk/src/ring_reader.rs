@@ -28,6 +28,11 @@ use rustix::{
     path::Arg,
 };
 
+#[must_use]
+pub fn is_text_mime(mime: &str) -> bool {
+    mime.is_empty() || mime.starts_with("text/") || mime == "application/xml"
+}
+
 #[derive(Debug)]
 struct RingIter {
     kind: RingKind,

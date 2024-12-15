@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 
-pub use ring_reader::{DatabaseReader, Entry, EntryReader, Kind, LoadedEntry, RingReader};
+pub use ring_reader::{
+    DatabaseReader, Entry, EntryReader, Kind, LoadedEntry, RingReader, is_text_mime,
+};
 pub use ringboard_core as core;
 use ringboard_core::protocol::IdNotFoundError;
 #[cfg(feature = "search")]

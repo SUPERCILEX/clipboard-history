@@ -28,7 +28,10 @@ use rustix::{
 };
 use thiserror::Error;
 
-use crate::{EntryReader, ring_reader::xattr_mime_type};
+use crate::{
+    EntryReader,
+    ring_reader::{is_text_mime, xattr_mime_type},
+};
 
 #[derive(Clone, Debug)]
 pub struct CaselessQuery {
@@ -274,7 +277,7 @@ fn search_impl(
                 &token,
                 &sender,
                 |file_name, fd, mime_type| {
-                    if !is_searchable_mime(mime_type) {
+                    if !is_text_mime(mime_type) {
                         return Ok(());
                     }
 
@@ -450,10 +453,6 @@ fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, CoreError> {
             )
             .into(),
         })
-}
-
-fn is_searchable_mime(mime: &str) -> bool {
-    mime.is_empty() || mime.starts_with("text/") || mime == "application/xml"
 }
 
 fn mime_search_impl(

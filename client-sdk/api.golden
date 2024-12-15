@@ -1277,4 +1277,5 @@ pub unsafe fn clipboard_history_client_sdk::RingReader<'a>::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::RingReader<'a>::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::RingReader<'a>
 impl<T> itertools::Itertools for clipboard_history_client_sdk::RingReader<'a> where T: core::iter::traits::iterator::Iterator + ?core::marker::Sized
+pub fn clipboard_history_client_sdk::is_text_mime(mime: &str) -> bool
 pub fn clipboard_history_client_sdk::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (clipboard_history_client_sdk::search::QueryIter, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
