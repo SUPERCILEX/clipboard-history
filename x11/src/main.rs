@@ -5,7 +5,7 @@ use std::{
     borrow::Cow,
     fmt::Display,
     fs::File,
-    io::{ErrorKind, IoSliceMut, Read},
+    io::{ErrorKind, Read},
     mem,
     mem::MaybeUninit,
     os::{
@@ -20,11 +20,7 @@ use arrayvec::ArrayVec;
 use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
-    ClientError,
-    api::{
-        AddRequest, MoveToFrontRequest, PASTE_SERVER_PROTOCOL_VERSION, PasteCommand,
-        connect_to_server,
-    },
+    api::{AddRequest, MoveToFrontRequest, PasteCommand, connect_to_server},
     config::{X11Config, X11V1Config, x11_config_file},
     core::{
         Error, IoErr, create_tmp_file,
@@ -39,15 +35,13 @@ use ringboard_sdk::{
 use ringboard_watcher_utils::{
     best_target::BestMimeTypeFinder,
     deduplication::{CopyData, CopyDeduplication},
+    utils::read_paste_command,
 };
 use rustix::{
     event::epoll,
     fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
     io::{Errno, read_uninit},
-    net::{
-        RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, SendFlags, SocketAddrUnix,
-        SocketType, recvmsg,
-    },
+    net::{RecvFlags, SendFlags, SocketAddrUnix, SocketType},
     path::Arg,
     time::{
         Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
@@ -1117,37 +1111,15 @@ fn handle_paste_event(
         }
     }
 
-    let mut buf = [0; size_of::<PasteCommand>()];
-    let mut ancillary = RecvAncillaryBuffer::new(ancillary_buf);
-    let msg = recvmsg(
-        &paste_socket,
-        &mut [IoSliceMut::new(&mut buf)],
-        &mut ancillary,
-        RecvFlags::TRUNC,
-    )
-    .map_io_err(|| "Failed to recv client msg.")?;
-    let version = buf[0];
-    if version != PASTE_SERVER_PROTOCOL_VERSION {
-        return Err(ClientError::VersionMismatch {
-            expected: PASTE_SERVER_PROTOCOL_VERSION,
-            actual: version,
-        }
-        .into());
-    }
-    if msg.bytes != buf.len() {
-        return Err(ClientError::InvalidResponse {
-            context: "Bad paste command.".into(),
-        }
-        .into());
-    }
-    debug_assert!(!msg.flags.contains(RecvFlags::TRUNC));
-
-    let PasteCommand {
-        trigger_paste,
-        mime,
-        id,
-        ..
-    } = *unsafe { &buf.as_ptr().cast::<PasteCommand>().read_unaligned() };
+    let (
+        PasteCommand {
+            trigger_paste,
+            id,
+            mime,
+            ..
+        },
+        fd,
+    ) = read_paste_command(paste_socket, ancillary_buf)?;
 
     MoveToFrontRequest::send(&server, id, None, SendFlags::empty())?;
     let move_to_front_guard = MoveToFrontGuard(server, last_paste, deduplicator);
@@ -1161,33 +1133,29 @@ fn handle_paste_event(
     };
     let mut mime_atom = None;
 
-    for msg in ancillary.drain() {
-        if let ScmRights(received_fds) = msg {
-            for fd in received_fds {
-                let data = Mmap::from(fd).map_io_err(|| "Failed to mmap paste file.")?;
-                info!("Received paste buffer of length {}.", data.len());
-                *move_to_front_guard.1 = Some((
-                    if data.len() > MAX_TRANSFER_SIZE {
-                        PasteFile::Large(Rc::new(data))
-                    } else {
-                        PasteFile::Small(data)
-                    },
-                    if let Some(a) = mime_atom {
-                        a
-                    } else if let Some(r) = mime_atom_req.take() {
-                        *mime_atom.insert(PasteAtom {
-                            atom: r.reply()?.atom,
-                            is_text: mime.starts_with("text/"),
-                        })
-                    } else {
-                        PasteAtom {
-                            atom: x11rb::NONE,
-                            is_text: true,
-                        }
-                    },
-                ));
-            }
-        }
+    if let Some(fd) = fd {
+        let data = Mmap::from(fd).map_io_err(|| "Failed to mmap paste file.")?;
+        info!("Received paste buffer of length {}.", data.len());
+        *move_to_front_guard.1 = Some((
+            if data.len() > MAX_TRANSFER_SIZE {
+                PasteFile::Large(Rc::new(data))
+            } else {
+                PasteFile::Small(data)
+            },
+            if let Some(a) = mime_atom {
+                a
+            } else if let Some(r) = mime_atom_req.take() {
+                *mime_atom.insert(PasteAtom {
+                    atom: r.reply()?.atom,
+                    is_text: mime.starts_with("text/"),
+                })
+            } else {
+                PasteAtom {
+                    atom: x11rb::NONE,
+                    is_text: true,
+                }
+            },
+        ));
     }
 
     let Atoms {
