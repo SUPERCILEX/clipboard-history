@@ -44,7 +44,7 @@ use wayland_client::{
 use wayland_protocols_wlr::data_control::v1::client::{
     zwlr_data_control_device_v1::{self, ZwlrDataControlDeviceV1},
     zwlr_data_control_manager_v1::ZwlrDataControlManagerV1,
-    zwlr_data_control_offer_v1::{Event, ZwlrDataControlOfferV1},
+    zwlr_data_control_offer_v1::{self, ZwlrDataControlOfferV1},
 };
 
 #[derive(Error, Debug)]
@@ -135,7 +135,8 @@ fn run() -> Result<(), CliError> {
     };
 
     let mut event_queue = conn.new_event_queue();
-    conn.display().get_registry(&event_queue.handle(), ());
+    let qh = event_queue.handle();
+    conn.display().get_registry(&qh, ());
     drop(conn);
     event_queue.roundtrip(&mut app)?;
 
@@ -161,7 +162,7 @@ fn run() -> Result<(), CliError> {
         }
         if let Some(manager) = &app.inner.manager {
             for (name, seat) in app.inner.pending_seats.drain(..) {
-                let device = manager.get_data_device(&seat, &event_queue.handle(), name);
+                let device = manager.get_data_device(&seat, &qh, name);
                 app.inner.seats.add(name, seat.into_inner(), device);
                 debug!("Listening for clipboard events on seat {name}.");
             }
@@ -272,41 +273,44 @@ struct Seats {
 
 impl Seats {
     fn add(&mut self, seat: u32, seat_obj: WlSeat, device: ZwlrDataControlDeviceV1) {
+        let Self { first, others } = self;
+
         let value = (AutoDestroy(seat_obj), AutoDestroy(device));
-        if self.first.is_none() {
-            self.first = Some((seat, value));
-        } else if self.others.insert(seat, value).is_some() {
+        if first.is_none() {
+            *first = Some((seat, value));
+        } else if others.insert(seat, value).is_some() {
             error!("Duplicate seat: {seat}");
         }
     }
 
     fn remove(&mut self, seat: u32) {
-        if let &Some((existing, _)) = &self.first
+        let Self { first, others } = self;
+
+        if let &Some((existing, _)) = &*first
             && seat == existing
         {
             debug!("Data control device finished for seat {seat}.");
-            self.first = self
-                .others
+            *first = others
                 .keys()
                 .next()
                 .copied()
-                .and_then(|any| self.others.remove_entry(&any));
-        } else if self.others.remove(&seat).is_some() {
+                .and_then(|any| others.remove_entry(&any));
+        } else if others.remove(&seat).is_some() {
             debug!("Data control device finished for seat {seat}.");
         } else {
             debug!("Trying to remove seat {seat} that does not exist.");
         }
-        self.others.shrink_to_fit();
+        others.shrink_to_fit();
     }
 }
 
-const OFFER_BUFFERS: usize = 4;
+const IN_TRANSFER_BUFFERS: usize = 4;
 
 #[derive(Default, Debug)]
 struct PendingOffers {
-    offers: [Option<AutoDestroy<ZwlrDataControlOfferV1>>; OFFER_BUFFERS],
-    mimes: [BestMimeTypeFinder<String>; OFFER_BUFFERS],
-    transfers: [Option<Transfer>; OFFER_BUFFERS],
+    offers: [Option<AutoDestroy<ZwlrDataControlOfferV1>>; IN_TRANSFER_BUFFERS],
+    mimes: [BestMimeTypeFinder<String>; IN_TRANSFER_BUFFERS],
+    transfers: [Option<Transfer>; IN_TRANSFER_BUFFERS],
     next: u8,
 }
 
@@ -321,12 +325,7 @@ struct Transfer {
 
 impl PendingOffers {
     fn init(&mut self, offer: ZwlrDataControlOfferV1) {
-        const _: () = assert!(OFFER_BUFFERS.is_power_of_two());
-
-        let idx = usize::from(self.next) & (OFFER_BUFFERS - 1);
-        if let Some(id) = &self.offers[idx] {
-            warn!("Dropping old offer for peer {idx}: {:?}", id.id());
-        }
+        const _: () = assert!(IN_TRANSFER_BUFFERS.is_power_of_two());
 
         let Self {
             offers,
@@ -334,6 +333,11 @@ impl PendingOffers {
             transfers,
             next,
         } = self;
+
+        let idx = usize::from(*next) & (IN_TRANSFER_BUFFERS - 1);
+        if let Some(id) = &offers[idx] {
+            warn!("Dropping old offer for peer {idx}: {:?}", id.id());
+        }
 
         offers[idx] = Some(AutoDestroy(offer));
         mimes[idx] = BestMimeTypeFinder::default();
@@ -723,6 +727,7 @@ impl Dispatch<ZwlrDataControlOfferV1, ()> for App {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        use zwlr_data_control_offer_v1::Event;
         match event {
             Event::Offer { mime_type } => {
                 trace!(
