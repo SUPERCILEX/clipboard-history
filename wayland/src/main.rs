@@ -22,7 +22,9 @@ use ringboard_sdk::{
         Error, IoErr, create_tmp_file,
         dirs::{paste_socket_file, socket_file},
         init_unix_server, is_plaintext_mime,
-        protocol::{AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, RingKind},
+        protocol::{
+            AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, Response, RingKind,
+        },
         ring::Mmap,
     },
     is_text_mime,
@@ -37,7 +39,7 @@ use rustix::{
     event::epoll,
     fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
     io::Errno,
-    net::{SocketAddrUnix, SocketType},
+    net::{RecvFlags, SendFlags, SocketAddrUnix, SocketType},
     pipe::{SpliceFlags, pipe, splice},
 };
 use smallvec::SmallVec;
@@ -224,6 +226,8 @@ fn run() -> Result<(), CliError> {
                     app.inner.manager.as_ref(),
                     &app.inner.seats,
                     &mut app.inner.sources,
+                    &server,
+                    &mut deduplicator,
                 )?,
                 _ => unreachable!(),
             }
@@ -939,7 +943,35 @@ fn handle_paste_event(
     manager: Option<&AutoDestroy<ZwlrDataControlManagerV1>>,
     seats: &Seats,
     sources: &mut Sources,
+
+    server: impl AsFd,
+    deduplicator: &mut CopyDeduplication,
 ) -> Result<(), CliError> {
+    struct MoveToFrontGuard<'a, Server: AsFd>(Server, Option<Mmap>, &'a mut CopyDeduplication);
+
+    impl<Server: AsFd> Drop for MoveToFrontGuard<'_, Server> {
+        fn drop(&mut self) {
+            let Ok(MoveToFrontResponse::Success { id }) =
+                unsafe { MoveToFrontRequest::recv(&self.0, RecvFlags::empty()) }.map(
+                    |Response {
+                         sequence_number: _,
+                         value,
+                     }| value,
+                )
+            else {
+                return;
+            };
+            let Some(data) = &self.1 else {
+                return;
+            };
+
+            let data_hash =
+                CopyDeduplication::hash(CopyData::Slice(data), u64::try_from(data.len()).unwrap());
+            debug!("Pasted entry promoted to front.");
+            self.2.remember(data_hash, id);
+        }
+    }
+
     let (
         cmd @ PasteCommand {
             trigger_paste,
@@ -950,6 +982,20 @@ fn handle_paste_event(
         fd,
     ) = read_paste_command(paste_socket, ancillary_buf)?;
     debug!("Received paste command: {cmd:?}");
+
+    MoveToFrontRequest::send(&server, id, None, SendFlags::empty())?;
+    let guard = MoveToFrontGuard(
+        server,
+        if let Some(fd) = &fd {
+            Some(Mmap::from(fd).map_io_err(|| "Failed to mmap paste file.")?)
+        } else {
+            None
+        },
+        deduplicator,
+    );
+    if let Some(data) = &guard.1 {
+        debug!("Paste file is {} bytes long.", data.len());
+    }
 
     let Some(manager) = manager else {
         debug!("No manager for paste.");
@@ -981,7 +1027,7 @@ fn handle_paste_event(
     for (i, slot) in open.iter_mut().enumerate() {
         let source = AutoDestroy(manager.create_data_source(qh, i));
         for mime in &supported_mimes {
-            source.offer(mime.to_string());
+            source.offer((*mime).to_string());
         }
         match i {
             0 => device.set_primary_selection(Some(&source)),
