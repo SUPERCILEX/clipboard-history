@@ -8,6 +8,7 @@ systemctl --user daemon-reload
 rm ~/.config/systemd/user/ringboard*
 rm ~/.local/share/applications/ringboard*
 rm ~/.local/share/icons/hicolor/1024x1024/ringboard*
+rm -r ~/.local/share/clipboard-history/
 
 cargo uninstall \
   clipboard-history-server \
