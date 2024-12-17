@@ -3,12 +3,14 @@
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
+    fs::File,
     hash::BuildHasherDefault,
+    io,
     io::ErrorKind::WouldBlock,
     mem,
     mem::ManuallyDrop,
     ops::Deref,
-    os::fd::{AsFd, OwnedFd},
+    os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
     ptr,
     rc::Rc,
 };
@@ -928,6 +930,19 @@ impl OutgoingTransfers {
             ) {
                 Err(Errno::AGAIN) => {
                     return Ok(false);
+                }
+                Err(Errno::INVAL) => {
+                    let bytes = io::copy(
+                        &mut *ManuallyDrop::new(unsafe {
+                            File::from_raw_fd(data.as_fd().as_raw_fd())
+                        }),
+                        &mut *ManuallyDrop::new(unsafe {
+                            File::from_raw_fd(write.as_fd().as_raw_fd())
+                        }),
+                    )
+                    .map_io_err(|| "Fallback paste into peer failed.")?;
+                    debug!("Fallback finished sending {bytes} bytes.");
+                    return Ok(true);
                 }
                 r => {
                     let count =
