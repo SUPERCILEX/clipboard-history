@@ -352,18 +352,18 @@ pub fn copy_file_range_all<InFd: AsFd, OutFd: AsFd>(
 ) -> rustix::io::Result<usize> {
     let mut total_copied = 0;
     loop {
-        let byte_copied = copy_file_range(
+        let bytes_copied = copy_file_range(
             &fd_in,
             off_in.as_deref_mut(),
             &fd_out,
             off_out.as_deref_mut(),
             len - total_copied,
         )?;
+        total_copied += bytes_copied;
 
-        if byte_copied == 0 {
+        if total_copied == len || bytes_copied == 0 {
             break;
         }
-        total_copied += byte_copied;
     }
     Ok(total_copied)
 }

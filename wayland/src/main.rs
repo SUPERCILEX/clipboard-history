@@ -793,6 +793,7 @@ impl Dispatch<ZwlrDataControlOfferV1, ()> for App {
 struct Sources {
     mime: MimeType,
     fd: Option<MaybeRc<OwnedFd>>,
+    len: usize,
     open: [Option<AutoDestroy<ZwlrDataControlSourceV1>>; 2],
 }
 
@@ -849,12 +850,14 @@ impl OutgoingTransfers {
         &mut self,
         epoll: impl AsFd,
         data: &mut MaybeRc<OwnedFd>,
+        data_len: usize,
         write: OwnedFd,
     ) -> Result<(), CliError> {
         const _: () = assert!(OUT_TRANSFER_BUFFERS.is_power_of_two());
+        debug!("Starting transfer of {data_len} bytes.");
 
-        let mut len = 0;
-        if Self::transfer(&**data, &write, &mut len)? {
+        let mut offset = 0;
+        if Self::transfer(&**data, &write, &mut offset, data_len)? {
             info!("Fast path paste completed.");
             return Ok(());
         }
@@ -878,7 +881,8 @@ impl OutgoingTransfers {
         transfers[idx] = Some(OutgoingTransfer {
             data: data.convert_rc(),
             write,
-            len,
+            offset,
+            total: data_len,
         });
 
         *next = next.wrapping_add(1);
@@ -887,28 +891,39 @@ impl OutgoingTransfers {
     }
 
     fn continue_transfer(&mut self, idx: usize) -> Result<(), CliError> {
-        let Some(OutgoingTransfer { data, write, len }) = &mut self.transfers[idx] else {
+        let Some(OutgoingTransfer {
+            ref data,
+            ref write,
+            ref mut offset,
+            total,
+        }) = self.transfers[idx]
+        else {
             error!("Received poll notification for non-existent transfer peer: {idx}.");
             return Ok(());
         };
         debug!("Continuing transfer to peer {idx}.");
 
-        if Self::transfer(data, write, len)? {
+        if Self::transfer(data, write, offset, total)? {
             info!("Finished transfer to peer {idx}.");
             self.transfers[idx].take();
         }
         Ok(())
     }
 
-    fn transfer(data: impl AsFd, write: impl AsFd, len: &mut u64) -> Result<bool, CliError> {
+    fn transfer(
+        data: impl AsFd,
+        write: impl AsFd,
+        offset: &mut u64,
+        total: usize,
+    ) -> Result<bool, CliError> {
         loop {
-            let max_remaining = usize::MAX / 2 - usize::try_from(*len).unwrap();
+            let remaining = total - usize::try_from(*offset).unwrap();
             match splice(
                 &data,
-                Some(len),
+                Some(offset),
                 &write,
                 None,
-                max_remaining,
+                remaining,
                 SpliceFlags::NONBLOCK,
             ) {
                 Err(Errno::AGAIN) => {
@@ -918,8 +933,8 @@ impl OutgoingTransfers {
                     let count =
                         r.map_io_err(|| "Failed to splice data from data file into peer.")?;
                     trace!("Sent {count} bytes.");
-                    if count == 0 {
-                        debug!("Finished sending {len} bytes.");
+                    if u64::try_from(total).unwrap() == *offset || count == 0 {
+                        debug!("Finished sending {offset} bytes.");
                         return Ok(true);
                     }
                 }
@@ -932,7 +947,8 @@ impl OutgoingTransfers {
 struct OutgoingTransfer {
     data: Rc<OwnedFd>,
     write: OwnedFd,
-    len: u64,
+    offset: u64,
+    total: usize,
 }
 
 fn handle_paste_event(
@@ -1017,10 +1033,12 @@ fn handle_paste_event(
     let Sources {
         mime: mime_,
         fd: fd_,
+        len,
         open,
     } = sources;
     *mime_ = mime;
     *fd_ = Some(MaybeRc::new(fd));
+    *len = guard.1.as_ref().map_or(0, Mmap::len);
 
     let supported_mimes = generate_supported_mimes(&mime);
     trace!("Offering mimes: {supported_mimes:?}");
@@ -1076,6 +1094,7 @@ impl Dispatch<ZwlrDataControlSourceV1, usize> for App {
         let Sources {
             mime,
             fd: data,
+            len,
             open,
         } = &mut this.inner.sources;
         match event {
@@ -1092,7 +1111,7 @@ impl Dispatch<ZwlrDataControlSourceV1, usize> for App {
                 let err = this
                     .inner
                     .outgoing_transfers
-                    .begin(&this.epoll, data, fd)
+                    .begin(&this.epoll, data, *len, fd)
                     .err();
                 if this.inner.error.is_none() {
                     this.inner.error = err;
