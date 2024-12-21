@@ -13,16 +13,16 @@ license = "AGPL-3.0-only"
 arrayvec = "0.7.6"
 bitcode = { version = "0.6.3", features = ["arrayvec"] }
 bitvec = "1.0.1"
-env_logger = { version = "0.11.5", default-features = false }
+env_logger = { version = "0.11.6", default-features = false }
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
 io-uring = "0.7.2"
-libc = "0.2.168"
+libc = "0.2.169"
 log = { version = "0.4.22", features = ["release_max_level_info"] }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core", features = ["error-stack"] }
 rustix = { version = "0.38.42", features = ["fs", "process", "net", "io_uring"] }
 sd-notify = { version = "0.4.3", optional = true }
-smallvec = "2.0.0-alpha.8"
-thiserror = "2.0.7"
+smallvec = "2.0.0-alpha.9"
+thiserror = "2.0.9"
 tracy-client = { version = "0.17.6", optional = true }
 
 [features]

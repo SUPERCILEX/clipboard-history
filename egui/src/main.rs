@@ -80,19 +80,22 @@ fn main() -> Result<(), eframe::Error> {
                                 y_offset_factor: 0.1,
                                 baseline_offset_factor: -0.04,
                                 ..FontTweak::default()
-                            }),
+                            })
+                            .into(),
                         );
                         fonts.font_data.insert(
                             "Cascadia".to_owned(),
                             egui::FontData::from_static(include_bytes!(
                                 "../fonts/CascadiaCode-Light.ttf"
-                            )),
+                            ))
+                            .into(),
                         );
                         fonts.font_data.insert(
                             "NotoEmoji".to_owned(),
                             egui::FontData::from_static(include_bytes!(
                                 "../fonts/NotoEmoji-Regular.ttf"
-                            )),
+                            ))
+                            .into(),
                         );
 
                         fonts
