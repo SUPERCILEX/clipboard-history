@@ -16,8 +16,6 @@ ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path 
 rustc-hash = "2.1.0"
 rustix = { version = "0.38.42", features = ["fs"] }
 tracy-client = { version = "0.17.6", optional = true }
-# TODO tmp for https://github.com/rust-windowing/winit/issues/4048
-winit = "=0.30.5"
 
 [features]
 default = ["x11", "wayland"]
