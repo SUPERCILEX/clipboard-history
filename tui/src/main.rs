@@ -792,7 +792,7 @@ impl AppWrapper<'_> {
 
         if matches!(cache, UiEntryCache::Image) {
             if let Some(ImageState::Loaded(image_state)) = &mut ui.detail_image_state {
-                StatefulImage::new(None).render(inner_area, buf, image_state);
+                StatefulImage::default().render(inner_area, buf, image_state);
             } else {
                 Paragraph::new("Loading…")
                     .block(inner_block)

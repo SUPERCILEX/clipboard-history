@@ -28,13 +28,13 @@ regex = "1.11.1"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "deduplication", "search", "config"] }
 rustc-hash = "2.1.0"
 rustix = { version = "0.38.42", features = ["stdio", "event"] }
-serde = { version = "1.0.216", features = ["derive"] }
+serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.134"
 thiserror = "2.0.9"
 toml = { version = "0.8.19", default-features = false, features = ["display"] }
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.12", default-features = false, features = ["clap"] }
+supercilex-tests = { version = "0.4.13", default-features = false, features = ["clap"] }
 
 [[bin]]
 name = "ringboard"

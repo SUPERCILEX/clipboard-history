@@ -23,7 +23,7 @@ rustix = { version = "0.38.42", features = ["fs", "process", "net", "io_uring"] 
 sd-notify = { version = "0.4.3", optional = true }
 smallvec = "2.0.0-alpha.9"
 thiserror = "2.0.9"
-tracy-client = { version = "0.17.6", optional = true }
+tracy-client = { version = "0.18.0", optional = true }
 
 [features]
 default = ["systemd", "human-logs"]
