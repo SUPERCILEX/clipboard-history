@@ -246,7 +246,7 @@ impl App {
         let Self {
             requests,
             responses,
-            ref mut picker,
+            ref picker,
             ref mut state,
         } = self;
 
@@ -280,7 +280,7 @@ fn handle_message(
     message: Message,
     State { entries, ui }: &mut State,
     pending_favorite_change: &mut Option<u64>,
-    picker: &mut Picker,
+    picker: &Picker,
     requests: &Sender<Command>,
 ) -> Result<bool, CoreError> {
     let UiEntries {

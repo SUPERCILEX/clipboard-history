@@ -1573,7 +1573,7 @@ fn generate(
             pipeline_add_request(
                 &server,
                 data,
-                rng.gen::<GenerateRingKind>().0,
+                rng.r#gen::<GenerateRingKind>().0,
                 MimeType::new_const(),
                 None,
                 &mut pending_adds,
@@ -1893,7 +1893,7 @@ fn fuzz(
 
                 match action {
                     2 => {
-                        let kind = rng.gen::<FuzzRingKind>().0;
+                        let kind = rng.r#gen::<FuzzRingKind>().0;
                         let mime_type = if rng.gen_range(0..50) == 0 {
                             let len = rng.gen_range(1..=MimeType::new_const().capacity());
                             Alphanumeric.append_string(&mut rng, &mut buf, len);
@@ -1921,7 +1921,7 @@ fn fuzz(
                     }
                     3 => {
                         let move_id = rng.gen_range(0..=sequence_num);
-                        let kind = rng.gen::<Option<FuzzRingKind>>().map(|r| r.0);
+                        let kind = rng.r#gen::<Option<FuzzRingKind>>().map(|r| r.0);
 
                         pending_ops.push_back(PendingOp::Move { id: move_id });
                         pipeline_request!(|flags| MoveToFrontRequest::send(

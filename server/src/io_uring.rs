@@ -296,7 +296,9 @@ pub mod buf_ring {
         }
 
         pub unsafe fn recycle_by_index(&mut self, index: u16) {
-            self.recycle_by_index_(index);
+            unsafe {
+                self.recycle_by_index_(index);
+            }
         }
 
         unsafe fn recycle_by_index_(&mut self, index: u16) -> &mut io_uring_buf {

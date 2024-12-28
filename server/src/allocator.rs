@@ -447,7 +447,7 @@ impl Allocator {
         writer.write(Entry::Uninitialized, from_id)?;
 
         let run = |to_id,
-                   AllocatorData {
+                   &mut AllocatorData {
                        ref direct_dir,
                        ref metadata_dir,
                        ..

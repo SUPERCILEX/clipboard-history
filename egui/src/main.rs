@@ -356,18 +356,19 @@ impl eframe::App for App {
 
 fn search_ui(
     ui: &mut Ui,
-    State {
-        entries: UiEntries {
-            loaded_entries: _,
-            search_results,
-        },
+    &mut State {
+        entries:
+            UiEntries {
+                loaded_entries: _,
+                ref mut search_results,
+            },
         ui:
             UiState {
-                query,
-                search_kind,
-                search_highlighted_id,
-                pending_search_token,
-                queued_searches,
+                ref mut query,
+                ref mut search_kind,
+                ref mut search_highlighted_id,
+                ref mut pending_search_token,
+                ref mut queued_searches,
                 ref was_focused,
                 ..
             },

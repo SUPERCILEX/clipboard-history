@@ -37,10 +37,12 @@ macro_rules! response {
             server: Server,
             flags: RecvFlags,
         ) -> Result<Response<$t>, ClientError> {
-            if TypeId::of::<$t>() == TypeId::of::<VersionResponse>() {
-                response::<$t, { size_of::<$t>() }>(&server, flags)
-            } else {
-                response::<$t, { size_of::<Response<$t>>() }>(&server, flags)
+            unsafe {
+                if TypeId::of::<$t>() == TypeId::of::<VersionResponse>() {
+                    response::<$t, { size_of::<$t>() }>(&server, flags)
+                } else {
+                    response::<$t, { size_of::<Response<$t>>() }>(&server, flags)
+                }
             }
         }
     };
@@ -393,9 +395,9 @@ unsafe fn response<T: Copy + 'static, const N: usize>(
     if TypeId::of::<T>() == TypeId::of::<VersionResponse>() {
         Ok(Response {
             sequence_number: 0,
-            value: *unsafe { &buf.as_ptr().cast::<T>().read_unaligned() },
+            value: unsafe { buf.as_ptr().cast::<T>().read_unaligned() },
         })
     } else {
-        Ok(*unsafe { &buf.as_ptr().cast::<Response<T>>().read_unaligned() })
+        Ok(unsafe { buf.as_ptr().cast::<Response<T>>().read_unaligned() })
     }
 }

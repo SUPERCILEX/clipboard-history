@@ -48,7 +48,7 @@ pub fn read_paste_command(
     }
 
     Ok((
-        *unsafe { &buf.as_ptr().cast::<PasteCommand>().read_unaligned() },
+        unsafe { buf.as_ptr().cast::<PasteCommand>().read_unaligned() },
         data,
     ))
 }
