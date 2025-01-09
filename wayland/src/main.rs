@@ -536,6 +536,7 @@ impl PendingOffers {
         if len == 0 || {
             mmap = Mmap::new(&data, usize::try_from(len).unwrap())
                 .map_io_err(|| "Failed to mmap copy file")?;
+            debug_assert_eq!(mmap.len(), usize::try_from(len).unwrap());
             mmap.iter().all(u8::is_ascii_whitespace)
         } {
             warn!("Dropping empty or blank selection for peer {idx} on mime {mime:?}.");

@@ -558,7 +558,7 @@ fn do_search<E>(
                     .copied()
                     .ok_or_else(|| {
                         CoreError::IdNotFound(IdNotFoundError::Entry(
-                            index << u8::BITS | u32::from(bucket),
+                            (index << u8::BITS) | u32::from(bucket),
                         ))
                     }),
                 EntryLocation::File { entry_id } => {
