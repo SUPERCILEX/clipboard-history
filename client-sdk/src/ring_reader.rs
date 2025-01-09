@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Formatter},
     fs::File,
     io,
-    io::ErrorKind,
+    io::{BorrowedBuf, ErrorKind},
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
     os::{
@@ -290,24 +290,27 @@ pub fn xattr_mime_type<Fd: AsFd, MetadataFd: AsFd, MetadataPath: Arg + Copy + De
     fd: Fd,
     read_from_metadata: Option<(MetadataFd, MetadataPath)>,
 ) -> Result<MimeType, ringboard_core::Error> {
-    let mut mime_type = [0u8; MimeType::new_const().capacity()];
-    let len = if let Some((metadata_dir, file_name)) = read_from_metadata {
+    let mut mime_type = [MaybeUninit::uninit(); MimeType::new_const().capacity()];
+    let mut mime_type = BorrowedBuf::from(mime_type.as_mut_slice());
+    if let Some((metadata_dir, file_name)) = read_from_metadata {
         let metadata = File::from(
             match openat(metadata_dir, file_name, OFlags::RDONLY, Mode::empty()) {
                 Err(Errno::NOENT) => return Ok(MimeType::new_const()),
                 r => r.map_io_err(|| format!("Failed to open metadata file: {file_name:?}"))?,
             },
         );
-        mime_type.len()
-            - read_at_to_end(&metadata, mime_type.as_mut_slice(), 0)
-                .map_io_err(|| format!("Failed to read metadata file: {file_name:?}"))?
+        read_at_to_end(&metadata, mime_type.unfilled(), 0)
+            .map_io_err(|| format!("Failed to read metadata file: {file_name:?}"))?;
     } else {
-        match fgetxattr(fd, c"user.mime_type", &mut mime_type) {
+        let mut mime_type = mime_type.unfilled();
+        mime_type.ensure_init();
+        let len = match fgetxattr(fd, c"user.mime_type", mime_type.init_mut()) {
             Err(Errno::NODATA) => return Ok(MimeType::new_const()),
             r => r.map_io_err(|| "Failed to read extended attributes.")?,
-        }
+        };
+        mime_type.advance(len);
     };
-    let mime_type = str::from_utf8(&mime_type[..len]).map_err(|e| ringboard_core::Error::Io {
+    let mime_type = str::from_utf8(mime_type.filled()).map_err(|e| ringboard_core::Error::Io {
         error: io::Error::new(ErrorKind::InvalidInput, e),
         context: "Database corruption detected: invalid mime type detected".into(),
     })?;

@@ -1,4 +1,4 @@
-#![feature(debug_closure_helpers)]
+#![feature(debug_closure_helpers, core_io_borrowed_buf)]
 
 use std::{
     borrow::Cow,
@@ -9,7 +9,8 @@ use std::{
     fs::{File, create_dir_all},
     hash::BuildHasherDefault,
     io,
-    io::{BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
+    io::{BorrowedBuf, BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
+    mem::MaybeUninit,
     os::{
         fd::{AsFd, OwnedFd},
         unix::fs::FileExt,
@@ -561,7 +562,6 @@ fn search(
         )
     };
     let mut results = BTreeMap::<BucketAndIndex, (u16, u16)>::new();
-    let mut buf = [0; CONTEXT_WINDOW];
     for result in result_stream {
         let QueryResult {
             location,
@@ -579,20 +579,16 @@ fn search(
                 let entry = unsafe { database.get(entry_id)? };
                 let file = entry.to_file_raw(&reader)?.unwrap();
 
-                let remaining = read_at_to_end(
-                    &file,
-                    buf.as_mut_slice(),
+                let mut buf = [MaybeUninit::uninit(); CONTEXT_WINDOW];
+                let mut buf = BorrowedBuf::from(buf.as_mut_slice());
+                read_at_to_end(
+                    &*file,
+                    buf.unfilled(),
                     u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap(),
                 )
                 .map_io_err(|| format!("failed to read from direct entry {entry_id}."))?;
 
-                print_entry(
-                    entry_id,
-                    &buf[..buf.len() - remaining],
-                    &file.mime_type()?,
-                    start,
-                    end,
-                )?;
+                print_entry(entry_id, buf.filled(), &file.mime_type()?, start, end)?;
             }
         }
     }

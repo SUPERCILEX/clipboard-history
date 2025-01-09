@@ -1,4 +1,4 @@
-#![feature(core_io_borrowed_buf, read_buf)]
+#![feature(core_io_borrowed_buf)]
 
 use std::{borrow::Cow, io, num::ParseIntError};
 

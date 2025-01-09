@@ -4,7 +4,7 @@ use std::{
     fs,
     fs::File,
     io,
-    io::{BorrowedBuf, ErrorKind, ErrorKind::UnexpectedEof, Read, Write},
+    io::{BorrowedBuf, BorrowedCursor, ErrorKind, Write},
     mem,
     mem::{MaybeUninit, size_of},
     os::{
@@ -24,7 +24,7 @@ use rustix::{
         AtFlags, CWD, FlockOperation, Mode, OFlags, StatxFlags, copy_file_range, flock, linkat,
         openat, statx, unlinkat,
     },
-    io::Errno,
+    io::{Errno, pread_uninit},
     net::{AddressFamily, SocketAddrUnix, SocketType, bind_unix, listen, socket},
     path::{Arg, DecInt},
     process::{
@@ -68,14 +68,11 @@ enum LockFilePid {
 // 2^32 is 10 chars
 const LOCK_FILE_BUF_SIZE: usize = 10;
 
-fn read_lock_file_pid(lock_file: impl Copy + Debug, mut file: &File) -> Result<LockFilePid> {
+fn read_lock_file_pid(lock_file: impl Copy + Debug, file: &File) -> Result<LockFilePid> {
     let mut pid = [MaybeUninit::uninit(); LOCK_FILE_BUF_SIZE];
     let mut pid = BorrowedBuf::from(pid.as_mut_slice());
-    match file.read_buf_exact(pid.unfilled()) {
-        Err(e) if e.kind() == UnexpectedEof => Ok(()),
-        r => r,
-    }
-    .map_io_err(|| format!("Failed to read lock file: {lock_file:?}"))?;
+    read_at_to_end(file, pid.unfilled(), 0)
+        .map_io_err(|| format!("Failed to read lock file: {lock_file:?}"))?;
     let pid = pid.filled();
 
     if pid.iter().all(|&b| b == b'.') {
@@ -454,17 +451,25 @@ pub fn init_unix_server<P: AsRef<Path>>(socket_file: P, kind: SocketType) -> Res
     Ok(socket)
 }
 
-pub fn read_at_to_end(file: &File, mut buf: &mut [u8], mut offset: u64) -> io::Result<usize> {
+pub fn read_at_to_end<Fd: AsFd>(
+    file: Fd,
+    mut buf: BorrowedCursor,
+    offset: u64,
+) -> rustix::io::Result<()> {
     loop {
-        if buf.is_empty() {
-            break Ok(buf.len());
+        if buf.capacity() == 0 {
+            break Ok(());
         }
-        match file.read_at(buf, offset) {
-            Ok(0) => break Ok(buf.len()),
-            Ok(n) => {
-                let tmp = buf;
-                buf = &mut tmp[n..];
-                offset += n as u64;
+        match {
+            let offset = offset + u64::try_from(buf.written()).unwrap();
+            pread_uninit(&file, buf.uninit_mut(), offset)
+        } {
+            Ok(([], _)) => break Ok(()),
+            Ok((init, _)) => {
+                let n = init.len();
+                unsafe {
+                    buf.advance_unchecked(n);
+                }
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {}
             Err(e) => break Err(e),
