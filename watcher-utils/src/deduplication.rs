@@ -1,6 +1,8 @@
 use std::{
     fs::File,
     hash::{Hash, Hasher},
+    io::BorrowedBuf,
+    mem::MaybeUninit,
 };
 
 use log::{error, info, warn};
@@ -10,6 +12,7 @@ use ringboard_sdk::{
         Error as CoreError, IoErr,
         dirs::data_dir,
         protocol::{RingKind, composite_id, decompose_id},
+        read_at_to_end,
         ring::Mmap,
     },
 };
@@ -104,10 +107,13 @@ impl CopyDeduplication {
             match data {
                 CopyData::Slice(s) => s.hash(&mut data_hasher),
                 CopyData::File(f) => {
-                    if let Ok(m) = Mmap::new(f, usize::try_from(len).unwrap())
-                        .inspect_err(|e| error!("Failed to mmap file: {f:?}\nError: {e:?}"))
+                    let mut buf = [MaybeUninit::uninit(); 4096];
+                    let mut buf = BorrowedBuf::from(buf.as_mut_slice());
+                    if read_at_to_end(f, buf.unfilled(), 0)
+                        .inspect_err(|e| error!("Failed to read file: {f:?}\nError: {e:?}"))
+                        == Ok(())
                     {
-                        m.hash(&mut data_hasher);
+                        buf.filled().hash(&mut data_hasher);
                     }
                 }
             }

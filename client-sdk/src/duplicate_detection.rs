@@ -1,9 +1,11 @@
 use std::{
     collections::BTreeMap,
     hash::{Hash, Hasher},
+    io::BorrowedBuf,
+    mem::MaybeUninit,
 };
 
-use ringboard_core::{IoErr, RingAndIndex, protocol::IdNotFoundError, ring::Mmap};
+use ringboard_core::{IoErr, RingAndIndex, protocol::IdNotFoundError, read_at_to_end};
 use rustc_hash::FxHasher;
 use rustix::fs::{AtFlags, StatxFlags, statx};
 use smallvec::SmallVec;
@@ -37,9 +39,11 @@ impl DuplicateDetector {
                     if len >= 4096 {
                         len.hash(&mut data_hasher);
                     } else {
-                        Mmap::from(&*file)
-                            .map_io_err(|| format!("Failed to mmap file: {file:?}"))?
-                            .hash(&mut data_hasher);
+                        let mut buf = [MaybeUninit::uninit(); 4096];
+                        let mut buf = BorrowedBuf::from(buf.as_mut_slice());
+                        read_at_to_end(&*file, buf.unfilled(), 0)
+                            .map_io_err(|| format!("Failed to read file: {file:?}"))?;
+                        buf.filled().hash(&mut data_hasher);
                     }
                 }
             }
