@@ -12,6 +12,7 @@ license.workspace = true
 [dependencies]
 eframe = { version = "0.30.0", default-features = false, features = ["glow"] }
 image = "0.25.5"
+itoa = "1.0.14"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
 rustc-hash = "2.1.0"
 rustix = { version = "0.38.42", features = ["fs"] }

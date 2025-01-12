@@ -390,6 +390,11 @@ impl Deref for MmapOrSlice<'_> {
 
 impl Entry {
     #[must_use]
+    pub const fn rai(&self) -> RingAndIndex {
+        self.rai
+    }
+
+    #[must_use]
     pub fn kind(&self) -> Kind {
         if self.metadata.is_file() {
             Kind::File

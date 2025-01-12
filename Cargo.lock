@@ -678,6 +678,7 @@ dependencies = [
  "clipboard-history-client-sdk",
  "eframe",
  "image",
+ "itoa",
  "rustc-hash 2.1.0",
  "rustix",
  "tracy-client",

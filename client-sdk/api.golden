@@ -1097,6 +1097,7 @@ pub fn clipboard_history_client_sdk::Entry::id(&self) -> u64
 pub const fn clipboard_history_client_sdk::Entry::index(&self) -> u32
 pub fn clipboard_history_client_sdk::Entry::kind(&self) -> clipboard_history_client_sdk::Kind
 pub fn clipboard_history_client_sdk::Entry::mime_type(&self, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_core::protocol::MimeType, clipboard_history_core::Error>
+pub const fn clipboard_history_client_sdk::Entry::rai(&self) -> clipboard_history_core::views::RingAndIndex
 pub fn clipboard_history_client_sdk::Entry::ring(&self) -> clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_client_sdk::Entry::to_file<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<'a, std::fs::File>, clipboard_history_core::Error>
 pub fn clipboard_history_client_sdk::Entry::to_file_raw<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<'a, std::fs::File>>, clipboard_history_core::Error>

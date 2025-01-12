@@ -2,8 +2,11 @@
 #![allow(clippy::significant_drop_tightening)]
 
 use std::{
+    collections::HashSet,
     env,
     error::Error,
+    hash::BuildHasherDefault,
+    str,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -24,6 +27,7 @@ use eframe::{
     },
     epaint::FontFamily,
 };
+use itoa::Integer;
 use ringboard_sdk::{
     ClientError,
     core::{Error as CoreError, protocol::RingKind},
@@ -33,6 +37,7 @@ use ringboard_sdk::{
         controller,
     },
 };
+use rustc_hash::FxHasher;
 use rustix::fs::unlink;
 
 use crate::{
@@ -206,6 +211,32 @@ struct UiState {
 
     was_focused: bool,
     skip_first_focus: bool,
+
+    uri_buf: UriBuf,
+}
+
+const URI_PREFIX: &str = "ringboard://";
+
+struct UriBuf {
+    buf: [u8; URI_PREFIX.len() + u64::MAX_STR_LEN],
+}
+
+impl UriBuf {
+    fn format(&mut self, id: u64) -> &str {
+        let mut buf = itoa::Buffer::new();
+        let str = buf.format(id);
+
+        self.buf[URI_PREFIX.len()..][..str.len()].copy_from_slice(str.as_bytes());
+        unsafe { str::from_utf8_unchecked(&self.buf[..URI_PREFIX.len() + str.len()]) }
+    }
+}
+
+impl Default for UriBuf {
+    fn default() -> Self {
+        Self {
+            buf: *b"ringboard://\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0",
+        }
+    }
 }
 
 impl App {
@@ -241,6 +272,26 @@ macro_rules! active_highlighted_id {
     }};
 }
 
+fn remove_old_images<'a, 'b>(
+    ctx: &egui::Context,
+    uri_buf: &mut UriBuf,
+    old: impl IntoIterator<Item = &'a UiEntry>,
+    new: impl IntoIterator<Item = &'b UiEntry>,
+) {
+    let new_ids: HashSet<_, BuildHasherDefault<FxHasher>> = new
+        .into_iter()
+        .map(|UiEntry { entry, cache: _ }| entry.rai())
+        .collect();
+
+    for dead_id in old
+        .into_iter()
+        .map(|UiEntry { entry, cache: _ }| entry.rai())
+        .filter(|id| !new_ids.contains(id))
+    {
+        ctx.forget_image(uri_buf.format(dead_id.id()));
+    }
+}
+
 fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egui::Context) {
     let UiEntries {
         loaded_entries,
@@ -259,7 +310,17 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
         queued_searches,
         was_focused: _,
         skip_first_focus: _,
+        uri_buf,
     } = ui;
+
+    let mut remove_old_images = |entries| {
+        remove_old_images(
+            ctx,
+            uri_buf,
+            loaded_entries.iter().chain(&*search_results),
+            entries,
+        );
+    };
 
     last_error.take();
     match message {
@@ -272,6 +333,7 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
             entries,
             default_focused_id,
         } => {
+            remove_old_images(entries.iter().chain(&*search_results));
             *loaded_entries = entries;
             if highlighted_id.is_none() {
                 *highlighted_id = default_focused_id;
@@ -283,6 +345,7 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
             }
         }
         Message::SearchResults(entries) => {
+            remove_old_images(entries.iter().chain(&*loaded_entries));
             *queued_searches = queued_searches.saturating_sub(1);
             if pending_search_token.take().is_some() {
                 *search_highlighted_id = entries.first().map(|e| e.entry.id());
@@ -359,7 +422,7 @@ fn search_ui(
     &mut State {
         entries:
             UiEntries {
-                loaded_entries: _,
+                ref loaded_entries,
                 ref mut search_results,
             },
         ui:
@@ -370,6 +433,7 @@ fn search_ui(
                 ref mut pending_search_token,
                 ref mut queued_searches,
                 ref was_focused,
+                ref mut uri_buf,
                 ..
             },
     }: &mut State,
@@ -424,6 +488,13 @@ fn search_ui(
             .margin(8.),
     );
     let mut reset = |query: &mut String| {
+        remove_old_images(
+            ui.ctx(),
+            uri_buf,
+            loaded_entries.iter().chain(&*search_results),
+            loaded_entries,
+        );
+
         *query = String::new();
         *search_results = Box::default();
         *search_highlighted_id = None;
@@ -682,7 +753,7 @@ fn entry_ui(
             response!(Label::new(job).selectable(false))
         }
         UiEntryCache::Image => response!(
-            Image::new(format!("ringboard://{}", entry.entry.id()))
+            Image::new(state.uri_buf.format(entry.entry.id()).to_owned())
                 .max_height(250.)
                 .max_width(ui.available_width())
                 .fit_to_original_size(1.)
@@ -826,7 +897,7 @@ fn row_ui(
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
                                 ui.add(
-                                    Image::new(format!("ringboard://{}", entry.id()))
+                                    Image::new(state.uri_buf.format(entry.id()))
                                         .max_width(ui.available_width())
                                         .fit_to_original_size(1.),
                                 );
@@ -902,6 +973,8 @@ mod loader {
     use ringboard_sdk::{core::RingAndIndex, ui_actor::Command};
     use rustc_hash::FxHasher;
 
+    use crate::URI_PREFIX;
+
     enum CachedImage {
         Queued,
         Computed(Arc<ColorImage>),
@@ -939,7 +1012,7 @@ mod loader {
     }
 
     fn uri_to_id(uri: &str) -> Option<RingAndIndex> {
-        uri.strip_prefix("ringboard://")
+        uri.strip_prefix(URI_PREFIX)
             .and_then(|id| u64::from_str(id).ok())
             .and_then(|id| RingAndIndex::from_id(id).ok())
     }
