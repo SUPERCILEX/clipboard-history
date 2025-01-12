@@ -741,7 +741,6 @@ dependencies = [
  "log",
  "rustc-hash 2.1.0",
  "rustix",
- "smallvec 2.0.0-alpha.9",
  "thiserror 2.0.9",
  "wayland-client",
  "wayland-protocols-misc",

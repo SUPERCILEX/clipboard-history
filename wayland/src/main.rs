@@ -12,7 +12,6 @@ use std::{
     mem::ManuallyDrop,
     ops::Deref,
     os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
-    ptr,
     rc::Rc,
 };
 
@@ -45,7 +44,6 @@ use rustix::{
     net::{RecvFlags, SendFlags, SocketAddrUnix, SocketType},
     pipe::{SpliceFlags, pipe, splice},
 };
-use smallvec::SmallVec;
 use thiserror::Error;
 use wayland_client::{
     ConnectError, Connection, Dispatch, DispatchError, Proxy, QueueHandle,
@@ -195,16 +193,6 @@ fn run() -> Result<(), CliError> {
         if let Some(e) = app.inner.error {
             return Err(e);
         }
-        if let Some(manager) = &app.inner.manager {
-            for (name, seat) in app.inner.pending_seats.drain(..) {
-                let device = manager.get_data_device(&seat, &qh, name);
-                let keyboard = seat.get_keyboard(&qh, name);
-                app.inner
-                    .seats
-                    .add(name, seat.into_inner(), device, keyboard);
-                debug!("Listening for clipboard events on seat {name}.");
-            }
-        }
         event_queue.flush().map_err(DispatchError::from)?;
 
         trace!("Waiting for event.");
@@ -301,13 +289,6 @@ impl Destroyable for ZwpVirtualKeyboardV1 {
 }
 
 struct AutoDestroy<T: Destroyable>(T);
-
-impl<T: Destroyable> AutoDestroy<T> {
-    fn into_inner(self) -> T {
-        let this = ManuallyDrop::new(self);
-        unsafe { ptr::read(&this.0) }
-    }
-}
 
 impl<T: Destroyable + Debug> Debug for AutoDestroy<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -658,7 +639,6 @@ struct AppDefault {
     sources: Sources,
     outgoing_transfers: OutgoingTransfers,
 
-    pending_seats: SmallVec<(u32, AutoDestroy<WlSeat>), 1>,
     tmp_file_unsupported: bool,
 
     error: Option<CliError>,
@@ -734,8 +714,7 @@ impl Dispatch<WlRegistry, ()> for App {
                 version,
             } => {
                 if interface == WlSeat::interface().name {
-                    let seat: WlSeat = registry.bind(name, version, qh, ());
-                    this.inner.pending_seats.push((name, AutoDestroy(seat)));
+                    let _: WlSeat = registry.bind(name, version, qh, name);
                 }
             }
             Event::GlobalRemove { name } => this.inner.seats.remove(name),
@@ -770,18 +749,27 @@ impl Dispatch<ZwpVirtualKeyboardManagerV1, ()> for App {
     }
 }
 
-impl Dispatch<WlSeat, ()> for App {
+impl Dispatch<WlSeat, u32> for App {
     fn event(
-        _: &mut Self,
-        _: &WlSeat,
+        this: &mut Self,
+        seat: &WlSeat,
         event: <WlSeat as Proxy>::Event,
-        (): &(),
+        &id: &u32,
         _: &Connection,
-        _: &QueueHandle<Self>,
+        qh: &QueueHandle<Self>,
     ) {
         use wl_seat::Event;
+        trace!("Seat event: {event:?}");
         match event {
-            Event::Capabilities { capabilities: _ } | Event::Name { name: _ } => {}
+            Event::Name { name: _ } => {
+                if let Some(manager) = &this.inner.manager {
+                    let device = manager.get_data_device(seat, qh, id);
+                    let keyboard = seat.get_keyboard(qh, id);
+                    this.inner.seats.add(id, seat.clone(), device, keyboard);
+                    debug!("Listening for clipboard events on seat {id}.");
+                }
+            }
+            Event::Capabilities { capabilities: _ } => (),
             _ => debug_assert!(false, "Unhandled seat event: {event:?}"),
         }
     }
