@@ -929,9 +929,8 @@ impl OutgoingTransfers {
                 remaining,
                 SpliceFlags::NONBLOCK,
             ) {
-                Err(Errno::AGAIN) => {
-                    return Ok(false);
-                }
+                Err(Errno::AGAIN) => return Ok(false),
+                Err(Errno::PIPE) => return Ok(true),
                 Err(Errno::INVAL) => {
                     let bytes = io::copy(
                         &mut *ManuallyDrop::new(unsafe {
