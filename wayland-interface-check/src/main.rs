@@ -29,7 +29,7 @@ fn main() -> ExitCode {
         })
         .map(OsString::into_vec)
         .collect::<HashSet<_, _>>();
-    if interfaces.is_empty() {
+    if interfaces.is_empty() && !verbose {
         return ExitCode::SUCCESS;
     }
 
@@ -82,7 +82,7 @@ impl Dispatch<WlRegistry, ()> for State {
                 println!("{interface}:v{version}");
             }
             this.interfaces.remove(interface.as_bytes());
-            if this.interfaces.is_empty() {
+            if this.interfaces.is_empty() && !this.verbose {
                 ExitCode::SUCCESS.exit_process()
             }
         }
