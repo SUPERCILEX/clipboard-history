@@ -219,7 +219,7 @@ impl FreeLists {
                             slots.set(index, true);
                         }
                     }
-                    Entry::Uninitialized | Entry::File => continue,
+                    Entry::Uninitialized | Entry::File => (),
                 }
             }
         }
@@ -777,7 +777,7 @@ impl Allocator {
                                 slots.push(item);
                             }
                         }
-                        Some(Entry::Uninitialized | Entry::File) | None => continue,
+                        Some(Entry::Uninitialized | Entry::File) | None => (),
                     }
                 }
             }

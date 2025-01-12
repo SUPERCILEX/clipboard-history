@@ -421,7 +421,7 @@ fn run() -> Result<(), CliError> {
 
         for epoll::Event { flags: _, data } in &epoll_events {
             match data.u64() {
-                0 => continue,
+                0 => (),
                 1 => handle_paste_event(
                     &conn,
                     &atoms,

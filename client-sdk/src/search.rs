@@ -345,7 +345,7 @@ fn direct_alloc_search_stream<U>(
 
         if match run() {
             Ok(Some(r)) => send(Ok(r)),
-            Ok(None) => continue,
+            Ok(None) => Ok(()),
             Err(e) => send(Err(e)),
         }
         .is_err()
@@ -430,7 +430,7 @@ fn stream_through_direct_allocations<T>(
         };
 
         match run() {
-            Ok(()) => continue,
+            Ok(()) => (),
             Err(DirectIterError::Core(e)) => {
                 if sender.send(Err(e)).is_err() {
                     break;
