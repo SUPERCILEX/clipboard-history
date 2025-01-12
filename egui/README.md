@@ -24,4 +24,5 @@ bash -c 'echo /bin/sh -c \"ps -p \`cat /tmp/.ringboard/$USERNAME.egui-sleep 2\> 
 - Type <kbd>/</kbd> to search.
   - Use <kbd>Alt</kbd> + <kbd>X</kbd> to switch to RegEx search.
   - Note that the search input text font will be monospaced when in RegEx mode.
+  - Use <kbd>Alt</kbd> + <kbd>M</kbd> to search entries by mime type.
 - Use <kbd>Ctrl</kbd> + <kbd>R</kbd> to manually reload the database.
