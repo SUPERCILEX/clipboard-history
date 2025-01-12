@@ -531,6 +531,7 @@ fn do_search<E>(
                 RingAndIndex::new(entry.ring(), entry.index()),
             );
         }
+        reverse_index_cache.shrink_to_fit();
     }
 
     let mut results = BinaryHeap::from(mem::take(search_result_buf));
