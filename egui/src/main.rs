@@ -755,7 +755,7 @@ fn entry_ui(
         UiEntryCache::Image => response!(
             Image::new(state.uri_buf.format(entry.entry.id()).to_owned())
                 .max_height(250.)
-                .max_width(ui.available_width())
+                .max_width(ui.available_width() - 10.)
                 .fit_to_original_size(1.)
         ),
         UiEntryCache::Binary { mime_type } => response!(
@@ -838,7 +838,7 @@ fn row_ui(
                 });
             }
 
-            ui.set_min_width(200.);
+            ui.set_max_width(frame.content_ui.available_width());
             ui.set_max_height(max_popup_height);
 
             ui.horizontal(|ui| {
