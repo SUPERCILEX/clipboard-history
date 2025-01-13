@@ -15,8 +15,17 @@ curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/lo
 sed -i "s|Exec=ringboard-egui|Exec=$(echo /bin/sh -c \"ps -p \`cat /tmp/.ringboard/$USERNAME.egui-sleep 2\> /dev/null\` \> /dev/null 2\>\\\&1 \\\&\\\& exec rm -f /tmp/.ringboard/$USERNAME.egui-sleep \\\|\\\| exec $(which ringboard-egui)\")|g" ~/.local/share/applications/ringboard-egui.desktop
 sed -i "s|Icon=ringboard|Icon=$HOME/.local/share/icons/hicolor/1024x1024/ringboard.jpeg|g" ~/.local/share/applications/ringboard-egui.desktop
 
-# TODO remove once wayland client is implemented
-XDG_SESSION_TYPE=x11
+# Stop existing watchers in case user is switching between X11 and Wayland
+systemctl --user disable ringboard-x11 --now 2> /dev/null || true
+systemctl --user disable ringboard-wayland --now 2> /dev/null || true
+
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+  cargo +nightly install wayland-interface-check
+  if ! wayland-interface-check zwlr_data_control_manager_v1; then
+    export XDG_SESSION_TYPE=x11
+  fi
+fi
+
 cargo +nightly install clipboard-history-$XDG_SESSION_TYPE --no-default-features
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/$XDG_SESSION_TYPE/ringboard-$XDG_SESSION_TYPE.service -O --output-dir ~/.config/systemd/user/
 sed -i "s|ExecStart=ringboard-$XDG_SESSION_TYPE|ExecStart=$(which ringboard-$XDG_SESSION_TYPE)|g" ~/.config/systemd/user/ringboard-$XDG_SESSION_TYPE.service
