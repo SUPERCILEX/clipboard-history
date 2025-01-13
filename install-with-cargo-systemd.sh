@@ -41,3 +41,10 @@ echo "--- DONE ---"
 echo
 echo "Consider reading the egui docs:"
 echo "https://github.com/SUPERCILEX/clipboard-history/blob/master/egui/README.md"
+
+if [ "$XDG_CURRENT_DESKTOP" = "COSMIC" ]; then
+  echo
+  echo "Run"
+  echo "$ sudo bash -c \"echo 'COSMIC_DATA_CONTROL_ENABLED=1' > /etc/environment.d/clipboard.sh\""
+  echo "if necessary and then reboot."
+fi
