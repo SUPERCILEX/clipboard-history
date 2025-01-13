@@ -50,16 +50,21 @@ use wayland_client::{
     backend::WaylandError,
     event_created_child,
     protocol::{
-        wl_keyboard::{Event, KeyState, WlKeyboard},
+        wl_keyboard::{KeyState, WlKeyboard},
         wl_registry,
         wl_registry::WlRegistry,
         wl_seat,
         wl_seat::WlSeat,
     },
 };
-use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
-    zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
-    zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
+use wayland_protocols_misc::{
+    zwp_input_method_v2::client::{
+        zwp_input_method_manager_v2::ZwpInputMethodManagerV2, zwp_input_method_v2::ZwpInputMethodV2,
+    },
+    zwp_virtual_keyboard_v1::client::{
+        zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
+        zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
+    },
 };
 use wayland_protocols_wlr::data_control::v1::client::{
     zwlr_data_control_device_v1::{self, ZwlrDataControlDeviceV1},
@@ -182,6 +187,9 @@ fn run() -> Result<(), CliError> {
     if app.inner.virtual_keyboard_manager.is_none() {
         warn!("Virtual keyboard protocol not available: auto-paste will not work.");
     };
+    if app.inner.input_method_manager.is_none() {
+        warn!("Input method protocol not available: auto-paste will not work.");
+    };
     debug!("Wayland globals initialized.");
 
     let mut epoll_events = epoll::EventVec::with_capacity(4);
@@ -232,6 +240,7 @@ fn run() -> Result<(), CliError> {
                     &qh,
                     app.inner.manager.as_ref(),
                     &app.inner.seats,
+                    &mut app.inner.pending_paste,
                     &mut app.inner.sources,
                     &server,
                     &mut deduplicator,
@@ -288,6 +297,18 @@ impl Destroyable for ZwpVirtualKeyboardV1 {
     }
 }
 
+impl Destroyable for ZwpInputMethodManagerV2 {
+    fn destroy(&self) {
+        self.destroy();
+    }
+}
+
+impl Destroyable for ZwpInputMethodV2 {
+    fn destroy(&self) {
+        self.destroy();
+    }
+}
+
 struct AutoDestroy<T: Destroyable>(T);
 
 impl<T: Destroyable + Debug> Debug for AutoDestroy<T> {
@@ -314,11 +335,13 @@ type SeatStore = (
     AutoDestroy<WlSeat>,
     AutoDestroy<ZwlrDataControlDeviceV1>,
     AutoDestroy<WlKeyboard>,
+    Option<AutoDestroy<ZwpInputMethodV2>>,
     Option<AutoDestroy<ZwpVirtualKeyboardV1>>,
 );
 
 #[derive(Default, Debug)]
 struct Seats {
+    active: u32,
     first: Option<(u32, SeatStore)>,
     others: HashMap<u32, SeatStore, BuildHasherDefault<FxHasher>>,
 }
@@ -330,24 +353,51 @@ impl Seats {
         seat_obj: WlSeat,
         device: ZwlrDataControlDeviceV1,
         keyboard: WlKeyboard,
+        input_method: Option<ZwpInputMethodV2>,
     ) {
-        let Self { first, others } = self;
+        let Self {
+            active,
+            first,
+            others,
+        } = self;
 
         let value = (
             AutoDestroy(seat_obj),
             AutoDestroy(device),
             AutoDestroy(keyboard),
+            input_method.map(AutoDestroy),
             None,
         );
         if first.is_none() {
             *first = Some((seat, value));
+            *active = seat;
         } else if others.insert(seat, value).is_some() {
             error!("Duplicate seat: {seat}");
         }
     }
 
+    fn get(&self, seat: u32) -> Option<&SeatStore> {
+        let Self {
+            active: _,
+            first,
+            others,
+        } = self;
+
+        if let &Some((existing, ref value)) = first
+            && seat == existing
+        {
+            Some(value)
+        } else {
+            others.get(&seat)
+        }
+    }
+
     fn get_mut(&mut self, seat: u32) -> Option<&mut SeatStore> {
-        let Self { first, others } = self;
+        let Self {
+            active: _,
+            first,
+            others,
+        } = self;
 
         if let &mut Some((existing, ref mut value)) = first
             && seat == existing
@@ -359,7 +409,11 @@ impl Seats {
     }
 
     fn remove(&mut self, seat: u32) {
-        let Self { first, others } = self;
+        let Self {
+            active,
+            first,
+            others,
+        } = self;
 
         if let &Some((existing, _)) = &*first
             && seat == existing
@@ -376,6 +430,10 @@ impl Seats {
             debug!("Trying to remove seat {seat} that does not exist.");
         }
         others.shrink_to_fit();
+
+        if seat == *active {
+            *active = first.as_ref().map_or(0, |&(id, _)| id);
+        }
     }
 }
 
@@ -633,11 +691,13 @@ impl PendingOffers {
 struct AppDefault {
     manager: Option<AutoDestroy<ZwlrDataControlManagerV1>>,
     virtual_keyboard_manager: Option<ZwpVirtualKeyboardManagerV1>,
+    input_method_manager: Option<AutoDestroy<ZwpInputMethodManagerV2>>,
     seats: Seats,
     pending_offers: PendingOffers,
 
     sources: Sources,
     outgoing_transfers: OutgoingTransfers,
+    pending_paste: bool,
 
     tmp_file_unsupported: bool,
 
@@ -707,6 +767,14 @@ impl Dispatch<WlRegistry, ()> for App {
             &mut this.inner.error,
             &event,
         );
+        singleton(
+            registry,
+            qh,
+            &mut this.inner.input_method_manager,
+            AutoDestroy,
+            &mut this.inner.error,
+            &event,
+        );
         match event {
             Event::Global {
                 name,
@@ -765,7 +833,14 @@ impl Dispatch<WlSeat, u32> for App {
                 if let Some(manager) = &this.inner.manager {
                     let device = manager.get_data_device(seat, qh, id);
                     let keyboard = seat.get_keyboard(qh, id);
-                    this.inner.seats.add(id, seat.clone(), device, keyboard);
+                    let input_method = this
+                        .inner
+                        .input_method_manager
+                        .as_ref()
+                        .map(|m| m.get_input_method(seat, qh, id));
+                    this.inner
+                        .seats
+                        .add(id, seat.clone(), device, keyboard, input_method);
                     debug!("Listening for clipboard events on seat {id}.");
                 }
             }
@@ -1037,6 +1112,7 @@ fn handle_paste_event(
     qh: &QueueHandle<App>,
     manager: Option<&AutoDestroy<ZwlrDataControlManagerV1>>,
     seats: &Seats,
+    pending_paste: &mut bool,
     sources: &mut Sources,
 
     server: impl AsFd,
@@ -1096,8 +1172,7 @@ fn handle_paste_event(
         debug!("No manager for paste.");
         return Ok(());
     };
-    // TODO at some point we should handle multiple seats, but eh for now
-    let Some((_, (_, device, _, virtual_keyboard))) = seats.first.as_ref() else {
+    let Some((_, device, _, _, _)) = seats.get(seats.active) else {
         warn!("Received paste command with no seats to paste into, ignoring.");
         return Ok(());
     };
@@ -1135,15 +1210,7 @@ fn handle_paste_event(
     }
     info!("Claimed selection ownership.");
 
-    if trigger_paste && let Some(keyboard) = virtual_keyboard {
-        // TODO get rid of this hack
-        std::thread::sleep(std::time::Duration::from_millis(200));
-        keyboard.key(0, 42, KeyState::Pressed.into());
-        keyboard.key(0, 110, KeyState::Pressed.into());
-        keyboard.key(0, 110, KeyState::Released.into());
-        keyboard.key(0, 42, KeyState::Released.into());
-        info!("Sent paste command.");
-    }
+    *pending_paste = trigger_paste;
 
     Ok(())
 }
@@ -1244,9 +1311,11 @@ impl Dispatch<WlKeyboard, u32> for App {
         _: &Connection,
         qh: &QueueHandle<Self>,
     ) {
+        use wayland_client::protocol::wl_keyboard::Event;
+
         trace!("Keyboard event: {event:?}");
         if let Event::Keymap { format, fd, size } = event {
-            let Some((seat, _, _, virtual_keyboard)) = this.inner.seats.get_mut(seat) else {
+            let Some((seat, _, _, _, virtual_keyboard)) = this.inner.seats.get_mut(seat) else {
                 error!("Received keyboard event for seat {seat} that does not exist.");
                 return;
             };
@@ -1258,6 +1327,50 @@ impl Dispatch<WlKeyboard, u32> for App {
             let keyboard = virtual_keyboard
                 .get_or_insert_with(|| AutoDestroy(manager.create_virtual_keyboard(seat, qh, ())));
             keyboard.keymap(format.into(), fd.as_fd(), size);
+        }
+    }
+}
+
+impl Dispatch<ZwpInputMethodManagerV2, ()> for App {
+    fn event(
+        _: &mut Self,
+        _: &ZwpInputMethodManagerV2,
+        event: <ZwpInputMethodManagerV2 as Proxy>::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        debug_assert!(false, "Unhandled input method manager event: {event:?}");
+    }
+}
+
+impl Dispatch<ZwpInputMethodV2, u32> for App {
+    fn event(
+        this: &mut Self,
+        _: &ZwpInputMethodV2,
+        event: <ZwpInputMethodV2 as Proxy>::Event,
+        &seat: &u32,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_method_v2::Event;
+
+        trace!("Input method event: {event:?}");
+        if this.inner.pending_paste
+            && matches!(event, Event::Deactivate)
+            && let Some((_, _, _, _, Some(keyboard))) = &this.inner.seats.get(seat)
+        {
+            // Shift modifier + Insert key
+            keyboard.modifiers(1, 0, 0, 0);
+            keyboard.key(1, 110, KeyState::Pressed.into());
+            keyboard.key(2, 110, KeyState::Released.into());
+            keyboard.modifiers(0, 0, 0, 0);
+            info!("Sent paste command.");
+
+            this.inner.pending_paste = false;
+        }
+        if matches!(event, Event::Done) {
+            this.inner.seats.active = seat;
         }
     }
 }
