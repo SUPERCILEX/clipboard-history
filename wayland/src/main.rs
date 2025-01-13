@@ -57,14 +57,13 @@ use wayland_client::{
         wl_seat::WlSeat,
     },
 };
-use wayland_protocols_misc::{
-    zwp_input_method_v2::client::{
-        zwp_input_method_manager_v2::ZwpInputMethodManagerV2, zwp_input_method_v2::ZwpInputMethodV2,
-    },
-    zwp_virtual_keyboard_v1::client::{
-        zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
-        zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
-    },
+use wayland_protocols::ext::foreign_toplevel_list::v1::client::{
+    ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1, ext_foreign_toplevel_list_v1,
+    ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1,
+};
+use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
+    zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
+    zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
 };
 use wayland_protocols_wlr::data_control::v1::client::{
     zwlr_data_control_device_v1::{self, ZwlrDataControlDeviceV1},
@@ -187,8 +186,8 @@ fn run() -> Result<(), CliError> {
     if app.inner.virtual_keyboard_manager.is_none() {
         warn!("Virtual keyboard protocol not available: auto-paste will not work.");
     };
-    if app.inner.input_method_manager.is_none() {
-        warn!("Input method protocol not available: auto-paste will not work.");
+    if app.inner.foreign_toplevels.is_none() {
+        warn!("Foreign toplevel protocol not available: auto-paste will not work.");
     };
     debug!("Wayland globals initialized.");
 
@@ -297,13 +296,13 @@ impl Destroyable for ZwpVirtualKeyboardV1 {
     }
 }
 
-impl Destroyable for ZwpInputMethodManagerV2 {
+impl Destroyable for ExtForeignToplevelListV1 {
     fn destroy(&self) {
         self.destroy();
     }
 }
 
-impl Destroyable for ZwpInputMethodV2 {
+impl Destroyable for ExtForeignToplevelHandleV1 {
     fn destroy(&self) {
         self.destroy();
     }
@@ -335,7 +334,6 @@ type SeatStore = (
     AutoDestroy<WlSeat>,
     AutoDestroy<ZwlrDataControlDeviceV1>,
     AutoDestroy<WlKeyboard>,
-    Option<AutoDestroy<ZwpInputMethodV2>>,
     Option<AutoDestroy<ZwpVirtualKeyboardV1>>,
 );
 
@@ -353,7 +351,6 @@ impl Seats {
         seat_obj: WlSeat,
         device: ZwlrDataControlDeviceV1,
         keyboard: WlKeyboard,
-        input_method: Option<ZwpInputMethodV2>,
     ) {
         let Self {
             active,
@@ -365,7 +362,6 @@ impl Seats {
             AutoDestroy(seat_obj),
             AutoDestroy(device),
             AutoDestroy(keyboard),
-            input_method.map(AutoDestroy),
             None,
         );
         if first.is_none() {
@@ -691,7 +687,7 @@ impl PendingOffers {
 struct AppDefault {
     manager: Option<AutoDestroy<ZwlrDataControlManagerV1>>,
     virtual_keyboard_manager: Option<ZwpVirtualKeyboardManagerV1>,
-    input_method_manager: Option<AutoDestroy<ZwpInputMethodManagerV2>>,
+    foreign_toplevels: Option<AutoDestroy<ExtForeignToplevelListV1>>,
     seats: Seats,
     pending_offers: PendingOffers,
 
@@ -770,7 +766,7 @@ impl Dispatch<WlRegistry, ()> for App {
         singleton(
             registry,
             qh,
-            &mut this.inner.input_method_manager,
+            &mut this.inner.foreign_toplevels,
             AutoDestroy,
             &mut this.inner.error,
             &event,
@@ -833,14 +829,7 @@ impl Dispatch<WlSeat, u32> for App {
                 if let Some(manager) = &this.inner.manager {
                     let device = manager.get_data_device(seat, qh, id);
                     let keyboard = seat.get_keyboard(qh, id);
-                    let input_method = this
-                        .inner
-                        .input_method_manager
-                        .as_ref()
-                        .map(|m| m.get_input_method(seat, qh, id));
-                    this.inner
-                        .seats
-                        .add(id, seat.clone(), device, keyboard, input_method);
+                    this.inner.seats.add(id, seat.clone(), device, keyboard);
                     debug!("Listening for clipboard events on seat {id}.");
                 }
             }
@@ -1172,7 +1161,7 @@ fn handle_paste_event(
         debug!("No manager for paste.");
         return Ok(());
     };
-    let Some((_, device, _, _, _)) = seats.get(seats.active) else {
+    let Some((_, device, _, _)) = seats.get(seats.active) else {
         warn!("Received paste command with no seats to paste into, ignoring.");
         return Ok(());
     };
@@ -1315,7 +1304,7 @@ impl Dispatch<WlKeyboard, u32> for App {
 
         trace!("Keyboard event: {event:?}");
         if let Event::Keymap { format, fd, size } = event {
-            let Some((seat, _, _, _, virtual_keyboard)) = this.inner.seats.get_mut(seat) else {
+            let Some((seat, _, _, virtual_keyboard)) = this.inner.seats.get_mut(seat) else {
                 error!("Received keyboard event for seat {seat} that does not exist.");
                 return;
             };
@@ -1328,37 +1317,51 @@ impl Dispatch<WlKeyboard, u32> for App {
                 .get_or_insert_with(|| AutoDestroy(manager.create_virtual_keyboard(seat, qh, ())));
             keyboard.keymap(format.into(), fd.as_fd(), size);
         }
+        this.inner.seats.active = seat;
     }
 }
 
-impl Dispatch<ZwpInputMethodManagerV2, ()> for App {
+impl Dispatch<ExtForeignToplevelListV1, ()> for App {
     fn event(
-        _: &mut Self,
-        _: &ZwpInputMethodManagerV2,
-        event: <ZwpInputMethodManagerV2 as Proxy>::Event,
+        this: &mut Self,
+        _: &ExtForeignToplevelListV1,
+        event: <ExtForeignToplevelListV1 as Proxy>::Event,
         (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        debug_assert!(false, "Unhandled input method manager event: {event:?}");
+        use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::Event;
+
+        match event {
+            Event::Toplevel { toplevel } => trace!("New foreign top level: {:?}", toplevel.id()),
+            Event::Finished => {
+                trace!("Unsubscribing from toplevel events.");
+                this.inner.foreign_toplevels.take();
+            }
+            _ => debug_assert!(false, "Unhandled foreign top level list event: {event:?}"),
+        }
     }
+
+    event_created_child!(Self, ExtForeignToplevelListV1, [
+        ext_foreign_toplevel_list_v1::EVT_TOPLEVEL_OPCODE => (ExtForeignToplevelHandleV1, ()),
+    ]);
 }
 
-impl Dispatch<ZwpInputMethodV2, u32> for App {
+impl Dispatch<ExtForeignToplevelHandleV1, ()> for App {
     fn event(
         this: &mut Self,
-        _: &ZwpInputMethodV2,
-        event: <ZwpInputMethodV2 as Proxy>::Event,
-        &seat: &u32,
+        handle: &ExtForeignToplevelHandleV1,
+        event: <ExtForeignToplevelHandleV1 as Proxy>::Event,
+        (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_method_v2::Event;
+        use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::Event;
 
-        trace!("Input method event: {event:?}");
+        trace!("Foreign top level handle event: {event:?}");
         if this.inner.pending_paste
-            && matches!(event, Event::Deactivate)
-            && let Some((_, _, _, _, Some(keyboard))) = &this.inner.seats.get(seat)
+            && matches!(event, Event::Done | Event::Closed)
+            && let Some((_, _, _, Some(keyboard))) = &this.inner.seats.get(this.inner.seats.active)
         {
             // Shift modifier + Insert key
             keyboard.modifiers(1, 0, 0, 0);
@@ -1369,8 +1372,8 @@ impl Dispatch<ZwpInputMethodV2, u32> for App {
 
             this.inner.pending_paste = false;
         }
-        if matches!(event, Event::Done) {
-            this.inner.seats.active = seat;
+        if matches!(event, Event::Closed) {
+            handle.destroy();
         }
     }
 }

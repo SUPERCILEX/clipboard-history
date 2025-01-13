@@ -743,6 +743,7 @@ dependencies = [
  "rustix",
  "thiserror 2.0.9",
  "wayland-client",
+ "wayland-protocols",
  "wayland-protocols-misc",
  "wayland-protocols-wlr",
 ]
