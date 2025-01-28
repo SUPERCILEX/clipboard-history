@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Formatter},
-    intrinsics::transmute,
+    mem::transmute,
 };
 
 pub use path::PathView;

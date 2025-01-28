@@ -27,10 +27,10 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
 use error_stack::Report;
 use rand::{
-    Rng,
-    distributions::{Alphanumeric, DistString, Standard},
+    Rng, TryRngCore,
+    distr::{Alphanumeric, SampleString, StandardUniform},
 };
-use rand_distr::{Distribution, LogNormal, WeightedAliasIndex};
+use rand_distr::{Distribution, LogNormal, weighted::WeightedAliasIndex};
 use rand_xoshiro::{
     Xoshiro256PlusPlus,
     rand_core::{RngCore, SeedableRng},
@@ -1538,8 +1538,7 @@ fn generate(
 
         #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
         let len = len_distr.sample(rng).round().max(1.) as u64;
-        // TODO use adapter when it's available
-        let result = io::copy(&mut (rng as &mut dyn RngCore).take(len), &mut file)
+        let result = io::copy(&mut rng.read_adapter().take(len), &mut file)
             .map_io_err(|| "Failed to write bytes to entry file.")?;
         debug_assert_eq!(len, result);
         file.seek(SeekFrom::Start(0))
@@ -1550,9 +1549,9 @@ fn generate(
 
     struct GenerateRingKind(RingKind);
 
-    impl Distribution<GenerateRingKind> for Standard {
+    impl Distribution<GenerateRingKind> for StandardUniform {
         fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> GenerateRingKind {
-            match rng.gen_range(0..100) {
+            match rng.random_range(0..100) {
                 0 => GenerateRingKind(RingKind::Favorites),
                 _ => GenerateRingKind(RingKind::Main),
             }
@@ -1569,7 +1568,7 @@ fn generate(
             pipeline_add_request(
                 &server,
                 data,
-                rng.r#gen::<GenerateRingKind>().0,
+                rng.random::<GenerateRingKind>().0,
                 MimeType::new_const(),
                 None,
                 &mut pending_adds,
@@ -1603,9 +1602,9 @@ fn fuzz(
 
     struct FuzzRingKind(RingKind);
 
-    impl Distribution<FuzzRingKind> for Standard {
+    impl Distribution<FuzzRingKind> for StandardUniform {
         fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> FuzzRingKind {
-            match rng.gen_range(0..=2) {
+            match rng.random_range(0..=2) {
                 0 => FuzzRingKind(RingKind::Favorites),
                 _ => FuzzRingKind(RingKind::Main),
             }
@@ -1822,7 +1821,7 @@ fn fuzz(
             }
             1 => {
                 if !clients.is_empty() {
-                    let idx = rng.gen_range(0..clients.len());
+                    let idx = rng.random_range(0..clients.len());
                     if verbose {
                         writeln!(out, "Closing client {idx}.")
                             .map_io_err(|| "Failed to write to stdout.")?;
@@ -1859,7 +1858,7 @@ fn fuzz(
                     clients.push(connect_to_server(addr)?);
                 }
                 let (server, pending_ops, pending_requests) = {
-                    let idx = rng.gen_range(0..clients.len());
+                    let idx = rng.random_range(0..clients.len());
                     (
                         &clients[idx],
                         &mut pending_ops[idx],
@@ -1889,9 +1888,9 @@ fn fuzz(
 
                 match action {
                     2 => {
-                        let kind = rng.r#gen::<FuzzRingKind>().0;
-                        let mime_type = if rng.gen_range(0..50) == 0 {
-                            let len = rng.gen_range(1..=MimeType::new_const().capacity());
+                        let kind = rng.random::<FuzzRingKind>().0;
+                        let mime_type = if rng.random_range(0..50) == 0 {
+                            let len = rng.random_range(1..=MimeType::new_const().capacity());
                             Alphanumeric.append_string(&mut rng, &mut buf, len);
 
                             let mime = MimeType::from(&buf).unwrap();
@@ -1916,8 +1915,13 @@ fn fuzz(
                         ));
                     }
                     3 => {
-                        let move_id = rng.gen_range(0..=sequence_num);
-                        let kind = rng.r#gen::<Option<FuzzRingKind>>().map(|r| r.0);
+                        let move_id = rng.random_range(0..=sequence_num);
+                        let kind = if rng.random() {
+                            Some(rng.random::<FuzzRingKind>())
+                        } else {
+                            None
+                        }
+                        .map(|r| r.0);
 
                         pending_ops.push_back(PendingOp::Move { id: move_id });
                         pipeline_request!(|flags| MoveToFrontRequest::send(
@@ -1925,22 +1929,22 @@ fn fuzz(
                         ));
                     }
                     4 => {
-                        let id1 = rng.gen_range(0..=sequence_num);
-                        let id2 = rng.gen_range(0..=sequence_num);
+                        let id1 = rng.random_range(0..=sequence_num);
+                        let id2 = rng.random_range(0..=sequence_num);
 
                         pending_ops.push_back(PendingOp::Swap { id1, id2 });
                         pipeline_request!(|flags| SwapRequest::send(server, id1, id2, flags));
                     }
                     5 => {
-                        let id = rng.gen_range(0..=sequence_num);
+                        let id = rng.random_range(0..=sequence_num);
 
                         pending_ops.push_back(PendingOp::Remove { id });
                         pipeline_request!(|flags| RemoveRequest::send(server, id, flags));
                     }
                     6 => {
-                        let max_wasted_bytes = match rng.gen_range(0..4) {
+                        let max_wasted_bytes = match rng.random_range(0..4) {
                             0 => 0,
-                            _ => rng.gen_range(0..10_000) + 1,
+                            _ => rng.random_range(0..10_000) + 1,
                         };
 
                         pending_ops.push_back(PendingOp::Gc);

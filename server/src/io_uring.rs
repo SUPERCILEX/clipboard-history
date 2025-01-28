@@ -345,6 +345,8 @@ pub mod buf_ring {
     }
 
     impl Buf<'_, '_> {
+        // TODO https://github.com/rust-lang/rust-clippy/issues/14091
+        #[allow(clippy::missing_const_for_fn)]
         pub fn into_index(self) -> u16 {
             let me = ManuallyDrop::new(self);
             me.index

@@ -11,11 +11,11 @@ license.workspace = true
 
 [dependencies]
 arrayvec = "0.7.6"
-dirs = "5.0.1"
+dirs = "6.0.0"
 error-stack = { version = "0.5.0", default-features = false, optional = true }
 itoa = "1.0.14"
-rustix = { version = "0.38.42", features = ["fs", "mm", "process", "net", "event", "itoa", "linux_latest"] }
-thiserror = "2.0.9"
+rustix = { version = "0.38.44", features = ["fs", "mm", "process", "net", "event", "itoa", "linux_latest"] }
+thiserror = "2.0.11"
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.13", default-features = false, features = ["api"] }
+supercilex-tests = { version = "0.4.14", default-features = false, features = ["api"] }

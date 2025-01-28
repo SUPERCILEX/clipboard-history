@@ -1101,8 +1101,8 @@ pub const fn clipboard_history_client_sdk::Entry::rai(&self) -> clipboard_histor
 pub fn clipboard_history_client_sdk::Entry::ring(&self) -> clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_client_sdk::Entry::to_file<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<'a, std::fs::File>, clipboard_history_core::Error>
 pub fn clipboard_history_client_sdk::Entry::to_file_raw<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<'a, std::fs::File>>, clipboard_history_core::Error>
-pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<'a, MmapOrSlice<'a>>, clipboard_history_core::Error>
-pub fn clipboard_history_client_sdk::Entry::to_slice_raw<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<'a, MmapOrSlice<'a>>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_slice<'a>(&self, reader: &'a mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<clipboard_history_client_sdk::LoadedEntry<'a, clipboard_history_client_sdk::ring_reader::MmapOrSlice<'a>>, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::Entry::to_slice_raw<'a>(&self, reader: &'a clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<clipboard_history_client_sdk::LoadedEntry<'a, clipboard_history_client_sdk::ring_reader::MmapOrSlice<'a>>>, clipboard_history_core::Error>
 impl core::clone::Clone for clipboard_history_client_sdk::Entry
 pub fn clipboard_history_client_sdk::Entry::clone(&self) -> clipboard_history_client_sdk::Entry
 impl core::fmt::Debug for clipboard_history_client_sdk::Entry

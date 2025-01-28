@@ -1,10 +1,10 @@
 pub mod clipboard_history_watcher_utils
 pub mod clipboard_history_watcher_utils::best_target
 pub struct clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
+impl<Id: clipboard_history_watcher_utils::best_target::id::AsId<Idcore::cmp::Eq>> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
+pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::add_mime(&mut self, mime: &clipboard_history_core::protocol::MimeType, id: Id)
 impl<Id: core::marker::Copy> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::best(self) -> core::option::Option<(Id, clipboard_history_core::protocol::MimeType)>
-impl<Id: id::AsId<Idcore::cmp::Eq>> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
-pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::add_mime(&mut self, mime: &clipboard_history_core::protocol::MimeType, id: Id)
 impl<Id> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::block_plain_text(&mut self)
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::pop_best(&mut self) -> core::option::Option<Id>

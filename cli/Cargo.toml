@@ -14,27 +14,27 @@ arrayvec = { version = "0.7.6", features = ["serde"] }
 ask = { package = "ask-cli", version = "0.3.0" }
 base64 = "0.22.1"
 base64-serde = "0.8.0"
-clap = { version = "4.5.23", features = ["derive", "wrap_help"] }
-clap-num = "1.1.1"
-dirs = "5.0.1"
+clap = { version = "4.5.27", features = ["derive", "wrap_help"] }
+clap-num = "1.2.0"
+dirs = "6.0.0"
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
 fuc_engine = "2.2.0"
 mime_guess = { version = "2.0.5", default-features = false }
-quick-xml = { version = "0.37.1", features = ["serialize"] }
-rand = { version = "0.8.5", default-features = false, features = ["std"] }
-rand_distr = "0.4.3"
-rand_xoshiro = "0.6.0"
+quick-xml = { version = "0.37.2", features = ["serialize"] }
+rand = { version = "0.9.0", default-features = false, features = ["std"] }
+rand_distr = "0.5.0"
+rand_xoshiro = "0.7.0"
 regex = "1.11.1"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "deduplication", "search", "config"] }
 rustc-hash = "2.1.0"
-rustix = { version = "0.38.42", features = ["stdio", "event"] }
+rustix = { version = "0.38.44", features = ["stdio", "event"] }
 serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.134"
-thiserror = "2.0.9"
+serde_json = "1.0.137"
+thiserror = "2.0.11"
 toml = { version = "0.8.19", default-features = false, features = ["display"] }
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.13", default-features = false, features = ["clap"] }
+supercilex-tests = { version = "0.4.14", default-features = false, features = ["clap"] }
 
 [[bin]]
 name = "ringboard"

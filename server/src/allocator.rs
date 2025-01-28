@@ -163,6 +163,8 @@ struct BucketSlotGuard<'a> {
 }
 
 impl BucketSlotGuard<'_> {
+    // TODO https://github.com/rust-lang/rust-clippy/issues/14091
+    #[allow(clippy::missing_const_for_fn)]
     fn into_inner(self) -> u32 {
         let this = ManuallyDrop::new(self);
         this.id
