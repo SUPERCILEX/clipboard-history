@@ -49,6 +49,8 @@ apps or re-run the installation script whenever you need to update.
 
 ### Manual installation
 
+DO NOT RUN if you already installed via the script above.
+
 #### Common core
 
 You'll need the server, an X11 or Wayland clipboard watcher, and a way to view your clipboard:
