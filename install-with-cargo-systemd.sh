@@ -21,7 +21,7 @@ systemctl --user disable ringboard-wayland --now 2> /dev/null || true
 
 if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
   cargo +nightly install wayland-interface-check
-  if ! wayland-interface-check zwlr_data_control_manager_v1; then
+  if [ "$XDG_CURRENT_DESKTOP" != "COSMIC" ] && ! wayland-interface-check zwlr_data_control_manager_v1; then
     export XDG_SESSION_TYPE=x11
   fi
 fi
