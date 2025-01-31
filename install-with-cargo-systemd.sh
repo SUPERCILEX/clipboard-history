@@ -43,6 +43,8 @@ echo "Consider reading the egui docs:"
 echo "https://github.com/SUPERCILEX/clipboard-history/blob/master/egui/README.md"
 
 if [ "$XDG_CURRENT_DESKTOP" = "COSMIC" ]; then
-  mkdir -p ~/.config/environment.d && echo 'COSMIC_DATA_CONTROL_ENABLED=1' > ~/.config/environment.d/clipboard.conf
-  echo "COSMIC_DATA_CONTROL_ENABLED set... you may need to reboot for it to take effect."
+  echo "COSMIC_DATA_CONTROL_ENABLED must be set, which requires sudo."
+  echo "Please reboot after letting the following command run:"
+  echo "$ sudo sh -c 'echo \"export COSMIC_DATA_CONTROL_ENABLED=1\" > /etc/profile.d/clipboard.sh; chmod 644 /etc/profile.d/clipboard.sh'"
+  sudo sh -c 'echo "export COSMIC_DATA_CONTROL_ENABLED=1" > /etc/profile.d/clipboard.sh; chmod 644 /etc/profile.d/clipboard.sh'
 fi
