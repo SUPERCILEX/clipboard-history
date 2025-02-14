@@ -180,6 +180,7 @@ struct App {
     responses: Receiver<Message>,
 
     state: State,
+    daemon: bool,
 }
 
 #[derive(Default)]
@@ -248,6 +249,13 @@ impl App {
             responses,
 
             state,
+            daemon: cfg!(not(feature = "wayland"))
+                && {
+                    // i3 thinks the closed window is focused if it moves monitors.
+                    option_env!("XDG_CURRENT_DESKTOP")
+                        .is_none_or(|de| !de.eq_ignore_ascii_case("i3"))
+                }
+                && env::var_os("RINGBOARD_NO_DAEMON").is_none(),
         }
     }
 }
@@ -402,12 +410,7 @@ impl eframe::App for App {
                 );
             });
 
-        #[cfg(not(feature = "wayland"))]
-        if {
-            // i3 thinks the closed window is focused if it moves monitors.
-            option_env!("XDG_CURRENT_DESKTOP").is_none_or(|de| !de.eq_ignore_ascii_case("i3"))
-        } && ctx.input(|i| i.viewport().close_requested() && !i.modifiers.shift)
-        {
+        if self.daemon && ctx.input(|i| i.viewport().close_requested() && !i.modifiers.shift) {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(ViewportCommand::Visible(false));
 
