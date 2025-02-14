@@ -53,6 +53,7 @@ static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
     tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
 
 fn main() -> Result<(), eframe::Error> {
+    let oneshot = std::env::var("RINGBOARD_ONESHOT").is_ok();
     let stop = Arc::new(AtomicBool::new(false));
     let result = eframe::run_native(
         concat!("Ringboard v", env!("CARGO_PKG_VERSION")),
@@ -138,32 +139,38 @@ fn main() -> Result<(), eframe::Error> {
                 }
             });
 
-            thread::spawn({
-                let ctx = cc.egui_ctx.clone();
-                let stop = stop.clone();
-                move || {
-                    ctx.send_viewport_cmd(ViewportCommand::Icon(Some(
-                        eframe::icon_data::from_png_bytes(include_bytes!("../logo.jpeg"))
-                            .unwrap()
-                            .into(),
-                    )));
+            if !oneshot {
+                thread::spawn({
+                    let ctx = cc.egui_ctx.clone();
+                    let stop = stop.clone();
+                    move || {
+                        ctx.send_viewport_cmd(ViewportCommand::Icon(Some(
+                            eframe::icon_data::from_png_bytes(include_bytes!("../logo.jpeg"))
+                                .unwrap()
+                                .into(),
+                        )));
 
-                    if let Err(e) = maintain_single_instance(&stop, || {
-                        ctx.send_viewport_cmd(ViewportCommand::Visible(true));
-                        ctx.send_viewport_cmd(ViewportCommand::Focus);
-                    }) {
-                        let _ = response_sender.send(Message::Error(e.into()));
+                        if let Err(e) = maintain_single_instance(&stop, || {
+                            ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+                            ctx.send_viewport_cmd(ViewportCommand::Focus);
+                        }) {
+                            let _ = response_sender.send(Message::Error(e.into()));
+                        }
                     }
-                }
-            });
+                });
+            }
 
             if env::var_os("THEME").as_deref().unwrap_or_default() == "light" {
                 cc.egui_ctx.set_theme(ThemePreference::Light);
             }
 
-            Ok(Box::new(App::start(command_sender, response_receiver)))
+            Ok(Box::new(App::start(command_sender, response_receiver, oneshot)))
         }),
     );
+
+    if oneshot {
+        return result;
+    }
 
     stop.store(true, Ordering::Relaxed);
     {
@@ -180,6 +187,8 @@ struct App {
     responses: Receiver<Message>,
 
     state: State,
+    /// Exit ringboard-egui process after the window is closed
+    oneshot: bool,
 }
 
 #[derive(Default)]
@@ -240,7 +249,7 @@ impl Default for UriBuf {
 }
 
 impl App {
-    fn start(requests: Sender<Command>, responses: Receiver<Message>) -> Self {
+    fn start(requests: Sender<Command>, responses: Receiver<Message>, oneshot: bool) -> Self {
         let mut state = State::default();
         state.ui.skip_first_focus = true;
         Self {
@@ -248,6 +257,7 @@ impl App {
             responses,
 
             state,
+            oneshot,
         }
     }
 }
@@ -402,17 +412,19 @@ impl eframe::App for App {
                 );
             });
 
-        #[cfg(not(feature = "wayland"))]
-        if {
-            // i3 thinks the closed window is focused if it moves monitors.
-            option_env!("XDG_CURRENT_DESKTOP").is_none_or(|de| !de.eq_ignore_ascii_case("i3"))
-        } && ctx.input(|i| i.viewport().close_requested() && !i.modifiers.shift)
-        {
-            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-            ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+        if !self.oneshot {
+            #[cfg(not(feature = "wayland"))]
+            if {
+                // i3 thinks the closed window is focused if it moves monitors.
+                option_env!("XDG_CURRENT_DESKTOP").is_none_or(|de| !de.eq_ignore_ascii_case("i3"))
+            } && ctx.input(|i| i.viewport().close_requested() && !i.modifiers.shift)
+            {
+                ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+                ctx.send_viewport_cmd(ViewportCommand::Visible(false));
 
-            self.state = State::default();
-            ctx.forget_all_images();
+                self.state = State::default();
+                ctx.forget_all_images();
+            }
         }
     }
 }
