@@ -573,7 +573,7 @@ fn main_ui(
     if let Some(ref e) = state.fatal_error {
         show_error(ui, e);
         return;
-    };
+    }
     if let Some(e) = &state.last_error {
         show_error(ui, e);
     }

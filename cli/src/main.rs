@@ -1514,7 +1514,7 @@ fn migrate_from_ringboard_export(server: OwnedFd, dump_file: PathBuf) -> Result<
         for result in iter {
             process(result?)?;
         }
-    };
+    }
 
     unsafe { drain_add_requests(server, None, &mut pending_adds) }
 }
@@ -2045,7 +2045,7 @@ fn pipeline_request(
                 *pending_requests += 1;
                 break;
             }
-        };
+        }
     }
     Ok(())
 }
@@ -2068,7 +2068,7 @@ fn drain_requests(
                 break;
             }
             r => r?,
-        };
+        }
         *pending_requests -= 1;
     }
     Ok(())

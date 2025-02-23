@@ -182,13 +182,13 @@ fn run() -> Result<(), CliError> {
             message: "compositor does not implement necessary interface",
             interface: "zwlr_data_control_manager_v1",
         });
-    };
+    }
     if app.inner.virtual_keyboard_manager.is_none() {
         warn!("Virtual keyboard protocol not available: auto-paste will not work.");
-    };
+    }
     if app.inner.foreign_toplevels.is_none() {
         warn!("Foreign toplevel protocol not available: auto-paste will not work.");
-    };
+    }
     debug!("Wayland globals initialized.");
 
     let mut epoll_events = epoll::EventVec::with_capacity(4);
@@ -206,7 +206,7 @@ fn run() -> Result<(), CliError> {
         match epoll::wait(&app.epoll, &mut epoll_events, -1) {
             Err(Errno::INTR) => continue,
             r => r.map_io_err(|| "Failed to wait for epoll events.")?,
-        };
+        }
         for epoll::Event { flags: _, data } in &epoll_events {
             const OUT_START_IDX: u64 = IN_TRANSFER_BUFFERS as u64;
             const WAYLAND_IDX: u64 = OUT_START_IDX + OUT_TRANSFER_BUFFERS as u64;

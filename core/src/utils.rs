@@ -185,7 +185,7 @@ pub fn acquire_lock_file<
                     .map_io_err(|| format!("Failed to materialize lock file: {path:?}"))
                     .map(|()| A::NOTHING);
             }
-        };
+        }
 
         let lock_file = 'retry: {
             let lock_file = match openat(dirfd, path, OFlags::RDWR, Mode::empty()) {
@@ -218,7 +218,7 @@ pub fn acquire_lock_file<
                         r => r.map_io_err(|| {
                             format!("Failed to send quit to lock file {path:?} owner: {pid:?}")
                         })?,
-                    };
+                    }
 
                     let mut fds = [PollFd::new(&fd, PollFlags::IN)];
                     poll(&mut fds, -1).map_io_err(|| {
@@ -321,7 +321,7 @@ pub fn create_tmp_file<Fd: AsFd, P1: Arg, P2: Arg + Copy>(
         match openat(&dirfd, path, oflags | OFlags::TMPFILE, create_mode) {
             Err(Errno::NOTSUP) => *tmp_file_unsupported = true,
             r => return r,
-        };
+        }
     }
 
     let file = openat(

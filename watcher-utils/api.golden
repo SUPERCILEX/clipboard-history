@@ -6,7 +6,7 @@ pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::add
 impl<Id: core::marker::Copy> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::best(self) -> core::option::Option<(Id, clipboard_history_core::protocol::MimeType)>
 impl<Id> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
-pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::block_plain_text(&mut self)
+pub const fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::block_plain_text(&mut self)
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::pop_best(&mut self) -> core::option::Option<Id>
 impl<Id: core::default::Default> core::default::Default for clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>
 pub fn clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>::default() -> clipboard_history_watcher_utils::best_target::BestMimeTypeFinder<Id>

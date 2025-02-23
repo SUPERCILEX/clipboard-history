@@ -135,11 +135,11 @@ impl DatabaseReader {
         self.get_raw(id)
     }
 
-    pub fn main_ring_mut(&mut self) -> &mut Ring {
+    pub const fn main_ring_mut(&mut self) -> &mut Ring {
         &mut self.main
     }
 
-    pub fn favorites_ring_mut(&mut self) -> &mut Ring {
+    pub const fn favorites_ring_mut(&mut self) -> &mut Ring {
         &mut self.favorites
     }
 
@@ -309,7 +309,7 @@ pub fn xattr_mime_type<Fd: AsFd, MetadataFd: AsFd, MetadataPath: Arg + Copy + De
             r => r.map_io_err(|| "Failed to read extended attributes.")?,
         };
         mime_type.advance(len);
-    };
+    }
     let mime_type = str::from_utf8(mime_type.filled()).map_err(|e| ringboard_core::Error::Io {
         error: io::Error::new(ErrorKind::InvalidInput, e),
         context: "Database corruption detected: invalid mime type detected".into(),

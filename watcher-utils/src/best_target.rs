@@ -115,7 +115,7 @@ impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
 }
 
 impl<Id> BestMimeTypeFinder<Id> {
-    pub fn block_plain_text(&mut self) {
+    pub const fn block_plain_text(&mut self) {
         self.block_plain_text = true;
     }
 

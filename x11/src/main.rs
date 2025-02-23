@@ -417,7 +417,7 @@ fn run() -> Result<(), CliError> {
         match epoll::wait(&epoll, &mut epoll_events, -1) {
             Err(Errno::INTR) => continue,
             r => r.map_io_err(|| "Failed to wait for epoll events.")?,
-        };
+        }
 
         for epoll::Event { flags: _, data } in &epoll_events {
             match data.u64() {

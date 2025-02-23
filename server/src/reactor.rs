@@ -62,7 +62,7 @@ impl Clients {
         self.pending_recv &= !(1 << id);
     }
 
-    fn set_send_buffered(&mut self, id: u8, value: bool) -> bool {
+    const fn set_send_buffered(&mut self, id: u8, value: bool) -> bool {
         let r = (self.pending_sends & (1 << id)) != 0;
         if value {
             self.pending_sends |= 1 << id;
@@ -520,7 +520,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
                         r => {
                             r.map_io_err(|| format!("Failed to send response to client {fd}."))?;
                         }
-                    };
+                    }
 
                     if clients.is_closing(fd) && clients.is_connected(fd) {
                         try_close(fd, &mut clients, &mut send_bufs, &mut submissions)?;
