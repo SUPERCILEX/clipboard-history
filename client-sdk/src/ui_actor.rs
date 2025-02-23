@@ -154,29 +154,29 @@ pub struct DetailedEntry {
     pub full_text: Option<Box<str>>,
 }
 
+fn maybe_init_server(
+    socket_file: impl FnOnce() -> PathBuf,
+    connect_to_server: impl FnOnce(&SocketAddrUnix) -> Result<OwnedFd, ClientError>,
+    cache: &mut Option<OwnedFd>,
+) -> Result<impl AsFd + '_, ClientError> {
+    if cache.is_some() {
+        return Ok(cache.as_ref().unwrap());
+    }
+
+    let server = {
+        let socket_file = socket_file();
+        let addr = SocketAddrUnix::new(&socket_file)
+            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+        connect_to_server(&addr)?
+    };
+
+    Ok(cache.insert(server))
+}
+
 pub fn controller<E>(
     commands: impl IntoIterator<Item = Command>,
     mut send: impl FnMut(Message) -> Result<(), E>,
 ) {
-    fn maybe_init_server(
-        socket_file: impl FnOnce() -> PathBuf,
-        connect_to_server: impl FnOnce(&SocketAddrUnix) -> Result<OwnedFd, ClientError>,
-        cache: &mut Option<OwnedFd>,
-    ) -> Result<impl AsFd + '_, ClientError> {
-        if cache.is_some() {
-            return Ok(cache.as_ref().unwrap());
-        }
-
-        let server = {
-            let socket_file = socket_file();
-            let addr = SocketAddrUnix::new(&socket_file)
-                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
-            connect_to_server(&addr)?
-        };
-
-        Ok(cache.insert(server))
-    }
-
     let mut server = None;
     let mut paste_server = None;
     let (mut database, reader) = {
@@ -203,14 +203,8 @@ pub fn controller<E>(
     for command in once(Command::LoadFirstPage).chain(commands) {
         let result = handle_command(
             command,
-            || maybe_init_server(socket_file, connect_to_server, &mut server),
-            || {
-                maybe_init_server(
-                    paste_socket_file,
-                    connect_to_paste_server,
-                    &mut paste_server,
-                )
-            },
+            &mut server,
+            &mut paste_server,
             &mut send,
             &mut database,
             &mut reader,
@@ -227,10 +221,10 @@ pub fn controller<E>(
     }
 }
 
-fn handle_command<Server: AsFd, PasteServer: AsFd, E>(
+fn handle_command<E>(
     command: Command,
-    server: impl FnOnce() -> Result<Server, ClientError>,
-    paste_server: impl FnOnce() -> Result<PasteServer, ClientError>,
+    server: &mut Option<OwnedFd>,
+    paste_server: &mut Option<OwnedFd>,
     send: impl FnMut(Message) -> Result<(), E>,
     database: &mut DatabaseReader,
     reader_: &mut Option<EntryReader>,
@@ -305,20 +299,31 @@ fn handle_command<Server: AsFd, PasteServer: AsFd, E>(
             Ok(Some(Message::EntryDetails { id, result: run() }))
         }
         ref c @ (Command::Favorite(id) | Command::Unfavorite(id)) => {
-            match MoveToFrontRequest::response(
-                server()?,
-                id,
-                Some(match c {
-                    Command::Favorite(_) => RingKind::Favorites,
-                    Command::Unfavorite(_) => RingKind::Main,
-                    _ => unreachable!(),
-                }),
-            )? {
+            match {
+                MoveToFrontRequest::response(
+                    maybe_init_server(socket_file, connect_to_server, server)?,
+                    id,
+                    Some(match c {
+                        Command::Favorite(_) => RingKind::Favorites,
+                        Command::Unfavorite(_) => RingKind::Main,
+                        _ => unreachable!(),
+                    }),
+                )
+            }
+            .inspect_err(|_| *server = None)?
+            {
                 MoveToFrontResponse::Success { id } => Ok(Some(Message::FavoriteChange(id))),
                 MoveToFrontResponse::Error(e) => Err(e.into()),
             }
         }
-        Command::Delete(id) => match RemoveRequest::response(server()?, id)? {
+        Command::Delete(id) => match {
+            RemoveRequest::response(
+                maybe_init_server(socket_file, connect_to_server, server)?,
+                id,
+            )
+        }
+        .inspect_err(|_| *server = None)?
+        {
             RemoveResponse { error: None } => Ok(Some(Message::Deleted(id))),
             RemoveResponse { error: Some(e) } => Err(e.into()),
         },
@@ -355,8 +360,15 @@ fn handle_command<Server: AsFd, PasteServer: AsFd, E>(
         }
         Command::Paste(id) => {
             let entry = unsafe { database.get(id)? };
-            let paste_server = paste_server()?;
-            send_paste_buffer(paste_server, entry, reader, true)?;
+            {
+                send_paste_buffer(
+                    maybe_init_server(paste_socket_file, connect_to_paste_server, paste_server)?,
+                    entry,
+                    reader,
+                    true,
+                )
+            }
+            .inspect_err(|_| *paste_server = None)?;
             Ok(Some(Message::Pasted))
         }
     }
