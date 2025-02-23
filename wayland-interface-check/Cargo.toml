@@ -10,5 +10,5 @@ categories = ["command-line-utilities", "development-tools"]
 license.workspace = true
 
 [dependencies]
-rustc-hash = "2.1.0"
-wayland-client = "0.31.7"
+rustc-hash = "2.1.1"
+wayland-client = "0.31.8"

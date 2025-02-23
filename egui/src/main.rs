@@ -397,7 +397,7 @@ impl eframe::App for App {
             });
         CentralPanel::default()
             .frame(Frame::central_panel(&ctx.style()).inner_margin(Margin {
-                top: 5.,
+                top: 5,
                 ..Margin::ZERO
             }))
             .show(ctx, |ui| {
@@ -482,7 +482,7 @@ fn search_ui(
                 SearchKind::Mime => "Mime type search",
             })
             .font(match search_kind {
-                SearchKind::Plain => FontId::proportional(17.5),
+                SearchKind::Plain => FontId::proportional(17.75),
                 SearchKind::Regex | SearchKind::Mime => FontId::monospace(16.),
             })
             .desired_width(f32::INFINITY)

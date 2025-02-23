@@ -17,14 +17,14 @@ image = { version = "0.25.5", optional = true }
 memchr = { version = "2.7.4", optional = true }
 regex = { version = "1.11.1", optional = true }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core" }
-rustc-hash = { version = "2.1.0", optional = true }
+rustc-hash = { version = "2.1.1", optional = true }
 rustix = { version = "0.38.44", features = ["net", "fs", "thread"] }
-serde = { version = "1.0.217", features = ["derive"], optional = true }
+serde = { version = "1.0.218", features = ["derive"], optional = true }
 smallvec = { version = "2.0.0-alpha.10", optional = true }
 thiserror = "2.0.11"
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.14", default-features = false, features = ["api"] }
+supercilex-tests = { version = "0.4.15", default-features = false, features = ["api"] }
 
 [features]
 error-stack = ["dep:error-stack", "ringboard-core/error-stack"]
