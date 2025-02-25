@@ -219,6 +219,7 @@ atom_manager! {
     Atoms:
     AtomsCookie {
         _NET_WM_NAME,
+        _NET_ACTIVE_WINDOW,
         WM_CLASS,
         UTF8_STRING,
 
@@ -1164,6 +1165,7 @@ fn handle_paste_event(
         CLIPBOARD: clipboard_atom,
         PRIMARY: primary_atom,
         WM_CLASS: window_class_atom,
+        _NET_ACTIVE_WINDOW: active_window_atom,
         ..
     } = *atoms;
 
@@ -1174,7 +1176,25 @@ fn handle_paste_event(
 
     if auto_paste && trigger_paste {
         trace!("Preparing to send paste command.");
-        let focused_window = conn.get_input_focus()?.reply()?.focus;
+        let focused_window = conn
+            .get_property(
+                false,
+                root,
+                active_window_atom,
+                GetPropertyType::ANY,
+                0,
+                u32::MAX,
+            )?
+            .reply()?
+            .value32()
+            .and_then(|mut i| i.next());
+        dbg!(focused_window);
+        let focused_window = if let Some(w) = focused_window {
+            w
+        } else {
+            conn.get_input_focus()?.reply()?.focus
+        };
+        dbg!(focused_window);
         let should_defer = || -> Result<bool, CliError> {
             let class = conn
                 .get_property(
@@ -1186,11 +1206,19 @@ fn handle_paste_event(
                     u32::MAX,
                 )?
                 .reply()?;
-            let Some(name) = class.value.split(|&b| b == 0).nth(1) else {
-                return Ok(false);
-            };
-            if name != b"ringboard-egui" {
-                return Ok(false);
+            dbg!(&class.value);
+            for v in class.value.split(|&b| b == 0) {
+                println!("{}", v.escape_ascii());
+            }
+            if class.value.is_empty() {
+                dbg!("uh oh");
+            } else {
+                let Some(name) = class.value.split(|&b| b == 0).nth(1) else {
+                    return Ok(false);
+                };
+                if name != b"ringboard-egui" {
+                    return Ok(false);
+                }
             }
 
             conn.change_window_attributes(
@@ -1200,7 +1228,7 @@ fn handle_paste_event(
 
             Ok(true)
         };
-        if should_defer().ok() == Some(true) {
+        if dbg!(should_defer()).ok() == Some(true) {
             debug!("Waiting for focus event to send paste command.");
         } else {
             do_paste(conn, root)?;
