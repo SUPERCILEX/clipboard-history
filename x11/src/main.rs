@@ -1187,7 +1187,8 @@ fn handle_paste_event(
             )?
             .reply()?
             .value32()
-            .and_then(|mut i| i.next());
+            .and_then(|mut i| i.next())
+            .and_then(|id| (id != x11rb::NONE).then_some(id));
         dbg!(focused_window);
         let focused_window = if let Some(w) = focused_window {
             w
