@@ -431,10 +431,10 @@ fn run() -> Result<(), CliError> {
                     &mut deduplicator,
                     paste_window,
                     &paste_socket,
+                    paste_timer.as_ref(),
                     &mut ancillary_buf,
                     &mut last_paste,
                     &mut clear_selection_mask,
-                    paste_timer.is_some(),
                 )?,
                 2 => {
                     read_uninit(
@@ -693,21 +693,7 @@ fn handle_x11_event(
                     root,
                     &ChangeWindowAttributesAux::default().event_mask(EventMask::NO_EVENT),
                 )?;
-                timerfd_settime(
-                    paste_timer.unwrap(),
-                    TimerfdTimerFlags::empty(),
-                    &Itimerspec {
-                        it_interval: Timespec {
-                            tv_sec: 0,
-                            tv_nsec: 0,
-                        },
-                        it_value: Timespec {
-                            tv_sec: 0,
-                            tv_nsec: Duration::from_millis(20).as_nanos().try_into().unwrap(),
-                        },
-                    },
-                )
-                .map_io_err(|| "Failed to arm paste timer.")?;
+                arm_paste_timer(paste_timer.unwrap(), Duration::from_millis(20))?;
             }
         }
 
@@ -1075,10 +1061,10 @@ fn handle_paste_event(
     deduplicator: &mut CopyDeduplication,
     paste_window: Window,
     paste_socket: impl AsFd,
+    paste_timer: Option<impl AsFd>,
     ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
     last_paste: &mut Option<(PasteFile, PasteAtom)>,
     clear_selection_mask: &mut u8,
-    auto_paste: bool,
 ) -> Result<(), CliError> {
     struct MoveToFrontGuard<'a, 'b, Server: AsFd>(
         Server,
@@ -1174,7 +1160,9 @@ fn handle_paste_event(
     conn.set_selection_owner(paste_window, primary_atom, x11rb::CURRENT_TIME)?;
     *clear_selection_mask = 0;
 
-    if auto_paste && trigger_paste {
+    if let Some(paste_timer) = paste_timer
+        && trigger_paste
+    {
         trace!("Preparing to send paste command.");
         let focused_window = conn
             .get_property(
@@ -1213,13 +1201,14 @@ fn handle_paste_event(
             }
             if class.value.is_empty() {
                 dbg!("uh oh");
-            } else {
-                let Some(name) = class.value.split(|&b| b == 0).nth(1) else {
-                    return Ok(false);
-                };
-                if name != b"ringboard-egui" {
-                    return Ok(false);
-                }
+                arm_paste_timer(paste_timer, Duration::from_millis(150))?;
+                return Ok(true);
+            }
+            let Some(name) = class.value.split(|&b| b == 0).nth(1) else {
+                return Ok(false);
+            };
+            if name != b"ringboard-egui" {
+                return Ok(false);
             }
 
             conn.change_window_attributes(
@@ -1236,6 +1225,21 @@ fn handle_paste_event(
         }
     }
 
+    Ok(())
+}
+
+fn arm_paste_timer(paste_timer: impl AsFd, timer: Duration) -> Result<(), CliError> {
+    timerfd_settime(paste_timer, TimerfdTimerFlags::empty(), &Itimerspec {
+        it_interval: Timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        },
+        it_value: Timespec {
+            tv_sec: 0,
+            tv_nsec: timer.as_nanos().try_into().unwrap(),
+        },
+    })
+    .map_io_err(|| "Failed to arm paste timer.")?;
     Ok(())
 }
 
