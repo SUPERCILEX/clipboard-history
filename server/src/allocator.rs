@@ -297,7 +297,11 @@ impl Allocator {
         create_dir(c"buckets")?;
 
         let xattr_unsupported = matches!(
-            getxattr(c"direct", c"user.mime_type", &mut []),
+            getxattr(
+                c"direct",
+                c"user.mime_type",
+                &mut [const { MaybeUninit::uninit() }; 0]
+            ),
             Err(Errno::NOTSUP)
         );
         if xattr_unsupported {

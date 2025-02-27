@@ -18,7 +18,7 @@ memchr = { version = "2.7.4", optional = true }
 regex = { version = "1.11.1", optional = true }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core" }
 rustc-hash = { version = "2.1.1", optional = true }
-rustix = { version = "0.38.44", features = ["net", "fs", "thread"] }
+rustix = { version = "1.0.0-prerelease.1", features = ["net", "fs", "thread"] }
 serde = { version = "1.0.218", features = ["derive"], optional = true }
 smallvec = { version = "2.0.0-alpha.10", optional = true }
 thiserror = "2.0.11"

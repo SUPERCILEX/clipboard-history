@@ -463,7 +463,7 @@ dependencies = [
  "bitflags 2.8.0",
  "log",
  "polling",
- "rustix",
+ "rustix 0.38.44",
  "slab",
  "thiserror 1.0.69",
 ]
@@ -475,7 +475,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95a66a987056935f7efce4ab5668920b5d0dac4a7c99991a67395f13702ddd20"
 dependencies = [
  "calloop",
- "rustix",
+ "rustix 0.38.44",
  "wayland-backend",
  "wayland-client",
 ]
@@ -657,7 +657,7 @@ dependencies = [
  "rand_xoshiro",
  "regex",
  "rustc-hash 2.1.1",
- "rustix",
+ "rustix 1.0.0-prerelease.1",
  "serde",
  "serde_json",
  "supercilex-tests",
@@ -677,7 +677,7 @@ dependencies = [
  "memchr",
  "regex",
  "rustc-hash 2.1.1",
- "rustix",
+ "rustix 1.0.0-prerelease.1",
  "serde",
  "smallvec 2.0.0-alpha.10",
  "supercilex-tests",
@@ -692,7 +692,7 @@ dependencies = [
  "dirs",
  "error-stack",
  "itoa",
- "rustix",
+ "rustix 1.0.0-prerelease.1",
  "supercilex-tests",
  "thiserror 2.0.11",
 ]
@@ -706,7 +706,7 @@ dependencies = [
  "image",
  "itoa",
  "rustc-hash 2.1.1",
- "rustix",
+ "rustix 1.0.0-prerelease.1",
  "tracy-client",
 ]
 
@@ -723,7 +723,7 @@ dependencies = [
  "io-uring",
  "libc",
  "log",
- "rustix",
+ "rustix 1.0.0-prerelease.1",
  "sd-notify",
  "smallvec 2.0.0-alpha.10",
  "thiserror 2.0.11",
@@ -738,7 +738,7 @@ dependencies = [
  "error-stack",
  "ratatui",
  "ratatui-image",
- "rustix",
+ "rustix 1.0.0-prerelease.1",
  "thiserror 2.0.11",
  "tracy-client",
  "tui-textarea",
@@ -751,7 +751,7 @@ dependencies = [
  "clipboard-history-client-sdk",
  "log",
  "rustc-hash 2.1.1",
- "rustix",
+ "rustix 1.0.0-prerelease.1",
  "supercilex-tests",
 ]
 
@@ -766,7 +766,7 @@ dependencies = [
  "error-stack",
  "log",
  "rustc-hash 2.1.1",
- "rustix",
+ "rustix 1.0.0-prerelease.1",
  "thiserror 2.0.11",
  "wayland-client",
  "wayland-protocols",
@@ -784,7 +784,7 @@ dependencies = [
  "env_logger",
  "error-stack",
  "log",
- "rustix",
+ "rustix 1.0.0-prerelease.1",
  "thiserror 2.0.11",
  "toml",
  "x11rb",
@@ -957,7 +957,7 @@ dependencies = [
  "crossterm_winapi",
  "mio",
  "parking_lot",
- "rustix",
+ "rustix 0.38.44",
  "signal-hook",
  "signal-hook-mio",
  "winapi",
@@ -1424,7 +1424,7 @@ dependencies = [
  "once_cell",
  "rayon",
  "remove_dir_all",
- "rustix",
+ "rustix 0.38.44",
  "thiserror 2.0.11",
 ]
 
@@ -2086,6 +2086,12 @@ name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab"
+
+[[package]]
+name = "linux-raw-sys"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b713d55b8d76054c84da1d09a53a3509a2618b636cbdc714c65b48d6ea715d9"
 
 [[package]]
 name = "litemap"
@@ -2796,7 +2802,7 @@ dependencies = [
  "concurrent-queue",
  "hermit-abi",
  "pin-project-lite",
- "rustix",
+ "rustix 0.38.44",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -3022,7 +3028,7 @@ dependencies = [
  "image",
  "rand 0.8.5",
  "ratatui",
- "rustix",
+ "rustix 0.38.44",
  "thiserror 1.0.69",
  "windows",
 ]
@@ -3255,9 +3261,21 @@ checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 dependencies = [
  "bitflags 2.8.0",
  "errno",
- "itoa",
  "libc",
- "linux-raw-sys",
+ "linux-raw-sys 0.4.15",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "rustix"
+version = "1.0.0-prerelease.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3290d8786bcf0218a95ee77c3a7a3c57c86540023cc3ee71650c6623cd78d71"
+dependencies = [
+ "bitflags 2.8.0",
+ "errno",
+ "libc",
+ "linux-raw-sys 0.9.0",
  "windows-sys 0.59.0",
 ]
 
@@ -3456,7 +3474,7 @@ dependencies = [
  "libc",
  "log",
  "memmap2",
- "rustix",
+ "rustix 0.38.44",
  "thiserror 1.0.69",
  "wayland-backend",
  "wayland-client",
@@ -3611,7 +3629,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5352447f921fda68cf61b4101566c0bdb5104eff6804d0678e5227580ab6a4e9"
 dependencies = [
- "rustix",
+ "rustix 0.38.44",
  "windows-sys 0.59.0",
 ]
 
@@ -4038,7 +4056,7 @@ checksum = "b7208998eaa3870dad37ec8836979581506e0c5c64c20c9e79e9d2a10d6f47bf"
 dependencies = [
  "cc",
  "downcast-rs",
- "rustix",
+ "rustix 0.38.44",
  "scoped-tls",
  "smallvec 1.14.0",
  "wayland-sys",
@@ -4051,7 +4069,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2120de3d33638aaef5b9f4472bff75f07c56379cf76ea320bd3a3d65ecaf73f"
 dependencies = [
  "bitflags 2.8.0",
- "rustix",
+ "rustix 0.38.44",
  "wayland-backend",
  "wayland-scanner",
 ]
@@ -4073,7 +4091,7 @@ version = "0.31.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a93029cbb6650748881a00e4922b076092a6a08c11e7fbdb923f064b23968c5d"
 dependencies = [
- "rustix",
+ "rustix 0.38.44",
  "wayland-client",
  "xcursor",
 ]
@@ -4648,7 +4666,7 @@ dependencies = [
  "pin-project",
  "raw-window-handle",
  "redox_syscall 0.4.1",
- "rustix",
+ "rustix 0.38.44",
  "smithay-client-toolkit",
  "smol_str",
  "tracing",
@@ -4728,7 +4746,7 @@ dependencies = [
  "libc",
  "libloading",
  "once_cell",
- "rustix",
+ "rustix 0.38.44",
  "x11rb-protocol",
 ]
 

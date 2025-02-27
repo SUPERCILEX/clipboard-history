@@ -303,12 +303,15 @@ pub fn xattr_mime_type<Fd: AsFd, MetadataFd: AsFd, MetadataPath: Arg + Copy + De
             .map_io_err(|| format!("Failed to read metadata file: {file_name:?}"))?;
     } else {
         let mut mime_type = mime_type.unfilled();
-        mime_type.ensure_init();
-        let len = match fgetxattr(fd, c"user.mime_type", mime_type.init_mut()) {
+        let len = match fgetxattr(fd, c"user.mime_type", mime_type.uninit_mut()) {
             Err(Errno::NODATA) => return Ok(MimeType::new_const()),
             r => r.map_io_err(|| "Failed to read extended attributes.")?,
-        };
-        mime_type.advance(len);
+        }
+        .0
+        .len();
+        unsafe {
+            mime_type.advance_unchecked(len);
+        }
     }
     let mime_type = str::from_utf8(mime_type.filled()).map_err(|e| ringboard_core::Error::Io {
         error: io::Error::new(ErrorKind::InvalidInput, e),

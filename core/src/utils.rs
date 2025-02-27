@@ -24,8 +24,8 @@ use rustix::{
         AtFlags, CWD, FlockOperation, Mode, OFlags, StatxFlags, copy_file_range, flock, linkat,
         openat, statx, unlinkat,
     },
-    io::{Errno, pread_uninit},
-    net::{AddressFamily, SocketAddrUnix, SocketType, bind_unix, listen, socket},
+    io::{Errno, pread},
+    net::{AddressFamily, SocketAddrUnix, SocketType, bind, listen, socket},
     path::{Arg, DecInt},
     process::{
         Pid, PidfdFlags, Signal, getpid, kill_process, pidfd_open, pidfd_send_signal,
@@ -213,7 +213,7 @@ pub fn acquire_lock_file<
                         r => r.map_io_err(|| format!("Failed to open pid file: {pid:?}"))?,
                     };
 
-                    match pidfd_send_signal(&fd, Signal::Quit) {
+                    match pidfd_send_signal(&fd, Signal::QUIT) {
                         Err(Errno::SRCH) => break 'retry None,
                         r => r.map_io_err(|| {
                             format!("Failed to send quit to lock file {path:?} owner: {pid:?}")
@@ -221,7 +221,7 @@ pub fn acquire_lock_file<
                     }
 
                     let mut fds = [PollFd::new(&fd, PollFlags::IN)];
-                    poll(&mut fds, -1).map_io_err(|| {
+                    poll(&mut fds, None).map_io_err(|| {
                         format!("Failed to wait for lock file {path:?} owner to quit: {pid:?}")
                     })?;
                     if !fds[0].revents().contains(PollFlags::IN) {
@@ -233,7 +233,7 @@ pub fn acquire_lock_file<
                     None
                 }
                 LockAlreadyOwnedActionKind::SendKillAndTakeover => {
-                    match kill_process(pid, Signal::Term) {
+                    match kill_process(pid, Signal::TERM) {
                         Err(Errno::SRCH) => {
                             // Already dead
                         }
@@ -443,7 +443,7 @@ pub fn init_unix_server<P: AsRef<Path>>(socket_file: P, kind: SocketType) -> Res
 
     let socket = socket(AddressFamily::UNIX, kind, None)
         .map_io_err(|| format!("Failed to create socket: {socket_file:?}"))?;
-    bind_unix(&socket, &addr).map_io_err(|| format!("Failed to bind socket: {socket_file:?}"))?;
+    bind(&socket, &addr).map_io_err(|| format!("Failed to bind socket: {socket_file:?}"))?;
     if kind != SocketType::DGRAM {
         listen(&socket, -1)
             .map_io_err(|| format!("Failed to listen for clients: {socket_file:?}"))?;
@@ -462,7 +462,7 @@ pub fn read_at_to_end<Fd: AsFd>(
         }
         match {
             let offset = offset + u64::try_from(buf.written()).unwrap();
-            pread_uninit(&file, buf.uninit_mut(), offset)
+            pread(&file, buf.uninit_mut(), offset)
         } {
             Ok(([], _)) => break Ok(()),
             Ok((init, _)) => {

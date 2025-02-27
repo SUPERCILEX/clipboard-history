@@ -208,7 +208,7 @@ pub mod buf_ring {
     };
 
     use io_uring::Submitter;
-    use rustix::io_uring::{IORING_CQE_BUFFER_SHIFT, io_uring_buf};
+    use rustix::io_uring::{IORING_CQE_BUFFER_SHIFT, io_uring_buf, io_uring_ptr};
 
     use crate::io_uring::MmapAnon;
 
@@ -305,7 +305,8 @@ pub mod buf_ring {
             let uindex = usize::from(index);
             {
                 let next_buf = unsafe { &mut *self.ring_ptr.add(self.tail.0 & self.tail_mask) };
-                next_buf.addr = unsafe { self.buf_ptr.add(uindex * self.entry_size) } as u64;
+                next_buf.addr =
+                    io_uring_ptr::new(unsafe { self.buf_ptr.add(uindex * self.entry_size) });
                 next_buf.bid = index;
             }
             self.tail += &1;

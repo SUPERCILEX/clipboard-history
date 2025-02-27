@@ -9,7 +9,7 @@ use std::{
     io,
     io::ErrorKind::WouldBlock,
     mem,
-    mem::ManuallyDrop,
+    mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
     os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
     rc::Rc,
@@ -148,7 +148,7 @@ fn run() -> Result<(), CliError> {
     let paste_socket = init_unix_server(paste_socket_file(), SocketType::DGRAM)?;
     debug!("Initialized paste server");
 
-    let mut ancillary_buf = [0; rustix::cmsg_space!(ScmRights(1))];
+    let mut ancillary_buf = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(1))];
 
     let epoll =
         epoll::create(epoll::CreateFlags::empty()).map_io_err(|| "Failed to create epoll.")?;
@@ -191,8 +191,6 @@ fn run() -> Result<(), CliError> {
     }
     debug!("Wayland globals initialized.");
 
-    let mut epoll_events = epoll::EventVec::with_capacity(4);
-
     let mut deduplicator = CopyDeduplication::new()?;
 
     info!("Starting event loop.");
@@ -203,11 +201,12 @@ fn run() -> Result<(), CliError> {
         event_queue.flush().map_err(DispatchError::from)?;
 
         trace!("Waiting for event.");
-        match epoll::wait(&app.epoll, &mut epoll_events, -1) {
+        let mut epoll_events = [MaybeUninit::uninit(); 4];
+        let (epoll_events, _) = match epoll::wait(&app.epoll, &mut epoll_events, None) {
             Err(Errno::INTR) => continue,
             r => r.map_io_err(|| "Failed to wait for epoll events.")?,
-        }
-        for epoll::Event { flags: _, data } in &epoll_events {
+        };
+        for &mut epoll::Event { flags: _, data } in epoll_events {
             const OUT_START_IDX: u64 = IN_TRANSFER_BUFFERS as u64;
             const WAYLAND_IDX: u64 = OUT_START_IDX + OUT_TRANSFER_BUFFERS as u64;
             const PASTE_SERVER_IDX: u64 = WAYLAND_IDX + 1;
@@ -1096,7 +1095,7 @@ struct OutgoingTransfer {
 
 fn handle_paste_event(
     paste_socket: impl AsFd,
-    ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
+    ancillary_buf: &mut [MaybeUninit<u8>; rustix::cmsg_space!(ScmRights(1))],
 
     qh: &QueueHandle<App>,
     manager: Option<&AutoDestroy<ZwlrDataControlManagerV1>>,

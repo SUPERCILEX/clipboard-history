@@ -3,7 +3,7 @@ use std::{
     fs::File,
     io,
     io::{IoSlice, IoSliceMut, Seek, SeekFrom},
-    mem::ManuallyDrop,
+    mem::{ManuallyDrop, MaybeUninit},
     os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
 };
 
@@ -17,9 +17,9 @@ use ringboard_core::{
 use rustix::{
     fs::{AtFlags, CWD, FileType, Mode, OFlags, StatxFlags, statx},
     net::{
-        AddressFamily, RecvAncillaryBuffer, RecvFlags, SendAncillaryBuffer, SendAncillaryMessage,
-        SendFlags, SocketAddrUnix, SocketFlags, SocketType, connect_unix, recvmsg, sendmsg,
-        socket_with,
+        AddressFamily, RecvAncillaryBuffer, RecvFlags, ReturnFlags, SendAncillaryBuffer,
+        SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketFlags, SocketType, connect, recvmsg,
+        sendmsg, socket_with,
     },
 };
 
@@ -58,7 +58,7 @@ pub fn connect_to_server_with(
 ) -> Result<OwnedFd, ClientError> {
     let socket = socket_with(AddressFamily::UNIX, SocketType::SEQPACKET, flags, None)
         .map_io_err(|| format!("Failed to create socket: {addr:?}"))?;
-    connect_unix(&socket, addr).map_io_err(|| format!("Failed to connect to server: {addr:?}"))?;
+    connect(&socket, addr).map_io_err(|| format!("Failed to connect to server: {addr:?}"))?;
 
     {
         sendmsg(
@@ -95,7 +95,7 @@ pub fn connect_to_paste_server(addr: &SocketAddrUnix) -> Result<OwnedFd, ClientE
         None,
     )
     .map_io_err(|| format!("Failed to create socket: {addr:?}"))?;
-    connect_unix(&sock, addr).map_io_err(|| format!("Failed to connect to server: {addr:?}"))?;
+    connect(&sock, addr).map_io_err(|| format!("Failed to connect to server: {addr:?}"))?;
     Ok(sock)
 }
 
@@ -121,7 +121,7 @@ pub fn send_paste_buffer(
     let file = entry.to_file(reader)?;
     let mime = file.mime_type()?;
 
-    let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
+    let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(1))];
     let mut ancillary = SendAncillaryBuffer::new(&mut space);
     let fds = [file.as_fd()];
     {
@@ -336,7 +336,7 @@ fn request_with_fd(
     fd: impl AsFd,
     flags: SendFlags,
 ) -> Result<(), ClientError> {
-    let mut space = [0; rustix::cmsg_space!(ScmRights(1))];
+    let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(1))];
     let mut buf = SendAncillaryBuffer::new(&mut space);
     let fds = [fd.as_fd()];
     {
@@ -390,7 +390,7 @@ unsafe fn response<T: Copy + 'static, const N: usize>(
             context: format!("Bad {}.", type_name()).into(),
         });
     }
-    debug_assert!(!result.flags.contains(RecvFlags::TRUNC));
+    debug_assert!(!result.flags.contains(ReturnFlags::TRUNC));
 
     if TypeId::of::<T>() == TypeId::of::<VersionResponse>() {
         Ok(Response {
