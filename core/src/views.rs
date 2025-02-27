@@ -145,7 +145,7 @@ mod string {
     pub struct StringView<'a>(usize, &'a mut String);
 
     impl<'a> StringView<'a> {
-        pub fn new(s: &'a mut String) -> Self {
+        pub const fn new(s: &'a mut String) -> Self {
             Self(s.len(), s)
         }
     }

@@ -100,4 +100,4 @@ pub fn clipboard_history_watcher_utils::deduplication::CopyDeduplication::borrow
 impl<T> core::convert::From<T> for clipboard_history_watcher_utils::deduplication::CopyDeduplication
 pub fn clipboard_history_watcher_utils::deduplication::CopyDeduplication::from(t: T) -> T
 pub mod clipboard_history_watcher_utils::utils
-pub fn clipboard_history_watcher_utils::utils::read_paste_command(paste_socket: impl std::os::fd::owned::AsFd, ancillary_buf: &mut [u8; 32]) -> core::result::Result<(clipboard_history_client_sdk::api::PasteCommand, core::option::Option<std::os::fd::owned::OwnedFd>), clipboard_history_client_sdk::ClientError>
+pub fn clipboard_history_watcher_utils::utils::read_paste_command(paste_socket: impl std::os::fd::owned::AsFd, ancillary_buf: &mut [core::mem::maybe_uninit::MaybeUninit<u8>; 32]) -> core::result::Result<(clipboard_history_client_sdk::api::PasteCommand, core::option::Option<std::os::fd::owned::OwnedFd>), clipboard_history_client_sdk::ClientError>

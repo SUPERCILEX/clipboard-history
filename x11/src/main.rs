@@ -41,7 +41,7 @@ use ringboard_watcher_utils::{
 use rustix::{
     event::epoll,
     fs::{CWD, MemfdFlags, Mode, OFlags, memfd_create},
-    io::{Errno, read_uninit},
+    io::{Errno, read},
     net::{RecvFlags, SendFlags, SocketAddrUnix, SocketType},
     path::Arg,
     time::{
@@ -359,7 +359,7 @@ fn run() -> Result<(), CliError> {
     };
     debug!("Initialized paste server");
 
-    let mut ancillary_buf = [0; rustix::cmsg_space!(ScmRights(1))];
+    let mut ancillary_buf = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(1))];
     let mut last_paste = None;
     let mut clear_selection_mask = 0;
 
@@ -382,7 +382,6 @@ fn run() -> Result<(), CliError> {
         )
         .map_io_err(|| "Failed to register epoll interest.")?;
     }
-    let mut epoll_events = epoll::EventVec::with_capacity(3);
 
     let mut allocator = TransferAtomAllocator {
         windows: transfer_windows.into_inner().unwrap(),
@@ -414,12 +413,13 @@ fn run() -> Result<(), CliError> {
         conn.flush()?;
 
         trace!("Waiting for event.");
-        match epoll::wait(&epoll, &mut epoll_events, -1) {
+        let mut epoll_events = [MaybeUninit::uninit(); 3];
+        let (epoll_events, _) = match epoll::wait(&epoll, &mut epoll_events, None) {
             Err(Errno::INTR) => continue,
             r => r.map_io_err(|| "Failed to wait for epoll events.")?,
-        }
+        };
 
-        for epoll::Event { flags: _, data } in &epoll_events {
+        for &mut epoll::Event { flags: _, data } in epoll_events {
             match data.u64() {
                 0 => (),
                 1 => handle_paste_event(
@@ -436,7 +436,7 @@ fn run() -> Result<(), CliError> {
                     paste_timer.is_some(),
                 )?,
                 2 => {
-                    read_uninit(
+                    read(
                         paste_timer.as_ref().unwrap(),
                         &mut [MaybeUninit::uninit(); 8],
                     )
@@ -1074,7 +1074,7 @@ fn handle_paste_event(
     deduplicator: &mut CopyDeduplication,
     paste_window: Window,
     paste_socket: impl AsFd,
-    ancillary_buf: &mut [u8; rustix::cmsg_space!(ScmRights(1))],
+    ancillary_buf: &mut [MaybeUninit<u8>; rustix::cmsg_space!(ScmRights(1))],
     last_paste: &mut Option<(PasteFile, PasteAtom)>,
     clear_selection_mask: &mut u8,
     auto_paste: bool,

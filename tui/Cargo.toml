@@ -12,10 +12,10 @@ license.workspace = true
 [dependencies]
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
 ratatui = "0.29.0"
-ratatui-image = { version = "4.2.0", features = ["crossterm"] }
+ratatui-image = { version = "5.0.0", features = ["crossterm"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "ui"] }
-rustix = { version = "0.38.44", features = ["stdio"] }
-thiserror = "2.0.11"
+rustix = { version = "1.0.2", features = ["stdio"] }
+thiserror = "2.0.12"
 tracy-client = { version = "0.18.0", optional = true }
 tui-textarea = "0.7.0"
 
