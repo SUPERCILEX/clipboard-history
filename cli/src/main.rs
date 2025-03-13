@@ -45,7 +45,7 @@ use ringboard_sdk::{
     config::{X11Config, X11V1Config, x11_config_file},
     core::{
         BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, SendQuitAndWait, acquire_lock_file,
-        bucket_to_length, copy_file_range_all, create_tmp_file,
+        bucket_to_length, create_tmp_file,
         dirs::{data_dir, paste_socket_file, socket_file},
         protocol::{
             AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
@@ -60,8 +60,10 @@ use ringboard_sdk::{
 };
 use rustc_hash::FxHasher;
 use rustix::{
-    fs::{AtFlags, CWD, MemfdFlags, Mode, OFlags, StatxFlags, memfd_create, openat, statx},
-    io::Errno,
+    fs::{
+        AtFlags, CWD, MemfdFlags, Mode, OFlags, StatxFlags, memfd_create, openat, seek, sendfile,
+        statx,
+    },
     net::{RecvFlags, SendFlags, SocketAddrUnix, SocketFlags},
     stdio::stdin,
 };
@@ -823,43 +825,20 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
     const OP_TYPE_UNFAVORITE_ITEM: u8 = 4;
     const OP_TYPE_MOVE_ITEM_TO_END: u8 = 5;
 
-    fn generate_entry_file(
-        database: &mut File,
-        start: u64,
-        len: usize,
-        failed_cross_device: &mut bool,
-    ) -> Result<File, CliError> {
+    fn generate_entry_file(database: impl AsFd, start: u64, len: usize) -> Result<File, CliError> {
         let file = memfd_create(c"ringboard_import_gch", MemfdFlags::empty())
             .map_io_err(|| "Failed to create data entry file.")?;
-        let mut file = File::from(file);
 
-        let fallback_copy = |database: &mut File, file: &mut File| -> Result<_, CliError> {
-            database
-                .seek(SeekFrom::Start(start))
-                .map_io_err(|| "Failed to seek gch database file.")?;
-            let result = io::copy(database, file)
-                .map_io_err(|| "Failed to fallback copy data to mem entry file.")?;
-            file.seek(SeekFrom::Start(0))
-                .map_io_err(|| "Failed to reset entry file offset.")?;
-            Ok(usize::try_from(result).unwrap())
-        };
-        let result = if *failed_cross_device {
-            fallback_copy(database, &mut file)?
-        } else {
-            match copy_file_range_all(&database, Some(&mut { start }), &file, Some(&mut 0), len) {
-                Err(Errno::XDEV) => {
-                    *failed_cross_device = true;
-                    fallback_copy(database, &mut file)?
-                }
-                r => r.map_io_err(|| "Failed to copy data to entry file.")?,
-            }
-        };
+        let result = sendfile(&file, database, Some(&mut { start }), len)
+            .map_io_err(|| "Failed to copy data to entry file.")?;
         debug_assert_eq!(len, result);
+        seek(&file, rustix::fs::SeekFrom::Start(0))
+            .map_io_err(|| "Failed to reset entry file offset.")?;
 
-        Ok(file)
+        Ok(File::from(file))
     }
 
-    let (bytes, mut database) = {
+    let (bytes, database) = {
         let database = database
             .or_else(|| {
                 dirs::cache_dir().map(|mut f| {
@@ -878,7 +857,6 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
         )
     };
 
-    let mut failed_cross_device = false;
     let mut translation = Vec::new();
     let mut pending_adds = 0;
     let mut i = 0;
@@ -921,12 +899,7 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
                     .ok_or_else(|| io::Error::from(ErrorKind::InvalidData))
                     .map_io_err(|| "GCH database corrupted: data was not NUL terminated")?;
 
-                let data = generate_entry_file(
-                    &mut database,
-                    u64::try_from(i).unwrap(),
-                    raw_len,
-                    &mut failed_cross_device,
-                )?;
+                let data = generate_entry_file(&database, u64::try_from(i).unwrap(), raw_len)?;
                 i += 1 + raw_len;
 
                 unsafe {

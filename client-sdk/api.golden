@@ -107,7 +107,7 @@ pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::deref_mut<'
 pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::api::MoveToFrontRequest::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::api::MoveToFrontRequest
-#[attr="Repr([ReprC])")] pub struct clipboard_history_client_sdk::api::PasteCommand
+#[attr = Repr([ReprC])] pub struct clipboard_history_client_sdk::api::PasteCommand
 pub clipboard_history_client_sdk::api::PasteCommand::id: u64
 pub clipboard_history_client_sdk::api::PasteCommand::mime: clipboard_history_core::protocol::MimeType
 pub clipboard_history_client_sdk::api::PasteCommand::trigger_paste: bool
