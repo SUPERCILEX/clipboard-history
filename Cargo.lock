@@ -695,6 +695,7 @@ dependencies = [
 name = "clipboard-history-egui"
 version = "0.9.4"
 dependencies = [
+ "arrayvec",
  "clipboard-history-client-sdk",
  "eframe",
  "image",

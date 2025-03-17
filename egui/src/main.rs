@@ -16,6 +16,7 @@ use std::{
     thread,
 };
 
+use arrayvec::ArrayVec;
 use eframe::{
     egui,
     egui::{
@@ -605,28 +606,6 @@ fn main_ui(
     {
         let _ = requests.send(Command::Paste(id));
     }
-    if let Some(UiEntry { entry, cache: _ }) = ui
-        .input_mut(|input| {
-            (0..10).find(|i| {
-                input.consume_key(Modifiers::CTRL, match i {
-                    0 => Key::Num0,
-                    1 => Key::Num1,
-                    2 => Key::Num2,
-                    3 => Key::Num3,
-                    4 => Key::Num4,
-                    5 => Key::Num5,
-                    6 => Key::Num6,
-                    7 => Key::Num7,
-                    8 => Key::Num8,
-                    9 => Key::Num9,
-                    _ => unreachable!(),
-                })
-            })
-        })
-        .and_then(|idx| active_entries!(entries, state).get(idx))
-    {
-        let _ = requests.send(Command::Paste(entry.id()));
-    }
 
     if active_entries!(entries, state).is_empty() {
         ui.centered_and_justified(|ui| {
@@ -641,11 +620,14 @@ fn main_ui(
         });
     }
 
-    let try_popup =
-        ui.input(|input| input.key_pressed(Key::Space)) && ui.memory(|mem| mem.focused().is_none());
+    let mut fast_paste_buffer = ArrayVec::<_, 10>::new_const();
+    let starting_height = ui.min_rect().min.y;
 
-    let usable_height_for_popup = ui.available_size().y - 50.;
     ScrollArea::vertical().show(ui, |ui| {
+        let try_popup = ui.input(|input| input.key_pressed(Key::Space))
+            && ui.memory(|mem| mem.focused().is_none());
+        let usable_height_for_popup = ui.available_size().y - starting_height;
+
         let mut prev_was_favorites = false;
         for (i, entry) in active_entries!(entries, state).iter().enumerate() {
             let next_was_favorites = entry.entry.ring() == RingKind::Favorites;
@@ -666,9 +648,34 @@ fn main_ui(
                 no_popups_open,
                 usable_height_for_popup,
                 i,
+                starting_height,
+                &mut fast_paste_buffer,
             );
         }
     });
+
+    if let Some(&id) = ui
+        .input_mut(|input| {
+            (0..10).find(|i| {
+                input.consume_key(Modifiers::CTRL, match i {
+                    0 => Key::Num0,
+                    1 => Key::Num1,
+                    2 => Key::Num2,
+                    3 => Key::Num3,
+                    4 => Key::Num4,
+                    5 => Key::Num5,
+                    6 => Key::Num6,
+                    7 => Key::Num7,
+                    8 => Key::Num8,
+                    9 => Key::Num9,
+                    _ => unreachable!(),
+                })
+            })
+        })
+        .and_then(|idx| fast_paste_buffer.get(idx))
+    {
+        let _ = requests.send(Command::Paste(id));
+    }
 }
 
 fn entry_ui(
@@ -683,6 +690,8 @@ fn entry_ui(
     no_popups_open: bool,
     max_popup_height: f32,
     index: usize,
+    top_position: f32,
+    fast_paste_buffer: &mut ArrayVec<u64, 10>,
 ) {
     macro_rules! response {
         ($w:expr) => {
@@ -698,6 +707,8 @@ fn entry_ui(
                 try_popup,
                 max_popup_height,
                 index,
+                top_position,
+                fast_paste_buffer,
             )
         };
     }
@@ -787,16 +798,21 @@ fn row_ui(
     try_popup: bool,
     max_popup_height: f32,
     index: usize,
+    top_position: f32,
+    fast_paste_buffer: &mut ArrayVec<u64, 10>,
 ) -> Response {
-    if index < 10 && ui.input(|i| i.modifiers.ctrl) {
+    let entry_id = entry.id();
+
+    if ui.next_widget_position().y >= top_position
+        && ui.input(|i| i.modifiers.ctrl)
+        && fast_paste_buffer.try_push(entry_id) == Ok(())
+    {
         egui::Area::new(ui.next_auto_id())
             .fixed_pos(ui.next_widget_position())
             .show(ui.ctx(), |ui| {
-                ui.code(index.to_string());
+                ui.code((fast_paste_buffer.len() - 1).to_string());
             });
     }
-
-    let entry_id = entry.id();
 
     let frame_data = Frame::default().inner_margin(5.);
     let mut frame = frame_data.begin(ui);
