@@ -11,6 +11,8 @@ struct SeenMime<Id> {
 #[derive(Default, Debug)]
 struct KnownSeenMimes<Id> {
     mimes: [Option<SeenMime<Id>>; 6],
+    is_password: bool,
+
     always_none: Option<SeenMime<Id>>,
 }
 
@@ -59,6 +61,7 @@ impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
                             ref mut any_text,
                             ref mut other,
                         ],
+                    ref mut is_password,
                     always_none: _,
                 },
             ref mut best_mime,
@@ -78,6 +81,9 @@ impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
             chromium_custom
         } else if mime.starts_with("text/") {
             any_text
+        } else if mime == "x-kde-passwordManagerHint" {
+            *is_password = true;
+            return;
         } else if mime.chars().next().is_none_or(char::is_lowercase) {
             other
         } else {
@@ -135,10 +141,19 @@ impl<Id: Copy> BestMimeTypeFinder<Id> {
 
 impl<Id> KnownSeenMimes<Id> {
     fn best(&mut self) -> &mut Option<SeenMime<Id>> {
-        let Self { mimes, always_none } = self;
-        mimes
-            .iter_mut()
-            .find(|m| m.is_some())
-            .unwrap_or(always_none)
+        let Self {
+            ref mut mimes,
+            is_password,
+            ref mut always_none,
+        } = *self;
+
+        if is_password {
+            always_none
+        } else {
+            mimes
+                .iter_mut()
+                .find(|m| m.is_some())
+                .unwrap_or(always_none)
+        }
     }
 }
