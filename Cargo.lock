@@ -632,7 +632,7 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
 name = "clipboard-history"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "ask-cli",
@@ -661,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-client-sdk"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "clipboard-history-core",
@@ -680,7 +680,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-core"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "dirs",
@@ -693,7 +693,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-egui"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -707,7 +707,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-server"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "bitcode",
@@ -727,7 +727,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-tui"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "clipboard-history-client-sdk",
  "error-stack",
@@ -741,7 +741,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-watcher-utils"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "clipboard-history-client-sdk",
  "log",
@@ -752,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-wayland"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -771,7 +771,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-x11"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -4144,7 +4144,7 @@ dependencies = [
 
 [[package]]
 name = "wayland-interface-check"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "rustc-hash 2.1.1",
  "wayland-client",
