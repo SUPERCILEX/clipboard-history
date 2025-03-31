@@ -78,7 +78,7 @@ impl SendMsgBufs {
                     .align_offset(align_of::<libc::msghdr>());
                 buf.reserve(align_offset + metadata_size);
 
-                if old_ptr == buf.as_ptr() {
+                if ptr::eq(old_ptr, buf.as_ptr()) {
                     break align_offset;
                 }
             };

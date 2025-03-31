@@ -752,9 +752,9 @@ checksum = "dc827186963e592360843fb5ba4b973e145841266c1357f7180c43526f2e5b61"
 
 [[package]]
 name = "bitcode"
-version = "0.6.5"
+version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18c1406a27371b2f76232a2259df6ab607b91b5a0a7476a7729ff590df5a969a"
+checksum = "cf300f4aa6e66f3bdff11f1236a88c622fe47ea814524792240b4d554d9858ee"
 dependencies = [
  "arrayvec",
  "bitcode_derive",
@@ -1036,9 +1036,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.16"
+version = "1.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be714c154be609ec7f5dad223a33bf1482fff90472de28f7362806e6d4832b8c"
+checksum = "1fcb57c740ae1daf453ae85f16e37396f672b039e00d9d866e07ddb24e328e3a"
 dependencies = [
  "jobserver",
  "libc",
@@ -1104,9 +1104,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.32"
+version = "4.5.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6088f3ae8c3608d19260cd7445411865a485688711b78b5be70d78cd96136f83"
+checksum = "e958897981290da2a852763fe9cdb89cd36977a5d729023127095fa94d95e2ff"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1123,9 +1123,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.32"
+version = "4.5.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22a7ef7f676155edfb82daa97f99441f3ebf4a58d5e32f295a56259f1b6facc8"
+checksum = "83b0f35019843db2160b5bb19ae09b4e6411ac33fc6a712003c33e03090e2489"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1154,7 +1154,7 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
 name = "clipboard-history"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "ask-cli",
@@ -1173,7 +1173,7 @@ dependencies = [
  "rand_xoshiro",
  "regex",
  "rustc-hash 2.1.1",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "serde",
  "serde_json",
  "supercilex-tests",
@@ -1183,7 +1183,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-client-sdk"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "clipboard-history-core",
@@ -1193,29 +1193,29 @@ dependencies = [
  "memchr",
  "regex",
  "rustc-hash 2.1.1",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "serde",
- "smallvec 2.0.0-alpha.10",
+ "smallvec 2.0.0-alpha.11",
  "supercilex-tests",
  "thiserror 2.0.12",
 ]
 
 [[package]]
 name = "clipboard-history-core"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "dirs 6.0.0",
  "error-stack",
  "itoa",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "supercilex-tests",
  "thiserror 2.0.12",
 ]
 
 [[package]]
 name = "clipboard-history-egui"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -1223,13 +1223,13 @@ dependencies = [
  "image",
  "itoa",
  "rustc-hash 2.1.1",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "tracy-client",
 ]
 
 [[package]]
 name = "clipboard-history-server"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "bitcode",
@@ -1240,22 +1240,22 @@ dependencies = [
  "io-uring",
  "libc",
  "log",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "sd-notify",
- "smallvec 2.0.0-alpha.10",
+ "smallvec 2.0.0-alpha.11",
  "thiserror 2.0.12",
  "tracy-client",
 ]
 
 [[package]]
 name = "clipboard-history-tui"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "clipboard-history-client-sdk",
  "error-stack",
  "ratatui",
  "ratatui-image",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "thiserror 2.0.12",
  "tracy-client",
  "tui-textarea",
@@ -1263,18 +1263,18 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-watcher-utils"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "clipboard-history-client-sdk",
  "log",
  "rustc-hash 2.1.1",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "supercilex-tests",
 ]
 
 [[package]]
 name = "clipboard-history-wayland"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -1283,7 +1283,7 @@ dependencies = [
  "error-stack",
  "log",
  "rustc-hash 2.1.1",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "thiserror 2.0.12",
  "wayland-client",
  "wayland-protocols",
@@ -1293,7 +1293,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-x11"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -1301,7 +1301,7 @@ dependencies = [
  "env_logger",
  "error-stack",
  "log",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "thiserror 2.0.12",
  "toml 0.8.20",
  "x11rb",
@@ -1534,7 +1534,7 @@ dependencies = [
  "open",
  "rust-embed",
  "rustc-hash 2.1.1",
- "rustix 1.0.2",
+ "rustix 1.0.3",
 ]
 
 [[package]]
@@ -2238,7 +2238,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2464,9 +2464,9 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foldhash"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0d2fde1f7b3d48b8395d5f2de76c18a528bd6a9cdde438df747bfcba3e05d6f"
+checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "font-types"
@@ -2584,7 +2584,7 @@ dependencies = [
  "once_cell",
  "rayon",
  "remove_dir_all",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "thiserror 2.0.12",
 ]
 
@@ -2967,9 +2967,9 @@ dependencies = [
 
 [[package]]
 name = "half"
-version = "2.4.1"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dd08c532ae367adf81c312a4580bc67f1d0fe8bc9c460520283f4c0ff277888"
+checksum = "7db2ff139bba50379da6aa0766b52fdcb62cb5b263009b09ed58ba604e14bbd1"
 dependencies = [
  "cfg-if",
  "crunchy",
@@ -3525,9 +3525,9 @@ dependencies = [
 
 [[package]]
 name = "image"
-version = "0.25.5"
+version = "0.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd6f44aed642f18953a158afeb30206f4d50da59fbc66ecb53c66488de73563b"
+checksum = "db35664ce6b9810857a38a906215e75a9c879f0696556a39f59c62829710251a"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
@@ -3966,7 +3966,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -4013,9 +4013,9 @@ checksum = "2a385b1be4e5c3e362ad2ffa73c392e53f031eaa5b7d648e64cd87f27f6063d7"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.9.2"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6db9c683daf087dc577b7506e9695b3d556a9f3849903fa28186283afd6809e9"
+checksum = "fe7db12097d22ec582439daf8618b8fdd1a7bef6270e9af3b1ebcd30893cf413"
 
 [[package]]
 name = "litemap"
@@ -4054,9 +4054,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.26"
+version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
+checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "loom"
@@ -5175,7 +5175,7 @@ version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
- "zerocopy 0.8.23",
+ "zerocopy 0.8.24",
 ]
 
 [[package]]
@@ -5308,9 +5308,9 @@ checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
 
 [[package]]
 name = "quick-xml"
-version = "0.37.2"
+version = "0.37.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "165859e9e55f79d67b96c5d96f4e88b6f2695a1972849c15a6a3f5c59fc2c003"
+checksum = "bf763ab1c7a3aa408be466efc86efe35ed1bd3dd74173ed39d6b0d0a6f0ba148"
 dependencies = [
  "memchr",
  "serde",
@@ -5350,7 +5350,7 @@ checksum = "3779b94aeb87e8bd4e834cee3650289ee9e0d5677f976ecdb6d219e5f4f6cd94"
 dependencies = [
  "rand_chacha 0.9.0",
  "rand_core 0.9.3",
- "zerocopy 0.8.23",
+ "zerocopy 0.8.24",
 ]
 
 [[package]]
@@ -5846,20 +5846,20 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
 name = "rustix"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7178faa4b75a30e269c71e61c353ce2748cf3d76f0c44c393f4e60abf49b825"
+checksum = "e56a18552996ac8d29ecc3b190b4fdbb2d91ca4ec396de7bbffaf43f3d637e96"
 dependencies = [
  "bitflags 2.9.0",
  "errno",
  "libc",
- "linux-raw-sys 0.9.2",
- "windows-sys 0.59.0",
+ "linux-raw-sys 0.9.3",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6144,9 +6144,9 @@ checksum = "7fcf8323ef1faaee30a44a340193b1ac6814fd9b7b4e88e9d4519a3e4abe1cfd"
 
 [[package]]
 name = "smallvec"
-version = "2.0.0-alpha.10"
+version = "2.0.0-alpha.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51d44cfb396c3caf6fbfd0ab422af02631b69ddd96d2eff0b0f0724f9024051b"
+checksum = "87b96efa4bd6bdd2ff0c6615cc36fc4970cbae63cfd46ddff5cee35a1b4df570"
 
 [[package]]
 name = "smithay-client-toolkit"
@@ -6474,7 +6474,7 @@ dependencies = [
  "fastrand 2.3.0",
  "getrandom 0.3.1",
  "once_cell",
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "windows-sys 0.59.0",
 ]
 
@@ -6493,7 +6493,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45c6481c4829e4cc63825e62c49186a34538b7b2750b73b266581ffb612fb5ed"
 dependencies = [
- "rustix 1.0.2",
+ "rustix 1.0.3",
  "windows-sys 0.59.0",
 ]
 
@@ -6714,7 +6714,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.7.3",
+ "winnow 0.7.4",
 ]
 
 [[package]]
@@ -6797,7 +6797,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69fff37da548239c3bf9e64a12193d261e8b22b660991c6fd2df057c168f435f"
 dependencies = [
  "cc",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -7222,7 +7222,7 @@ dependencies = [
 
 [[package]]
 name = "wayland-interface-check"
-version = "0.9.4"
+version = "0.9.5"
 dependencies = [
  "rustc-hash 2.1.1",
  "wayland-client",
@@ -7597,7 +7597,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -8090,9 +8090,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e7f4ea97f6f78012141bcdb6a216b2609f0979ada50b20ca5b52dde2eac2bb1"
+checksum = "0e97b544156e9bebe1a0ffbc03484fc1ffe3100cbce3ffb17eac35f7cdd7ab36"
 dependencies = [
  "memchr",
 ]
@@ -8417,11 +8417,11 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.23"
+version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd97444d05a4328b90e75e503a34bad781f14e28a823ad3557f0750df1ebcbc6"
+checksum = "2586fea28e186957ef732a5f8b3be2da217d65c5969d4b1e17f973ebbe876879"
 dependencies = [
- "zerocopy-derive 0.8.23",
+ "zerocopy-derive 0.8.24",
 ]
 
 [[package]]
@@ -8437,9 +8437,9 @@ dependencies = [
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.23"
+version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6352c01d0edd5db859a63e2605f4ea3183ddbd15e2c4a9e7d32184df75e4f154"
+checksum = "a996a8f63c5c4448cd959ac1bab0aaa3306ccfd060472f85943ee0750f0169be"
 dependencies = [
  "proc-macro2",
  "quote",

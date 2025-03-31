@@ -448,7 +448,16 @@ fn ui_entry(
                     continue;
                 }
 
-                one_liner.push(if c.is_whitespace() { ' ' } else { c });
+                one_liner.push(if c.is_whitespace() {
+                    if let Some((start, end)) = &mut highlight {
+                        let diff = c.len_utf8() - const { ' '.len_utf8() };
+                        *start -= diff;
+                        *end -= diff;
+                    }
+                    ' '
+                } else {
+                    c
+                });
                 prev_char_is_whitespace = c.is_whitespace();
             }
             if suffix_free.len() != prefix_free.len() {

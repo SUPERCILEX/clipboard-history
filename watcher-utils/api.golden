@@ -68,7 +68,7 @@ pub fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::borrow(&sel
 impl<T> core::borrow::BorrowMut<T> for clipboard_history_watcher_utils::deduplication::CopyData<'a> where T: ?core::marker::Sized
 pub fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::borrow_mut(&mut self) -> &mut T
 impl<T> core::clone::CloneToUninit for clipboard_history_watcher_utils::deduplication::CopyData<'a> where T: core::clone::Clone
-pub unsafe fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::clone_to_uninit(&self, dst: *mut u8)
+pub unsafe fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_watcher_utils::deduplication::CopyData<'a>
 pub fn clipboard_history_watcher_utils::deduplication::CopyData<'a>::from(t: T) -> T
 pub struct clipboard_history_watcher_utils::deduplication::CopyDeduplication
