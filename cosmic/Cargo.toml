@@ -1,0 +1,34 @@
+[package]
+name = "cosmic-clipboard-history"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0"
+
+[profile.release]
+lto = true
+opt-level = 3
+debug = false
+
+[dependencies]
+i18n-embed-fl = "0.8"
+open = "5.1.3"
+rust-embed = "8.3.0"
+ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
+
+rustc-hash = "2.1.1"
+rustix = { version = "1.0.2", features = ["fs"] }
+
+[dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+default-features = false
+features = ["applet", "tokio", "wayland"]
+
+[dependencies.i18n-embed]
+version = "0.14"
+features = ["fluent-system", "desktop-requester"]
+
+# Uncomment to test a locally-cloned libcosmic
+# [patch.'https://github.com/pop-os/libcosmic']
+# libcosmic = { path = "../libcosmic" }
+# cosmic-config = { path = "../libcosmic/cosmic-config" }
+# cosmic-theme = { path = "../libcosmic/cosmic-theme" }

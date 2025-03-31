@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=COSMIC Applet Template
+Exec=cosmic-applet-template %F
+Terminal=false
+Type=Application
+StartupNotify=true
+Icon=com.example.CosmicAppletTemplate
+Categories=COSMIC;Utility;
+Keywords=Folder;Manager;
+MimeType=inode/directory;
+NoDisplay=true
+X-CosmicApplet=true
+X-CosmicHoverPopup=Auto
