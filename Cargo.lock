@@ -676,6 +676,7 @@ dependencies = [
  "crossbeam-channel",
  "error-stack",
  "image",
+ "lockness-executor",
  "memchr",
  "regex",
  "rustc-hash 2.1.1",
@@ -2182,6 +2183,10 @@ dependencies = [
  "autocfg",
  "scopeguard",
 ]
+
+[[package]]
+name = "lockness-executor"
+version = "0.0.1"
 
 [[package]]
 name = "log"

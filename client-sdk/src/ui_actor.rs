@@ -541,9 +541,7 @@ fn do_search<E>(
     let reader = Arc::new(reader_.take().unwrap());
 
     let (result_stream, threads) = search(query, reader.clone());
-    let _ = send(Message::PendingSearch(
-        result_stream.cancellation_token().clone(),
-    ));
+    let _ = send(Message::PendingSearch(result_stream.cancellation_token()));
 
     if *cached_write_heads
         != Some((
