@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     ffi::CStr,
     io,
     io::ErrorKind,
@@ -9,13 +10,16 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
+        mpsc::{RecvError, SendError},
     },
     thread,
     thread::JoinHandle,
 };
 
 use arrayvec::ArrayVec;
-use crossbeam_channel::{RecvError, SendError, Sender};
+use lockness_bags::{SlotReceiver, SlotSender};
+pub use lockness_executor::JoinError;
+use lockness_executor::{Error, Finisher, LocknessExecutorBuilder};
 use memchr::memmem::Finder;
 use regex::bytes::Regex;
 use ringboard_core::{
@@ -161,7 +165,7 @@ impl CancellationToken {
 type Out = Result<QueryResult, CoreError>;
 
 pub struct QueryIter<const N: usize> {
-    receiver: crossbeam_channel::Receiver<ArrayVec<Out, N>>,
+    receiver: SlotReceiver<ArrayVec<Out, N>>,
     buf: ArrayVec<Out, N>,
     token: CancellationToken,
 }
@@ -200,14 +204,40 @@ impl<const N: usize> Drop for QueryIter<N> {
     }
 }
 
-pub fn search(
-    query: Query,
-    reader: Arc<EntryReader>,
-) -> (
-    QueryIter<16>,
-    impl Iterator<Item = JoinHandle<()>> + Send + Sync + 'static,
-) {
-    let (results, threads) = match query {
+pub enum ThreadReaper {
+    Lockness(Finisher<Infallible>),
+    Mimes(Option<JoinHandle<()>>),
+}
+
+impl From<Finisher<Infallible>> for ThreadReaper {
+    fn from(value: Finisher<Infallible>) -> Self {
+        Self::Lockness(value)
+    }
+}
+
+impl From<JoinHandle<()>> for ThreadReaper {
+    fn from(value: JoinHandle<()>) -> Self {
+        Self::Mimes(Some(value))
+    }
+}
+
+impl Iterator for ThreadReaper {
+    type Item = JoinError;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Lockness(f) => f.next().map(|Error::Panic(p)| p),
+            Self::Mimes(h) => h
+                .take()
+                .and_then(|h| h.join().err())
+                .map(JoinError::from_join_error),
+        }
+    }
+}
+
+#[must_use]
+pub fn search(query: Query, reader: Arc<EntryReader>) -> (QueryIter<16>, ThreadReaper) {
+    match query {
         Query::Plain(p) => search_impl(PlainQuery(Arc::new(Finder::new(p).into_owned())), reader),
         Query::PlainIgnoreCase(CaselessQuery { mut query, trim }) => {
             query.make_ascii_lowercase();
@@ -222,17 +252,65 @@ pub fn search(
         }
         Query::Regex(r) => search_impl(RegexQuery(r), reader),
         Query::Mimes(r) => mime_search_impl(RegexQuery(r), reader),
-    };
-    (results, threads.into_iter())
+    }
+}
+
+#[derive(Clone)]
+struct Params<const N: usize, Q> {
+    query: Q,
+    reader: Arc<EntryReader>,
+
+    token: CancellationToken,
+    sender: SlotSender<ArrayVec<Out, N>>,
+}
+
+struct State<const N: usize, Q> {
+    query: Q,
+    reader: Arc<EntryReader>,
+
+    token: CancellationToken,
+    sender: BufferedSender<N, Out>,
+}
+
+mod lockness {
+    use std::convert::Infallible;
+
+    use lockness_executor::config::{Config, Fifo, True};
+
+    use crate::search::{BufferedSender, Params, State};
+
+    impl<const N: usize, Q> Config for Params<N, Q> {
+        const NUM_TASK_TYPES: usize = 3;
+        type AllowTasksToSpawnMoreTasks = True;
+        type DequeBias = Fifo;
+
+        type Error = Infallible;
+        type ThreadLocalState = State<N, Q>;
+
+        fn thread_initializer(self) -> Result<Self::ThreadLocalState, Self::Error> {
+            let Self {
+                query,
+                reader,
+                token,
+                sender,
+            } = self;
+            Ok(State {
+                query,
+                reader,
+                token,
+                sender: BufferedSender::new(sender),
+            })
+        }
+    }
 }
 
 struct BufferedSender<const N: usize, T> {
     buf: ArrayVec<T, N>,
-    sender: Sender<ArrayVec<T, N>>,
+    sender: SlotSender<ArrayVec<T, N>>,
 }
 
 impl<const N: usize, T> BufferedSender<N, T> {
-    const fn new(sender: Sender<ArrayVec<T, N>>) -> Self {
+    const fn new(sender: SlotSender<ArrayVec<T, N>>) -> Self {
         Self {
             buf: ArrayVec::new_const(),
             sender,
@@ -260,32 +338,31 @@ impl<const N: usize, T> Drop for BufferedSender<N, T> {
 }
 
 fn search_impl<const N: usize>(
-    mut query: impl QueryImpl + Clone + Send + 'static,
+    query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
-) -> (QueryIter<N>, arrayvec::IntoIter<JoinHandle<()>, 13>) {
-    let (sender, receiver) = crossbeam_channel::bounded(1);
+) -> (QueryIter<N>, ThreadReaper) {
+    let (sender, receiver) = lockness_bags::mpsc_slot();
     let token = CancellationToken::new();
-    let mut threads = ArrayVec::<_, 13>::new_const();
 
-    let mut extra_direct_threads = 1;
-    let (direct_file_sender, direct_file_receiver) = crossbeam_channel::bounded(1);
-    for bucket in usize::from(size_to_bucket(
+    let buckets = usize::from(size_to_bucket(
         u16::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u16::MAX),
-    ))..reader.buckets().len()
-    {
-        let mut query = query.clone();
-        let reader = reader.clone();
-        let sender = sender.clone();
-        let token = token.clone();
-        let direct_file_receiver = if extra_direct_threads > 0 {
-            extra_direct_threads -= 1;
-            Some(direct_file_receiver.clone())
-        } else {
-            None
-        };
-        threads.push(thread::spawn(move || {
-            let mut sender = BufferedSender::new(sender);
-            {
+    ))..reader.buckets().len();
+    let executor = LocknessExecutorBuilder::new().build(Params {
+        query,
+        reader,
+        token: token.clone(),
+        sender,
+    });
+    let spawner = executor.spawner();
+
+    for bucket in buckets {
+        spawner.spawn0(
+            move |State {
+                      query,
+                      reader,
+                      token,
+                      sender,
+                  }| {
                 let bucket_size = usize::from(bucket_to_length(bucket));
                 let midpoint = if bucket_size == 4 {
                     1
@@ -314,27 +391,28 @@ fn search_impl<const N: usize>(
                         end,
                     }));
                 }
-            }
-            if let Some(directs) = direct_file_receiver {
-                direct_alloc_search_stream(&token, &mut query, directs, |r| sender.send(r));
-            }
-        }));
+                Ok(())
+            },
+        );
     }
-    threads.push(thread::spawn({
-        let token = token.clone();
-        let sender = sender.clone();
-        move || {
-            let mut sender = BufferedSender::new(sender);
+    spawner.spawn1({
+        |spawner,
+         State {
+             query: _,
+             reader,
+             token,
+             sender,
+         }| {
             stream_through_direct_allocations(
-                &reader,
-                &token,
-                &mut sender,
+                reader,
+                token,
+                sender,
                 |_, file_name, fd, mime_type| {
                     if !is_text_mime(mime_type) {
                         return Ok(());
                     }
 
-                    let data = Mmap::from(&fd).map_io_err(|| {
+                    let data = Mmap::from(fd).map_io_err(|| {
                         format!("Failed to mmap direct allocation: {file_name:?}")
                     })?;
                     let file_name = <[u8; DIRECT_FILE_NAME_LEN]>::try_from(file_name.to_bytes())
@@ -348,21 +426,39 @@ fn search_impl<const N: usize>(
                             )
                             .into(),
                         })?;
-                    let _ = direct_file_sender.send((data, file_name));
+                    spawner.spawn0({
+                        move |State {
+                                  query,
+                                  reader: _,
+                                  token,
+                                  sender,
+                              }| {
+                            if token.is_cancelled() {
+                                return Ok(());
+                            }
+                            let Some((start, end)) = query.find(&data) else {
+                                return Ok(());
+                            };
+
+                            let run = || {
+                                let id = entry_id_from_direct_file_name(&file_name)?;
+                                Ok(QueryResult {
+                                    location: EntryLocation::File { entry_id: id },
+                                    start,
+                                    end,
+                                })
+                            };
+                            let _ = sender.send(run());
+                            Ok(())
+                        }
+                    });
+                    spawner.drain();
                     Ok(())
                 },
             );
+            Ok(())
         }
-    }));
-    threads.push(thread::spawn({
-        let token = token.clone();
-        move || {
-            let mut sender = BufferedSender::new(sender);
-            direct_alloc_search_stream(&token, &mut query, direct_file_receiver, |r| {
-                sender.send(r)
-            });
-        }
-    }));
+    });
 
     (
         QueryIter {
@@ -370,44 +466,8 @@ fn search_impl<const N: usize>(
             buf: ArrayVec::new_const(),
             token,
         },
-        threads.into_iter(),
+        executor.finisher().into(),
     )
-}
-
-fn direct_alloc_search_stream<U>(
-    token: &CancellationToken,
-    query: &mut impl QueryImpl,
-    inputs: impl IntoIterator<Item = (Mmap, [u8; DIRECT_FILE_NAME_LEN])>,
-    mut send: impl FnMut(Out) -> Result<(), U>,
-) {
-    for (file, file_name) in inputs {
-        if token.is_cancelled() {
-            break;
-        }
-
-        let mut run = || {
-            let Some((start, end)) = query.find(&file) else {
-                return Ok(None);
-            };
-
-            let id = entry_id_from_direct_file_name(&file_name)?;
-            Ok(Some(QueryResult {
-                location: EntryLocation::File { entry_id: id },
-                start,
-                end,
-            }))
-        };
-
-        if match run() {
-            Ok(Some(r)) => send(Ok(r)),
-            Ok(None) => Ok(()),
-            Err(e) => send(Err(e)),
-        }
-        .is_err()
-        {
-            break;
-        }
-    }
 }
 
 fn stream_through_direct_allocations<const N: usize>(
@@ -492,12 +552,11 @@ fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, CoreError> {
 fn mime_search_impl<const N: usize>(
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
-) -> (QueryIter<N>, arrayvec::IntoIter<JoinHandle<()>, 13>) {
-    let (sender, receiver) = crossbeam_channel::bounded(0);
+) -> (QueryIter<N>, ThreadReaper) {
+    let (sender, receiver) = lockness_bags::mpsc_slot();
     let token = CancellationToken::new();
-    let mut threads = ArrayVec::<_, 13>::new_const();
 
-    threads.push(thread::spawn({
+    let handle = thread::spawn({
         let token = token.clone();
         move || {
             let mut sender = BufferedSender::new(sender);
@@ -522,7 +581,7 @@ fn mime_search_impl<const N: usize>(
                 },
             );
         }
-    }));
+    });
 
     (
         QueryIter {
@@ -530,6 +589,6 @@ fn mime_search_impl<const N: usize>(
             buf: ArrayVec::new_const(),
             token,
         },
-        threads.into_iter(),
+        handle.into(),
     )
 }

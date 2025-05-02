@@ -56,7 +56,7 @@ use ringboard_sdk::{
         size_to_bucket,
     },
     duplicate_detection::DuplicateDetector,
-    search::{CaselessQuery, EntryLocation, Query, QueryResult},
+    search::{CaselessQuery, EntryLocation, JoinError, Query, QueryResult},
 };
 use rustc_hash::FxHasher;
 use rustix::{
@@ -428,7 +428,7 @@ enum CliError {
     #[error("invalid RegEx")]
     Regex(#[from] regex::Error),
     #[error("internal search error")]
-    InternalSearchError,
+    InternalSearchError(JoinError),
 }
 
 #[derive(Error, Debug)]
@@ -461,7 +461,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::QuickXmlAttr(e) => Report::new(e).change_context(wrapper),
             CliError::Toml(e) => Report::new(e).change_context(wrapper),
             CliError::Regex(e) => Report::new(e).change_context(wrapper),
-            CliError::InternalSearchError => Report::new(wrapper).attach_printable(
+            CliError::InternalSearchError(e) => Report::new(e).change_context(wrapper).attach_printable(
                 "Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new",
             ),
         }
@@ -611,7 +611,7 @@ fn search(
 
     let (mut database, reader) = open_db()?;
     let reader = Arc::new(reader);
-    let (result_stream, threads) = {
+    let (result_stream, thread_reaper) = {
         // TODO https://github.com/rust-lang/rust-clippy/issues/13227
         #[allow(clippy::redundant_locals)]
         let query = query;
@@ -662,8 +662,8 @@ fn search(
             }
         }
     }
-    for thread in threads {
-        thread.join().map_err(|_| CliError::InternalSearchError)?;
+    if let Some(e) = thread_reaper.into_iter().next() {
+        return Err(CliError::InternalSearchError(e));
     }
     let mut reader = Arc::into_inner(reader).unwrap();
 

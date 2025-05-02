@@ -11,9 +11,10 @@ license.workspace = true
 
 [dependencies]
 arrayvec = "0.7.6"
-crossbeam-channel = "0.5.15"
 error-stack = { version = "0.5.0", default-features = false, optional = true }
 image = { version = "0.25.6", optional = true }
+lockness-bags = { path = "/home/asaveau/Desktop/wip/lockness/bags", optional = true }
+lockness-executor = { path = "/home/asaveau/Desktop/wip/lockness/executor", optional = true }
 memchr = { version = "2.7.5", optional = true }
 regex = { version = "1.11.1", optional = true }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core" }
@@ -29,6 +30,6 @@ supercilex-tests = { version = "0.4.21", default-features = false, features = ["
 [features]
 error-stack = ["dep:error-stack", "ringboard-core/error-stack"]
 deduplication = ["dep:rustc-hash", "dep:smallvec"]
-search = ["dep:memchr", "dep:regex"]
+search = ["dep:memchr", "dep:regex", "dep:lockness-bags", "dep:lockness-executor"]
 ui = ["search", "dep:image", "dep:rustc-hash"]
 config = ["dep:serde"]
