@@ -17,6 +17,9 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
+use lockness_executor::{
+    LocknessExecutor, LocknessExecutorBuilder, MessageIterator, SimpleLocknessExecutor,
+};
 use memchr::memmem::Finder;
 use regex::bytes::Regex;
 use ringboard_core::{
@@ -129,51 +132,48 @@ pub enum EntryLocation {
     File { entry_id: u64 },
 }
 
+type Executor = SimpleLocknessExecutor<Result<QueryResult, CoreError>>;
+
 #[derive(Clone, Debug)]
 pub struct CancellationToken {
-    stop: Arc<AtomicBool>,
+    executor: Executor,
 }
 
 impl CancellationToken {
-    fn new() -> Self {
-        Self {
-            stop: Arc::new(AtomicBool::new(false)),
-        }
+    fn new(executor: Executor) -> Self {
+        Self { executor }
     }
 
     pub fn cancel(&self) {
-        self.stop.store(true, Ordering::Relaxed);
+        self.executor.cancel();
     }
 
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
-        self.stop.load(Ordering::Relaxed)
+        self.executor.is_cancelled()
     }
 }
 
 pub struct QueryIter {
-    stream: mpsc::IntoIter<Result<QueryResult, CoreError>>,
-    token: CancellationToken,
+    executor: Executor,
 }
 
 impl QueryIter {
     #[must_use]
-    pub const fn cancellation_token(&self) -> &CancellationToken {
-        &self.token
+    pub const fn cancellation_token(&self) -> CancellationToken {
+        CancellationToken {
+            executor: self.executor.clone(),
+        }
     }
 }
 
-impl Iterator for QueryIter {
+impl IntoIterator for QueryIter {
     type Item = Result<QueryResult, CoreError>;
+    type IntoIter = MessageIterator<Self::Item>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.stream.next()
-    }
-}
-
-impl Drop for QueryIter {
-    fn drop(&mut self) {
-        self.token.cancel();
+    fn into_iter(self) -> Self::IntoIter {
+        // TODO
+        self.executor.finish().unwrap()
     }
 }
 
@@ -377,8 +377,7 @@ impl<T> From<crossbeam_channel::SendError<T>> for DirectIterError {
 
 fn stream_through_direct_allocations<T>(
     reader: &EntryReader,
-    token: &CancellationToken,
-    sender: &SyncSender<Result<T, CoreError>>,
+    executor: &Executor,
     mut f: impl FnMut(&CStr, OwnedFd, &str) -> Result<(), DirectIterError>,
 ) {
     let (direct_dir, metadata_dir) = {
@@ -402,7 +401,7 @@ fn stream_through_direct_allocations<T>(
         match run() {
             Ok(d) => d,
             Err(e) => {
-                let _ = sender.send(Err(e));
+                let _ = executor.send(Err(e));
                 return;
             }
         }
@@ -411,7 +410,7 @@ fn stream_through_direct_allocations<T>(
     let mut buf = [MaybeUninit::uninit(); 8192];
     let mut iter = RawDir::new(&direct_dir, &mut buf);
     while let Some(file) = iter.next() {
-        if token.is_cancelled() {
+        if executor.is_cancelled() {
             break;
         }
 
@@ -432,7 +431,7 @@ fn stream_through_direct_allocations<T>(
         match run() {
             Ok(()) => (),
             Err(DirectIterError::Core(e)) => {
-                if sender.send(Err(e)).is_err() {
+                if executor.send(Err(e)).is_err() {
                     break;
                 }
             }
@@ -458,42 +457,26 @@ fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, CoreError> {
 fn mime_search_impl(
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
-) -> (QueryIter, arrayvec::IntoIter<JoinHandle<()>, 13>) {
-    let (sender, receiver) = mpsc::sync_channel(0);
-    let token = CancellationToken::new();
-    let mut threads = ArrayVec::<_, 13>::new_const();
+) -> QueryIter {
+    let executor = LocknessExecutor::builder().build();
 
-    threads.push(thread::spawn({
-        let token = token.clone();
-        move || {
-            stream_through_direct_allocations(
-                &reader,
-                &token,
-                &sender,
-                |file_name, _fd, mime_type| {
-                    if mime_type.is_empty() {
-                        return Ok(());
-                    }
+    executor.spawn(|(_, executor)| {
+        stream_through_direct_allocations(&reader, &executor, |file_name, _fd, mime_type| {
+            if mime_type.is_empty() {
+                return Ok(());
+            }
 
-                    if query.find(mime_type.as_bytes()).is_some() {
-                        let id = entry_id_from_direct_file_name(file_name.to_bytes())?;
-                        sender.send(Ok(QueryResult {
-                            location: EntryLocation::File { entry_id: id },
-                            start: 0,
-                            end: 0,
-                        }))?;
-                    }
-                    Ok(())
-                },
-            );
-        }
-    }));
+            if query.find(mime_type.as_bytes()).is_some() {
+                let id = entry_id_from_direct_file_name(file_name.to_bytes())?;
+                executor.send(Ok(QueryResult {
+                    location: EntryLocation::File { entry_id: id },
+                    start: 0,
+                    end: 0,
+                }))?;
+            }
+            Ok(())
+        });
+    });
 
-    (
-        QueryIter {
-            stream: receiver.into_iter(),
-            token,
-        },
-        threads.into_iter(),
-    )
+    QueryIter { executor }
 }
