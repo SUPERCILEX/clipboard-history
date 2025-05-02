@@ -538,6 +538,53 @@ pub unsafe fn clipboard_history_client_sdk::search::Query<'a>::deref_mut<'a>(ptr
 pub unsafe fn clipboard_history_client_sdk::search::Query<'a>::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::search::Query<'a>::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::Query<'a>
+pub enum clipboard_history_client_sdk::search::ThreadReaper
+pub clipboard_history_client_sdk::search::ThreadReaper::Lockness(lockness_executor::Finisher)
+pub clipboard_history_client_sdk::search::ThreadReaper::Mimes(core::option::Option<std::thread::JoinHandle<()>>)
+impl core::convert::From<lockness_executor::Finisher> for clipboard_history_client_sdk::search::ThreadReaper
+pub fn clipboard_history_client_sdk::search::ThreadReaper::from(value: lockness_executor::Finisher) -> Self
+impl core::convert::From<std::thread::JoinHandle<()>> for clipboard_history_client_sdk::search::ThreadReaper
+pub fn clipboard_history_client_sdk::search::ThreadReaper::from(value: std::thread::JoinHandle<()>) -> Self
+impl core::iter::traits::iterator::Iterator for clipboard_history_client_sdk::search::ThreadReaper
+pub type clipboard_history_client_sdk::search::ThreadReaper::Item = alloc::boxed::Box<(dyn core::any::Any + core::marker::Send)>
+pub fn clipboard_history_client_sdk::search::ThreadReaper::next(&mut self) -> core::option::Option<Self::Item>
+impl core::marker::Freeze for clipboard_history_client_sdk::search::ThreadReaper
+impl core::marker::Send for clipboard_history_client_sdk::search::ThreadReaper
+impl core::marker::Sync for clipboard_history_client_sdk::search::ThreadReaper
+impl core::marker::Unpin for clipboard_history_client_sdk::search::ThreadReaper
+impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::search::ThreadReaper
+impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::search::ThreadReaper
+impl<I> core::iter::traits::collect::IntoIterator for clipboard_history_client_sdk::search::ThreadReaper where I: core::iter::traits::iterator::Iterator
+pub type clipboard_history_client_sdk::search::ThreadReaper::IntoIter = I
+pub type clipboard_history_client_sdk::search::ThreadReaper::Item = <I as core::iter::traits::iterator::Iterator>::Item
+pub fn clipboard_history_client_sdk::search::ThreadReaper::into_iter(self) -> I
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::search::ThreadReaper where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::search::ThreadReaper::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::search::ThreadReaper where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::search::ThreadReaper::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::search::ThreadReaper::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::search::ThreadReaper where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::search::ThreadReaper::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::search::ThreadReaper::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::search::ThreadReaper where T: 'static + ?core::marker::Sized
+pub fn clipboard_history_client_sdk::search::ThreadReaper::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::ThreadReaper where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::search::ThreadReaper::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::ThreadReaper where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::search::ThreadReaper::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::ThreadReaper
+pub fn clipboard_history_client_sdk::search::ThreadReaper::from(t: T) -> T
+impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::search::ThreadReaper
+pub type clipboard_history_client_sdk::search::ThreadReaper::Init = T
+pub const clipboard_history_client_sdk::search::ThreadReaper::ALIGN: usize
+pub unsafe fn clipboard_history_client_sdk::search::ThreadReaper::deref<'a>(ptr: usize) -> &'a T
+pub unsafe fn clipboard_history_client_sdk::search::ThreadReaper::deref_mut<'a>(ptr: usize) -> &'a mut T
+pub unsafe fn clipboard_history_client_sdk::search::ThreadReaper::drop(ptr: usize)
+pub unsafe fn clipboard_history_client_sdk::search::ThreadReaper::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
+impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::ThreadReaper
+impl<T> itertools::Itertools for clipboard_history_client_sdk::search::ThreadReaper where T: core::iter::traits::iterator::Iterator + ?core::marker::Sized
+impl<T> rayon::iter::par_bridge::ParallelBridge for clipboard_history_client_sdk::search::ThreadReaper where T: core::iter::traits::iterator::Iterator + core::marker::Send, <T as core::iter::traits::iterator::Iterator>::Item: core::marker::Send
+pub fn clipboard_history_client_sdk::search::ThreadReaper::par_bridge(self) -> rayon::iter::par_bridge::IterBridge<T>
 pub struct clipboard_history_client_sdk::search::CancellationToken
 impl clipboard_history_client_sdk::search::CancellationToken
 pub fn clipboard_history_client_sdk::search::CancellationToken::cancel(&self)
@@ -714,7 +761,7 @@ pub unsafe fn clipboard_history_client_sdk::search::QueryResult::deref_mut<'a>(p
 pub unsafe fn clipboard_history_client_sdk::search::QueryResult::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::search::QueryResult::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::QueryResult
-pub fn clipboard_history_client_sdk::search::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
+pub fn clipboard_history_client_sdk::search::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (clipboard_history_client_sdk::search::QueryIter<16>, clipboard_history_client_sdk::search::ThreadReaper)
 pub mod clipboard_history_client_sdk::ui_actor
 pub enum clipboard_history_client_sdk::ui_actor::Command
 pub clipboard_history_client_sdk::ui_actor::Command::Delete(u64)
@@ -1373,4 +1420,4 @@ pub unsafe fn clipboard_history_client_sdk::RingReader<'a>::init(init: <T as cro
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::RingReader<'a>
 impl<T> itertools::Itertools for clipboard_history_client_sdk::RingReader<'a> where T: core::iter::traits::iterator::Iterator + ?core::marker::Sized
 pub fn clipboard_history_client_sdk::is_text_mime(mime: &str) -> bool
-pub fn clipboard_history_client_sdk::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
+pub fn clipboard_history_client_sdk::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (clipboard_history_client_sdk::search::QueryIter<16>, clipboard_history_client_sdk::search::ThreadReaper)
