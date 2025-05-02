@@ -11,9 +11,10 @@ license.workspace = true
 
 [dependencies]
 arrayvec = "0.7.6"
-crossbeam-channel = "0.5.15"
 error-stack = { version = "0.6.0", default-features = false, optional = true }
 image = { version = "0.25.9", optional = true }
+lockness-bags = { path = "/home/asaveau/Desktop/wip/lockness/bags", optional = true }
+lockness-executor = { path = "/home/asaveau/Desktop/wip/lockness/executor", optional = true }
 log = { version = "0.4.29", default-features = false, optional = true }
 memchr = { version = "2.8.0", optional = true }
 regex = { version = "1.12.3", optional = true }
@@ -31,7 +32,7 @@ supercilex-tests = { version = "0.4.21", default-features = false, features = ["
 [features]
 error-stack = ["dep:error-stack", "ringboard-core/error-stack"]
 deduplication = ["dep:rustc-hash", "dep:smallvec"]
-search = ["dep:memchr", "dep:regex"]
+search = ["dep:memchr", "dep:regex", "dep:lockness-bags", "dep:lockness-executor"]
 ui = ["search", "dep:image", "dep:rustc-hash"]
 config = ["dep:serde"]
 watcher-utils = ["dep:log", "dep:rustc-hash"]

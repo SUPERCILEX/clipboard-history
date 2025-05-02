@@ -13,6 +13,7 @@ use std::{
 };
 
 use image::ImageError;
+use lockness_executor::JoinError;
 use regex::bytes::Regex;
 use ringboard_core::dirs::paste_socket_file;
 use rustc_hash::FxHasher;
@@ -47,7 +48,7 @@ pub enum CommandError {
     #[error("failed to load image")]
     Image(#[from] ImageError),
     #[error("search crashed")]
-    Search,
+    Search(JoinError),
 }
 
 impl From<IdNotFoundError> for CommandError {
@@ -72,7 +73,7 @@ mod error_stack_compat {
                 Self::Sdk(e) => e.into_report(wrapper),
                 Self::Regex(e) => Report::new(e).change_context(wrapper),
                 Self::Image(e) => Report::new(e).change_context(wrapper),
-                Self::Search => Report::new(wrapper),
+                Self::Search(e) => Report::new(e).change_context(wrapper),
             }
         }
     }
@@ -559,7 +560,7 @@ fn do_search<E>(
 
     let reader = Arc::new(reader_.take().unwrap());
 
-    let (result_stream, threads) = search(query, reader.clone(), token.clone());
+    let (result_stream, thread_reaper) = search(query, reader.clone(), token.clone());
 
     if *cached_write_heads
         != Some((
@@ -634,11 +635,8 @@ fn do_search<E>(
         }
     }
 
-    for thread in threads {
-        let Err(_) = thread.join() else { continue };
-
-        token.done();
-        let _ = send(Message::Error(CommandError::Search));
+    if let Some(e) = thread_reaper.into_iter().next() {
+        let _ = send(Message::Error(CommandError::Search(e)));
     }
     token.done();
 
