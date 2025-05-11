@@ -11,18 +11,18 @@ license.workspace = true
 
 [dependencies]
 arrayvec = "0.7.6"
-env_logger = { version = "0.11.7", default-features = false }
+env_logger = { version = "0.11.8", default-features = false }
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
 log = { version = "0.4.27", features = ["release_max_level_info"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "config"] }
 ringboard-watcher-utils = { package = "clipboard-history-watcher-utils", version = "0", path = "../watcher-utils" }
 rustc-hash = "2.1.1"
-rustix = { version = "1.0.3", features = ["pipe", "event"] }
+rustix = { version = "1.0.7", features = ["pipe", "event"] }
 thiserror = "2.0.12"
-wayland-client = "0.31.8"
-wayland-protocols = { version = "0.32.6", features = ["client", "staging"] }
-wayland-protocols-misc = { version = "0.3.6", features = ["client"] }
-wayland-protocols-wlr = { version = "0.3.6", features = ["client"] }
+wayland-client = "0.31.10"
+wayland-protocols = { version = "0.32.8", features = ["client", "staging"] }
+wayland-protocols-misc = { version = "0.3.8", features = ["client"] }
+wayland-protocols-wlr = { version = "0.3.8", features = ["client"] }
 
 [features]
 default = ["human-logs"]

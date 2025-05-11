@@ -117,14 +117,14 @@ fn setup_uring() -> Result<(IoUring, BuiltInFds), CliError> {
         use std::os::fd::FromRawFd;
 
         let mut set = mem::zeroed::<libc::sigset_t>();
-        libc::sigemptyset(&mut set);
+        libc::sigemptyset(&raw mut set);
 
-        libc::sigaddset(&mut set, libc::SIGTERM);
-        libc::sigaddset(&mut set, libc::SIGQUIT);
-        libc::sigaddset(&mut set, libc::SIGINT);
-        libc::sigprocmask(libc::SIG_BLOCK, &set, ptr::null_mut());
+        libc::sigaddset(&raw mut set, libc::SIGTERM);
+        libc::sigaddset(&raw mut set, libc::SIGQUIT);
+        libc::sigaddset(&raw mut set, libc::SIGINT);
+        libc::sigprocmask(libc::SIG_BLOCK, &raw const set, ptr::null_mut());
 
-        let fd = libc::signalfd(-1, &set, 0);
+        let fd = libc::signalfd(-1, &raw const set, 0);
         if fd < 0 {
             return Err(CliError::Internal {
                 context: "Could not create signal fd.".into(),
@@ -252,7 +252,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         hdr
     };
     let recvmsg = |fd| {
-        RecvMsgMulti::new(Fixed(u32::from(fd)), &receive_hdr, u16::from(fd))
+        RecvMsgMulti::new(Fixed(u32::from(fd)), &raw const receive_hdr, u16::from(fd))
             .flags(RecvFlags::TRUNC.bits())
             .build()
     };

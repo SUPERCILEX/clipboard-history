@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 use std::{
     fmt::Write,
     fs::File,
@@ -318,15 +316,14 @@ fn handle_message(
                         .position(|e| e.entry.id() == selected_id)
                 }));
             }
-            if let Some(id) = pending_favorite_change.take() {
-                if let Some(index) = active_entries!(entries, ui)
+            if let Some(id) = pending_favorite_change.take()
+                && let Some(index) = active_entries!(entries, ui)
                     .iter()
                     .position(|e| e.entry.id() == id)
-                {
-                    active_list_state!(entries, ui).select(Some(index));
-                    if details_requested.is_some() {
-                        *details_requested = Some(id);
-                    }
+            {
+                active_list_state!(entries, ui).select(Some(index));
+                if details_requested.is_some() {
+                    *details_requested = Some(id);
                 }
             }
         }
