@@ -11,4 +11,4 @@ license.workspace = true
 
 [dependencies]
 rustc-hash = "2.1.1"
-wayland-client = "0.31.8"
+wayland-client = "0.31.10"

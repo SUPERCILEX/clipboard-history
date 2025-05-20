@@ -1,6 +1,7 @@
 use std::{
     ffi::CString,
     fmt::Debug,
+    fs,
     mem::MaybeUninit,
     os::{fd::AsFd, unix::ffi::OsStringExt},
     path::PathBuf,
@@ -35,6 +36,8 @@ pub fn maintain_single_instance(
             break Ok(());
         }
 
+        fs::create_dir_all("/tmp/.ringboard")
+            .map_io_err(|| "Failed to create tmp ringboard directory.")?;
         kill_old_instances_if_any(&mut cache, &path)?;
         let id = inotify::add_watch(
             &inotify,

@@ -13,7 +13,7 @@ license.workspace = true
 log = { version = "0.4.27", default-features = false }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
 rustc-hash = "2.1.1"
-rustix = { version = "1.0.3", features = ["fs"] }
+rustix = { version = "1.0.7", features = ["fs"] }
 
 [dev-dependencies]
 supercilex-tests = { version = "0.4.16", default-features = false, features = ["api"] }

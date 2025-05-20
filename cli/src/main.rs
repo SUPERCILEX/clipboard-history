@@ -740,6 +740,10 @@ fn wipe() -> Result<(), CliError> {
     let mut extra_buffer = data_dir.clone();
     data_dir.pop();
 
+    create_dir_all(&data_dir).map_io_err(|| {
+        format!("Failed to create data directory to acquire lock file: {data_dir:?}")
+    })?;
+
     data_dir.push("server.lock");
     acquire_lock_file(
         &mut false,
