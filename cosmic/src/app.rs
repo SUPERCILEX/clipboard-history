@@ -2,23 +2,34 @@
 
 use cosmic::app::{Core, Task};
 use cosmic::iced::window::Id;
-use cosmic::iced::Limits;
+use cosmic::iced::{Length, Limits};
+use cosmic::iced_widget::{Column, column};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
-use cosmic::widget::{self, settings};
-use cosmic::{Application, Element};
+use cosmic::widget::{self, container, row};
+use cosmic::{Application, Apply, Element, theme};
+use ringboard_sdk::core::IoErr;
+use ringboard_sdk::core::dirs::data_dir;
+use ringboard_sdk::core::protocol::RingKind;
+use ringboard_sdk::{DatabaseReader, EntryReader};
 
+use crate::config::GeneralConfig;
 use crate::fl;
+use crate::views::main::{self, Main};
+use crate::views::rings::{self, Rings};
+use crate::views::settings::{self, Settings};
 
 /// This is the struct that represents your application.
 /// It is used to define the data that will be used by your application.
-#[derive(Default)]
-pub struct YourApp {
+pub struct App {
     /// Application state which is managed by the COSMIC runtime.
     core: Core,
     /// The popup id.
     popup: Option<Id>,
     /// Example row toggler.
-    example_row: bool,
+    pub database_reader: DatabaseReader,
+    entry_reader: EntryReader,
+    pub config: GeneralConfig,
+    main: Main,
 }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
@@ -28,7 +39,8 @@ pub struct YourApp {
 pub enum Message {
     TogglePopup,
     PopupClosed(Id),
-    ToggleExampleRow(bool),
+    SearchQuery(String),
+    MainMessage(main::Message),
 }
 
 /// Implement the `Application` trait for your application.
@@ -39,7 +51,7 @@ pub enum Message {
 /// - `Flags` is the data that your application needs to use before it starts.
 /// - `Message` is the enum that contains all the possible variants that your application will need to transmit messages.
 /// - `APP_ID` is the unique identifier of your application.
-impl Application for YourApp {
+impl Application for App {
     type Executor = cosmic::executor::Default;
 
     type Flags = ();
@@ -64,9 +76,19 @@ impl Application for YourApp {
     /// - `flags` is used to pass in any data that your application needs to use before it starts.
     /// - `Command` type is used to send messages to your application. `Command::none()` can be used to send no messages to your application.
     fn init(core: Core, _flags: Self::Flags) -> (Self, Task<Self::Message>) {
-        let app = YourApp {
+        let mut database = data_dir();
+        database
+            .try_exists()
+            .map_io_err(|| format!("Failed to check that database exists: {database:?}"))
+            .unwrap();
+
+        let app = App {
             core,
-            ..Default::default()
+            popup: None,
+            database_reader: DatabaseReader::open(&mut database).unwrap(),
+            entry_reader: EntryReader::open(&mut database).unwrap(),
+            config: GeneralConfig::default(),
+            main: Main::default(),
         };
 
         (app, Task::none())
@@ -91,15 +113,25 @@ impl Application for YourApp {
     }
 
     fn view_window(&self, _id: Id) -> Element<Self::Message> {
-        let content_list = widget::list_column()
-            .padding(5)
-            .spacing(0)
-            .add(settings::item(
-                fl!("example-row"),
-                widget::toggler(self.example_row).on_toggle(Message::ToggleExampleRow),
-            ));
+        /* let content = column![widget::text("Hello"), widget::text("World"),]; */
 
-        self.core.applet.popup_container(content_list).into()
+        let content = match &self.main {
+            Main::Rings(rings) => rings
+                .view(self)
+                .map(|msg| Message::MainMessage(main::Message::Rings(msg))),
+            Main::Settings(settings) => settings
+                .view(self)
+                .map(|msg| Message::MainMessage(main::Message::Settings(msg))),
+        };
+
+        let container = container(content)
+            .padding(theme::spacing().space_s)
+            .width(Length::Fill);
+        self.core
+            .applet
+            .popup_container(container)
+            .auto_width(true)
+            .into()
     }
 
     /// Application messages are handled here. The application state can be modified based on
@@ -126,14 +158,67 @@ impl Application for YourApp {
                         .min_height(200.0)
                         .max_height(1080.0);
                     get_popup(popup_settings)
-                }
+                };
             }
             Message::PopupClosed(id) => {
                 if self.popup.as_ref() == Some(&id) {
                     self.popup = None;
                 }
             }
-            Message::ToggleExampleRow(toggled) => self.example_row = toggled,
+            Message::SearchQuery(q) => {
+                println!("Search query: {}", q);
+            }
+            Message::MainMessage(main_message) => {
+                match main_message {
+                    main::Message::Rings(rings_message) => {
+                        match rings_message {
+                            rings::Message::ChangeMainSettings => {
+                                self.main = Main::Settings(Settings::default());
+                            }
+                            _ => {}
+                        }
+
+                        // Not ideal
+                        match &mut self.main {
+                            Main::Rings(view) => {
+                                let _ = view.update(rings_message);
+                            }
+                            _ => {}
+                        }
+                    }
+                    main::Message::Settings(settings_message) => {
+                        match settings_message {
+                            settings::Message::ChangeEntriesLimit(limit) => {
+                                if let Some(limit) = limit {
+                                    self.config.items_max = limit;
+                                }
+                            }
+                            settings::Message::ToggleShowFavourites(state) => {
+                                self.config.show_favourites = !state;
+                            }
+                            settings::Message::ChangeMainRings => {
+                                self.main = Main::Rings(Rings::default());
+                            }
+                        }
+
+                        // Not ideal
+                        match &mut self.main {
+                            Main::Settings(view) => {
+                                let _ = view.update(settings_message);
+                            }
+                            _ => {}
+                        }
+                    }
+                    main::Message::ChangeMain(route) => match route {
+                        main::MainRoute::Settings => {
+                            self.main = Main::Settings(Settings::default());
+                        }
+                        main::MainRoute::Rings => {
+                            self.main = Main::Rings(Rings::default());
+                        }
+                    },
+                }
+            }
         }
         Task::none()
     }

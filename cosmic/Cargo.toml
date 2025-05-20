@@ -17,11 +17,12 @@ ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path 
 
 rustc-hash = "2.1.1"
 rustix = { version = "1.0.2", features = ["fs"] }
+serde = "1.0.219"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
-features = ["applet", "tokio", "wayland"]
+features = ["applet", "applet-token", "wayland"]
 
 [dependencies.i18n-embed]
 version = "0.14"
