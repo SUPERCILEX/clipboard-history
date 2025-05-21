@@ -434,24 +434,24 @@ pub fn ui_entry_(
             }
             let mut prev_char_is_whitespace = false;
             for c in s.chars() {
-                if (prev_char_is_whitespace || one_liner.is_empty()) && c.is_whitespace() {
+                let mut offset_highlight = |diff| {
                     if let Some((start, end)) = &mut highlight {
                         if one_liner.len() < *start {
-                            *start -= c.len_utf8();
+                            *start -= diff;
                         }
                         if one_liner.len() < *end {
-                            *end -= c.len_utf8();
+                            *end -= diff;
                         }
                     }
+                };
+
+                if (prev_char_is_whitespace || one_liner.is_empty()) && c.is_whitespace() {
+                    offset_highlight(c.len_utf8());
                     continue;
                 }
 
                 one_liner.push(if c.is_whitespace() {
-                    if let Some((start, end)) = &mut highlight {
-                        let diff = c.len_utf8() - const { ' '.len_utf8() };
-                        *start -= diff;
-                        *end -= diff;
-                    }
+                    offset_highlight(c.len_utf8() - const { ' '.len_utf8() });
                     ' '
                 } else {
                     c
