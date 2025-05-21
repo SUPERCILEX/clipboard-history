@@ -1,0 +1,21 @@
+[package]
+name = "clipboard-history-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+clipboard-history-client-sdk = { path = "..", features = ["ui"] }
+
+[[bin]]
+name = "ui_entry"
+path = "fuzz_targets/ui_entry.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

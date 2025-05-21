@@ -262,10 +262,7 @@ fn handle_command<E>(
                 .rev()
                 .chain(database.main().rev().take(100))
             {
-                entries.push(ui_entry(entry, reader, None).unwrap_or_else(|e| UiEntry {
-                    cache: UiEntryCache::Error(e),
-                    entry,
-                }));
+                entries.push(ui_entry(entry, reader, None));
             }
             Ok(Some(Message::LoadedFirstPage {
                 entries: entries.into(),
@@ -374,18 +371,18 @@ fn handle_command<E>(
     }
 }
 
-fn ui_entry(
+#[must_use]
+pub fn ui_entry_(
     entry: Entry,
-    reader: &mut EntryReader,
+    loaded: &[u8],
+    mime_type: &str,
     mut highlight: Option<(usize, usize)>,
-) -> Result<UiEntry, CoreError> {
-    let loaded = entry.to_slice(reader)?;
-    let mime_type = &*loaded.mime_type()?;
+) -> UiEntry {
     if mime_type.starts_with("image/") {
-        return Ok(UiEntry {
+        return UiEntry {
             entry,
             cache: UiEntryCache::Image,
-        });
+        };
     }
 
     let prefix_free = if let Some((start, end)) = &mut highlight {
@@ -406,11 +403,11 @@ fn ui_entry(
 
         l
     } else {
-        &loaded
+        loaded
     };
     let suffix_free = &prefix_free[..min(prefix_free.len(), 250)];
 
-    Ok(match str::from_utf8(suffix_free) {
+    match str::from_utf8(suffix_free) {
         Ok(s) => Some(s),
         Err(e) if e.error_len().is_none() => {
             Some(unsafe { str::from_utf8_unchecked(&suffix_free[..e.valid_up_to()]) })
@@ -430,8 +427,9 @@ fn ui_entry(
             if prefix_free.len() != loaded.len() {
                 one_liner.push('…');
                 if let Some((start, end)) = &mut highlight {
-                    *start += '…'.len_utf8();
-                    *end += '…'.len_utf8();
+                    let prefix = const { '…'.len_utf8() };
+                    *start += prefix;
+                    *end += prefix;
                 }
             }
             let mut prev_char_is_whitespace = false;
@@ -482,7 +480,20 @@ fn ui_entry(
                 },
             }
         },
-    ))
+    )
+}
+
+fn ui_entry(entry: Entry, reader: &mut EntryReader, highlight: Option<(usize, usize)>) -> UiEntry {
+    let mut run = || {
+        let loaded = entry.to_slice(reader)?;
+        let mime_type = &*loaded.mime_type()?;
+        Ok(ui_entry_(entry, &loaded, mime_type, highlight))
+    };
+
+    run().unwrap_or_else(|e| UiEntry {
+        cache: UiEntryCache::Error(e),
+        entry,
+    })
 }
 
 type SearchCache = (
@@ -634,11 +645,7 @@ fn do_search<E>(
                 } else {
                     Some((start, end))
                 },
-            )
-            .unwrap_or_else(|e| UiEntry {
-                cache: UiEntryCache::Error(e),
-                entry,
-            }))
+            ))
         })
         .collect();
     *search_result_buf = results;

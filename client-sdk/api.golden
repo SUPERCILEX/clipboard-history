@@ -945,6 +945,7 @@ pub unsafe fn clipboard_history_client_sdk::ui_actor::UiEntry::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::ui_actor::UiEntry::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::ui_actor::UiEntry
 pub fn clipboard_history_client_sdk::ui_actor::controller<E>(commands: impl core::iter::traits::collect::IntoIterator<Item = clipboard_history_client_sdk::ui_actor::Command>, send: impl core::ops::function::FnMut(clipboard_history_client_sdk::ui_actor::Message) -> core::result::Result<(), E>)
+pub fn clipboard_history_client_sdk::ui_actor::ui_entry_(entry: clipboard_history_client_sdk::Entry, loaded: &[u8], mime_type: &str, highlight: core::option::Option<(usize, usize)>) -> clipboard_history_client_sdk::ui_actor::UiEntry
 pub enum clipboard_history_client_sdk::ClientError
 pub clipboard_history_client_sdk::ClientError::Core(clipboard_history_core::Error)
 pub clipboard_history_client_sdk::ClientError::InvalidResponse
