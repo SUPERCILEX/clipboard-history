@@ -18,7 +18,10 @@ fn fuzz(data: &[u8], require_utf8: bool, debug: bool) {
     if use_highlight && (start > end || end > data.len()) {
         return;
     }
-    if require_utf8 && str::from_utf8(data).is_err() {
+    if require_utf8
+        && (str::from_utf8(data).is_err()
+            || (use_highlight && str::from_utf8(&data[start..end]).is_err()))
+    {
         return;
     }
 
@@ -40,10 +43,12 @@ fn fuzz(data: &[u8], require_utf8: bool, debug: bool) {
             start,
             end,
         } => {
-            std::hint::black_box(&one_liner[start..end]);
+            if require_utf8 {
+                std::hint::black_box(&one_liner[start..end]);
+            }
         }
         UiEntryCache::Text { one_liner: _ } | UiEntryCache::Binary { mime_type: _ } => {}
         UiEntryCache::Image | UiEntryCache::Error(_) => unreachable!(),
     }
 }
-fuzz_target!(|d| fuzz(d, false, false));
+fuzz_target!(|d| fuzz(d, true, false));

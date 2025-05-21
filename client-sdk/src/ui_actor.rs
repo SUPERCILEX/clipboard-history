@@ -397,7 +397,7 @@ pub fn ui_entry_(
             l = &l[1..];
         }
 
-        let diff = loaded.len() - l.len();
+        let diff = min(*start, loaded.len() - l.len());
         *start -= diff;
         *end -= diff;
 
