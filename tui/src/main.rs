@@ -274,6 +274,24 @@ impl App {
     }
 }
 
+fn maybe_focus_pending_changed_entry(
+    entries: &mut UiEntries,
+    ui: &mut UiState,
+    pending_favorite_change: &mut Option<u64>,
+) {
+    if let Some(id) = *pending_favorite_change
+        && let Some(index) = active_entries!(entries, ui)
+            .iter()
+            .position(|e| e.entry.id() == id)
+    {
+        pending_favorite_change.take();
+        active_list_state!(entries, ui).select(Some(index));
+        if ui.details_requested.is_some() {
+            ui.details_requested = Some(id);
+        }
+    }
+}
+
 fn handle_message(
     message: Message,
     State { entries, ui }: &mut State,
@@ -316,29 +334,21 @@ fn handle_message(
                         .position(|e| e.entry.id() == selected_id)
                 }));
             }
-            if let Some(id) = pending_favorite_change.take()
-                && let Some(index) = active_entries!(entries, ui)
-                    .iter()
-                    .position(|e| e.entry.id() == id)
-            {
-                active_list_state!(entries, ui).select(Some(index));
-                if details_requested.is_some() {
-                    *details_requested = Some(id);
-                }
-            }
+            maybe_focus_pending_changed_entry(entries, ui, pending_favorite_change);
         }
         Message::EntryDetails { id, result } => {
             if *details_requested == Some(id) {
                 *detailed_entry = Some(result);
             }
         }
-        Message::SearchResults(entries) => {
+        Message::SearchResults(results) => {
             *queued_searches = queued_searches.saturating_sub(1);
             if pending_search_token.take().is_some() {
-                *search_results = entries;
+                *search_results = results;
                 if search_state.selected().is_none() {
                     search_state.select_first();
                 }
+                maybe_focus_pending_changed_entry(entries, ui, pending_favorite_change);
             }
         }
         Message::FavoriteChange(id) => {
