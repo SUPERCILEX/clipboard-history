@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.example.CosmicAppletTemplate</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <project_group>COSMIC</project_group>
+  <developer_name>YourName</developer_name>
+  <update_contact>your@email.com</update_contact>
+  <url type="homepage"></url>
+  <url type="bugtracker"></url>
+  <name>COSMIC App Template</name>
+  <summary>A template for COSMIC applications</summary>
+  <description>
+    <p>A template for COSMIC applications</p>
+  </description>
+  <launchable type="desktop-id">com.example.CosmicAppletTemplate.desktop</launchable>
+  <icon type="remote" height="256" width="256">https://raw.githubusercontent.com/edfloreshz/cosmic-applet-template/master/res/icons/hicolor/256x256/apps/com.example.CosmicAppletTemplate.svg</icon>
+  <screenshots>
+  </screenshots>
+  <provides>
+    <mimetypes>
+      <mimetype>text/plain</mimetype>
+    </mimetypes>
+    <binaries>
+      <binary>cosmic-applet-template</binary>
+    </binaries>
+  </provides>
+</component>
