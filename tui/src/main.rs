@@ -1,3 +1,5 @@
+#![feature(default_field_values)]
+
 use std::{
     fmt::Write,
     fs::File,
@@ -97,7 +99,10 @@ struct UiState {
     detail_image_state: Option<ImageState>,
 
     query: TextArea<'static>,
-    search_state: Option<SearchState>,
+    search_state: Option<SearchState> = Some(SearchState {
+        focused: true,
+        kind: SearchKind::Plain,
+    }),
     pending_search_token: Option<CancellationToken>,
     queued_searches: u32,
 
@@ -333,6 +338,7 @@ fn handle_message(
                         .iter()
                         .position(|e| e.entry.id() == selected_id)
                 }));
+                maybe_get_details(entries, ui, requests);
             }
             maybe_focus_pending_changed_entry(entries, ui, pending_favorite_change);
         }
