@@ -7,10 +7,11 @@ use cosmic::iced_widget::{Column, column};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::widget::{self, container, row};
 use cosmic::{Application, Apply, Element, theme};
-use ringboard_sdk::core::IoErr;
+use ringboard_sdk::core::ring::Ring;
+use ringboard_sdk::core::{IoErr, PathView};
 use ringboard_sdk::core::dirs::data_dir;
 use ringboard_sdk::core::protocol::RingKind;
-use ringboard_sdk::{DatabaseReader, EntryReader};
+use ringboard_sdk::{DatabaseReader, EntryReader, RingReader};
 
 use crate::config::GeneralConfig;
 use crate::fl;
@@ -27,7 +28,7 @@ pub struct App {
     popup: Option<Id>,
     /// Example row toggler.
     pub database_reader: DatabaseReader,
-    entry_reader: EntryReader,
+    pub entry_reader: EntryReader,
     pub config: GeneralConfig,
     main: Main,
 }
@@ -58,7 +59,7 @@ impl Application for App {
 
     type Message = Message;
 
-    const APP_ID: &'static str = "com.example.CosmicAppletTemplate";
+    const APP_ID: &'static str = "com.example.ClipboardHistory";
 
     fn core(&self) -> &Core {
         &self.core
@@ -82,13 +83,19 @@ impl Application for App {
             .map_io_err(|| format!("Failed to check that database exists: {database:?}"))
             .unwrap();
 
+        let database_reader = DatabaseReader::open(&mut database).unwrap();
+        let entry_reader = EntryReader::open(&mut database).unwrap();
+
+        let config = GeneralConfig::default();
+        let main = Main::new(&config);
+
         let app = App {
             core,
             popup: None,
-            database_reader: DatabaseReader::open(&mut database).unwrap(),
-            entry_reader: EntryReader::open(&mut database).unwrap(),
-            config: GeneralConfig::default(),
-            main: Main::default(),
+            database_reader,
+            entry_reader,
+            config,
+            main,
         };
 
         (app, Task::none())
@@ -127,11 +134,7 @@ impl Application for App {
         let container = container(content)
             .padding(theme::spacing().space_s)
             .width(Length::Fill);
-        self.core
-            .applet
-            .popup_container(container)
-            .auto_width(true)
-            .into()
+        self.core.applet.popup_container(container).into()
     }
 
     /// Application messages are handled here. The application state can be modified based on
@@ -173,7 +176,7 @@ impl Application for App {
                     main::Message::Rings(rings_message) => {
                         match rings_message {
                             rings::Message::ChangeMainSettings => {
-                                self.main = Main::Settings(Settings::default());
+                                self.main = Main::Settings(Settings::new());
                             }
                             _ => {}
                         }
@@ -197,7 +200,7 @@ impl Application for App {
                                 self.config.show_favourites = !state;
                             }
                             settings::Message::ChangeMainRings => {
-                                self.main = Main::Rings(Rings::default());
+                                self.main = Main::Rings(Rings::new(&self.config));
                             }
                         }
 
@@ -211,10 +214,10 @@ impl Application for App {
                     }
                     main::Message::ChangeMain(route) => match route {
                         main::MainRoute::Settings => {
-                            self.main = Main::Settings(Settings::default());
+                            self.main = Main::Settings(Settings::new());
                         }
                         main::MainRoute::Rings => {
-                            self.main = Main::Rings(Rings::default());
+                            self.main = Main::Rings(Rings::new(&self.config));
                         }
                     },
                 }

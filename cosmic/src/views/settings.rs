@@ -16,14 +16,8 @@ pub enum Message {
     ChangeMainRings,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Settings;
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl Settings {
     pub fn new() -> Self {

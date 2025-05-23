@@ -1,6 +1,6 @@
 use cosmic::{Element, Task};
 
-use crate::app::App;
+use crate::{app::App, config::GeneralConfig};
 
 use super::{rings::{self, Rings}, settings::{self, Settings}};
 
@@ -17,15 +17,15 @@ pub enum MainRoute {
     Rings,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Main {
     Settings(Settings),
     Rings(Rings),
 }
 
-impl Default for Main {
-    fn default() -> Self {
-        Self::Rings(Rings::default())
+impl Main {
+    pub fn new(config: &GeneralConfig) -> Self {
+        Main::Rings(Rings::new(config))
     }
 }
 
