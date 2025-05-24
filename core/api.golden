@@ -532,7 +532,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::Mmap where 
 pub fn clipboard_history_core::ring::Mmap::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::ring::Mmap
 pub fn clipboard_history_core::ring::Mmap::from(t: T) -> T
-pub struct clipboard_history_core::ring::RawEntry(_)
+#[repr(transparent)] pub struct clipboard_history_core::ring::RawEntry(_)
 impl core::convert::From<clipboard_history_core::ring::Entry> for clipboard_history_core::ring::RawEntry
 pub fn clipboard_history_core::ring::RawEntry::from(value: clipboard_history_core::ring::Entry) -> Self
 impl core::convert::From<clipboard_history_core::ring::RawEntry> for clipboard_history_core::ring::Entry
