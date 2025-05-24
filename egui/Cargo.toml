@@ -12,6 +12,7 @@ license.workspace = true
 [dependencies]
 arrayvec = "0.7.6"
 eframe = { version = "0.31.1", default-features = false, features = ["glow"] }
+font-kit = { version = "0.14.2", optional = true }
 image = "0.25.6"
 itoa = "1.0.15"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
@@ -24,6 +25,7 @@ default = ["x11", "wayland"]
 trace = ["dep:tracy-client"]
 x11 = ["eframe/x11"]
 wayland = ["eframe/wayland"]
+system-fonts = ["font-kit"]
 
 [[bin]]
 name = "ringboard-egui"

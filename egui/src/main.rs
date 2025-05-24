@@ -19,13 +19,12 @@ use arrayvec::ArrayVec;
 use eframe::{
     egui,
     egui::{
-        CentralPanel, Event, FontId, FontTweak, Frame, Image, Key, Label, Margin, Modifiers,
+        CentralPanel, Event, FontId, Frame, Image, Key, Label, Margin, Modifiers,
         PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke, TextEdit,
         TextFormat, ThemePreference, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand,
         Widget,
         text::{LayoutJob, LayoutSection},
     },
-    epaint::FontFamily,
 };
 use itoa::Integer;
 use ringboard_sdk::{
@@ -73,52 +72,7 @@ fn main() -> Result<(), eframe::Error> {
                 let command_sender = command_sender.clone();
                 let response_sender = response_sender.clone();
                 move || {
-                    {
-                        let mut fonts = egui::FontDefinitions::default();
-
-                        fonts.font_data.insert(
-                            "AtkinsonHyperlegible".to_owned(),
-                            egui::FontData::from_static(include_bytes!(
-                                "../fonts/Atkinson-Hyperlegible-Regular-102.ttf"
-                            ))
-                            .tweak(FontTweak {
-                                y_offset_factor: 0.1,
-                                baseline_offset_factor: -0.04,
-                                ..FontTweak::default()
-                            })
-                            .into(),
-                        );
-                        fonts.font_data.insert(
-                            "Cascadia".to_owned(),
-                            egui::FontData::from_static(include_bytes!(
-                                "../fonts/CascadiaCode-Light.ttf"
-                            ))
-                            .into(),
-                        );
-                        fonts.font_data.insert(
-                            "NotoEmoji".to_owned(),
-                            egui::FontData::from_static(include_bytes!(
-                                "../fonts/NotoEmoji-Regular.ttf"
-                            ))
-                            .into(),
-                        );
-
-                        fonts
-                            .families
-                            .entry(FontFamily::Monospace)
-                            .or_default()
-                            .extend_from_slice(&["Cascadia".into(), "NotoEmoji".into()]);
-                        fonts
-                            .families
-                            .entry(FontFamily::Proportional)
-                            .or_default()
-                            .extend_from_slice(&[
-                                "AtkinsonHyperlegible".to_owned(),
-                                "NotoEmoji".to_owned(),
-                            ]);
-
-                        ctx.set_fonts(fonts);
-                    }
+                    ctx.set_fonts(fonts::compute_fonts());
 
                     let ringboard_loader = Arc::new(RingboardLoader::new(command_sender));
                     ctx.add_image_loader(ringboard_loader.clone());
@@ -1095,5 +1049,154 @@ mod loader {
                     })
                     .sum::<usize>()
         }
+    }
+}
+
+mod fonts {
+    use eframe::egui::{FontData, FontDefinitions, FontFamily, FontTweak};
+
+    pub fn compute_fonts() -> FontDefinitions {
+        let mut fonts = FontDefinitions::default();
+
+        fonts.font_data.insert(
+            "AtkinsonHyperlegible".to_owned(),
+            FontData::from_static(include_bytes!(
+                "../fonts/Atkinson-Hyperlegible-Regular-102.ttf"
+            ))
+            .tweak(FontTweak {
+                y_offset_factor: 0.1,
+                baseline_offset_factor: -0.04,
+                ..FontTweak::default()
+            })
+            .into(),
+        );
+        fonts.font_data.insert(
+            "Cascadia".to_owned(),
+            FontData::from_static(include_bytes!("../fonts/CascadiaCode-Light.ttf")).into(),
+        );
+        fonts.font_data.insert(
+            "NotoEmoji".to_owned(),
+            FontData::from_static(include_bytes!("../fonts/NotoEmoji-Regular.ttf")).into(),
+        );
+
+        fonts
+            .families
+            .entry(FontFamily::Monospace)
+            .or_default()
+            .extend_from_slice(&["Cascadia".into(), "NotoEmoji".into()]);
+        fonts
+            .families
+            .entry(FontFamily::Proportional)
+            .or_default()
+            .extend_from_slice(&["AtkinsonHyperlegible".to_owned(), "NotoEmoji".to_owned()]);
+
+        #[cfg(feature = "system-fonts")]
+        super::system_fonts::add_system_fonts(&mut fonts);
+
+        fonts
+    }
+}
+
+#[cfg(feature = "system-fonts")]
+mod system_fonts {
+    use std::{fs, path::PathBuf, sync::Arc};
+
+    use arrayvec::ArrayVec;
+    use eframe::egui::{FontData, FontDefinitions, FontFamily};
+    use font_kit::{
+        family_name::FamilyName, handle::Handle, properties::Properties, source::SystemSource,
+    };
+
+    pub fn add_system_fonts(fonts: &mut FontDefinitions) {
+        const SYSTEM_FONTS: &[(&str, &[&str])] = &[
+            ("japanese", &[
+                "Noto Sans JP",
+                "Noto Sans CJK JP",
+                "Source Han Sans JP",
+                "MS Gothic",
+            ]),
+            ("korean", &["Source Han Sans KR"]),
+            ("taiwanese", &["Source Han Sans TW"]),
+            ("simplified_chinese", &[
+                "Heiti SC",
+                "Songti SC",
+                "Noto Sans CJK SC",
+                "Noto Sans SC",
+                "WenQuanYi Zen Hei",
+                "SimSun",
+                "Noto Sans SC",
+                "PingFang SC",
+                "Source Han Sans CN",
+            ]),
+            ("traditional_chinese", &["Source Han Sans HK"]),
+            ("arabic_fonts", &[
+                "Noto Sans Arabic",
+                "Amiri",
+                "Lateef",
+                "Al Tarikh",
+                "Segoe UI",
+            ]),
+        ];
+
+        let system_source = SystemSource::new();
+        let mut already_loaded = ArrayVec::<_, { SYSTEM_FONTS.len() }>::new_const();
+        for (region, font_names) in SYSTEM_FONTS {
+            let Some(bytes) = load_first_match(&system_source, font_names, &mut already_loaded)
+            else {
+                continue;
+            };
+
+            fonts
+                .font_data
+                .insert((*region).to_string(), Arc::new(FontData::from_owned(bytes)));
+
+            // Putting proportional fonts into the monospace bucket is a little dumb, but
+            // it's better than tofus so eh.
+            fonts
+                .families
+                .entry(FontFamily::Monospace)
+                .or_default()
+                .push((*region).to_string());
+            fonts
+                .families
+                .entry(FontFamily::Proportional)
+                .or_default()
+                .push((*region).to_string());
+        }
+    }
+
+    fn load_first_match<const N: usize>(
+        system_source: &SystemSource,
+        families: &[&str],
+        already_loaded: &mut ArrayVec<PathBuf, N>,
+    ) -> Option<Vec<u8>> {
+        for family in families {
+            let Ok(handle) = system_source.select_best_match(
+                &[FamilyName::Title((*family).to_string())],
+                &Properties::new(),
+            ) else {
+                continue;
+            };
+
+            match handle {
+                Handle::Path {
+                    path,
+                    font_index: _,
+                } => {
+                    if already_loaded.contains(&path) {
+                        return None;
+                    }
+                    if let Ok(bytes) = fs::read(&path) {
+                        already_loaded.push(path);
+                        return Some(bytes);
+                    }
+                }
+                Handle::Memory {
+                    bytes,
+                    font_index: _,
+                } => return Some((*bytes).clone()),
+            }
+        }
+        None
     }
 }
