@@ -12,6 +12,7 @@ use crate::app::App;
 pub enum Message {
     ChangeEntriesLimit(Option<u32>),
     ToggleShowFavourites(bool),
+    ToggleOneLineLimit(bool),
     // Not ideal
     ChangeMainRings,
 }
@@ -52,6 +53,11 @@ impl Settings {
                         Message::ChangeEntriesLimit(None)
                     }
                 }),
+            ),
+            widget::settings::item(
+                "Limit each entry to one line",
+                widget::toggler(app.config.one_line_limit)
+                    .on_toggle(Message::ToggleOneLineLimit),
             )
         ].spacing(theme::spacing().space_xs);
 

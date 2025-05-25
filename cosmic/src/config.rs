@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct GeneralConfig {
     pub items_max: u32,
     pub show_favourites: bool,
+    pub one_line_limit: bool,
 }
 
 impl Default for GeneralConfig {
@@ -13,6 +14,7 @@ impl Default for GeneralConfig {
         Self {
             items_max: 50,
             show_favourites: true,
+            one_line_limit: false,
         }
     }
 }

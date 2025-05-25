@@ -199,6 +199,9 @@ impl Application for App {
                             settings::Message::ToggleShowFavourites(state) => {
                                 self.config.show_favourites = !state;
                             }
+                            settings::Message::ToggleOneLineLimit(state) => {
+                                self.config.one_line_limit = !state;
+                            }
                             settings::Message::ChangeMainRings => {
                                 self.main = Main::Rings(Rings::new(&self.config));
                             }

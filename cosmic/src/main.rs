@@ -6,6 +6,7 @@ mod app;
 mod core;
 mod config;
 mod views;
+mod components;
 
 /// The `cosmic::app::run()` function is the starting point of your application.
 /// It takes two arguments:

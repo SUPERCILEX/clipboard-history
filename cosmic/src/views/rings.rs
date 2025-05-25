@@ -1,13 +1,10 @@
+use std::{io::Read, path::PathBuf};
+
 use cosmic::{
-    Element, Task,
-    iced::Length::{self, Fill},
-    iced_widget::{Column, column, row},
-    theme,
-    widget::{self, button, icon},
+    iced::{Alignment, Length::{self, Fill}}, iced_core::image::Bytes, iced_widget::{column, row, Column}, theme, widget::{self, button, container, icon, image}, Element, Task
 };
 use ringboard_sdk::{
-    DatabaseReader, EntryReader, RingReader,
-    core::{IoErr, PathView, dirs::data_dir, protocol::RingKind, ring::Ring},
+    api::MoveToFrontRequest, core::{dirs::data_dir, protocol::RingKind, ring::Ring, IoErr, PathView}, DatabaseReader, Entry, EntryReader, RingReader
 };
 
 use crate::{
@@ -16,22 +13,22 @@ use crate::{
 };
 
 use super::main::View;
+use crate::components::ring_entry::FormattedEntry;
 
 #[derive(Debug, Clone)]
 pub enum Message {
     SearchQuery(String),
-    CopyEntry(u32),
+    CopyEntry(u64),
     // Not ideal
     ChangeMainSettings,
 }
 
-type EntryValues = String;
-
 #[derive(Debug)]
 pub struct Rings {
     search_query: String,
-    entries: Vec<EntryValues>,
+    entries: Vec<FormattedEntry>,
     entry_reader: EntryReader,
+    selected_id: Option<u64>,
 }
 
 impl Rings {
@@ -53,31 +50,28 @@ impl Rings {
 
         let mut entries = Vec::new();
 
-        for entry in reader {
-            let loaded = entry.to_slice(&mut entry_reader).unwrap();
+        for entry in reader.rev() {
+            if entries.len() as u32 > config.items_max {
+                break;
+            }
 
-            let mime_type = &*loaded.mime_type().unwrap();
-            if mime_type.starts_with("image/") {
-                println!("Entry is image");
-            } else {
-                let short = &loaded[..loaded.len().min(250)];
-
-                let string = str::from_utf8(&short);
-
-                if let Ok(string) = string {
-                    println!("Entry is text: {string}");
-
-                    entries.push(string.to_string());
-                } else {
-                    println!("Failed to decode of bytes: {}", loaded.len());
-                }
+            let formatted = FormattedEntry::from_entry(&entry, &mut entry_reader);
+            if let Some(formatted) = formatted {
+                entries.push(formatted);
             }
         }
+
+        let selected_id = if let Some(last) = entries.last() {
+            Some(last.id)
+        } else {
+            None
+        };
 
         Self {
             search_query: String::new(),
             entries,
             entry_reader,
+            selected_id,
         }
     }
 
@@ -100,36 +94,10 @@ impl Rings {
         .spacing(theme::spacing().space_xxs);
 
         let non_favourites_column = Column::from_vec({
-            let mut vec: Vec<Element<Message>> = Vec::new();
+            let mut vec: Vec<Element<'static, Message>> = Vec::new();
 
-            for index in (0..self.entries.len()).rev() {
-                let entry = &self.entries[index];
-
-                if vec.len() as u32 > app.config.items_max {
-                    break;
-                }
-
-                /* let kind = ring.kind();
-                match kind {
-                    ringboard_sdk::Kind::File => {
-                        println!("is file for sure");
-                    }
-                    ringboard_sdk::Kind::Bucket(ent) => {
-                        if ent.is_file() {
-                            println!("Is file, somehow");
-                        }
-                    }
-                }; */
-
-                let is_selected = index == 0;
-
-                vec.push(
-                    button::custom(widget::text(entry.clone()).width(Length::Fill))
-                        .class(theme::Button::MenuItem)
-                        .on_press(Message::CopyEntry(index as u32))
-                        .selected(is_selected)
-                        .into(),
-                );
+            for entry in &self.entries {
+                vec.push(entry.into_element(entry.id));
             }
 
             vec
@@ -170,6 +138,13 @@ impl Rings {
         match message {
             Message::SearchQuery(query) => {
                 self.search_query = query;
+                Task::none()
+            }
+            Message::CopyEntry(id) => {
+                self.selected_id = Some(id);
+
+                // MoveToFrontRequest::send()
+
                 Task::none()
             }
             _ => Task::none(),
