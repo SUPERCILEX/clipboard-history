@@ -1,17 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::app::{Core, Task};
+use std::sync::{
+    mpmc,
+    mpsc::{self, Receiver, Sender},
+};
+use std::thread;
+
 use cosmic::iced::window::Id;
 use cosmic::iced::{Length, Limits};
 use cosmic::iced_widget::{Column, column};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::widget::{self, container, row};
 use cosmic::{Application, Apply, Element, theme};
-use ringboard_sdk::core::ring::Ring;
-use ringboard_sdk::core::{IoErr, PathView};
+use cosmic::{
+    app::{Core, Task},
+    iced::{Subscription, time::every},
+};
 use ringboard_sdk::core::dirs::data_dir;
 use ringboard_sdk::core::protocol::RingKind;
+use ringboard_sdk::core::{IoErr, PathView};
+use ringboard_sdk::ui_actor::{self, controller};
 use ringboard_sdk::{DatabaseReader, EntryReader, RingReader};
+use ringboard_sdk::{core::ring::Ring, ui_actor::UiEntry};
 
 use crate::config::GeneralConfig;
 use crate::fl;
@@ -31,6 +41,19 @@ pub struct App {
     pub entry_reader: EntryReader,
     pub config: GeneralConfig,
     main: Main,
+    requests: Sender<ui_actor::Command>,
+    responses: Receiver<Response>,
+    entries: Vec<UiEntry>,
+}
+
+enum Response {
+    UiMessage(ui_actor::Message),
+}
+
+impl From<ui_actor::Message> for Response {
+    fn from(message: ui_actor::Message) -> Self {
+        Response::UiMessage(message)
+    }
 }
 
 /// This is the enum that contains all the possible variants that your application will need to transmit messages.
@@ -42,6 +65,7 @@ pub enum Message {
     PopupClosed(Id),
     SearchQuery(String),
     MainMessage(main::Message),
+    Tick,
 }
 
 /// Implement the `Application` trait for your application.
@@ -89,6 +113,18 @@ impl Application for App {
         let config = GeneralConfig::default();
         let main = Main::new(&config);
 
+        //
+
+        let (command_sender, command_receiver) = mpsc::channel();
+        let (response_sender, response_receiver) = mpsc::sync_channel(8);
+
+        thread::spawn({
+            let sender = response_sender.clone();
+            move || controller(&command_receiver, |m| sender.send(m.into()))
+        });
+
+        //
+
         let app = App {
             core,
             popup: None,
@@ -96,6 +132,9 @@ impl Application for App {
             entry_reader,
             config,
             main,
+            requests: command_sender,
+            responses: response_receiver,
+            entries: Vec::new(),
         };
 
         (app, Task::none())
@@ -171,6 +210,22 @@ impl Application for App {
             Message::SearchQuery(q) => {
                 println!("Search query: {}", q);
             }
+            Message::Tick => {
+                for action in &self.responses {
+                    match action {
+                        Response::UiMessage(ui_message) => {
+                            match ui_message {
+                                ui_actor::Message::LoadedFirstPage { entries: new_entries, default_focused_id: _ } => {
+                                    self.entries = new_entries.into();
+                                    println!("Added entries of len {}", self.entries.len());
+                                }, 
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    };
+                }
+            },
             Message::MainMessage(main_message) => {
                 match main_message {
                     main::Message::Rings(rings_message) => {
@@ -227,6 +282,20 @@ impl Application for App {
             }
         }
         Task::none()
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        every(std::time::Duration::from_millis(1000)).map(|_| {
+
+
+
+            Message::Tick
+
+            // match _ {
+            //     ui_actor::Message::LoadedFirstPage { entries, default_focused_id } => Message::LoadedEntries(entries),
+            //     _ => Message::None
+            // }
+        })
     }
 
     fn style(&self) -> Option<cosmic::iced_runtime::Appearance> {
