@@ -16,7 +16,7 @@ use cosmic::{
     app::{Core, Task},
     iced::{Subscription, time::every},
 };
-use ringboard_sdk::core::dirs::data_dir;
+use ringboard_sdk::{core::dirs::data_dir, ui_actor::UiEntryCache};
 use ringboard_sdk::core::protocol::RingKind;
 use ringboard_sdk::core::{IoErr, PathView};
 use ringboard_sdk::ui_actor::{self, controller};
@@ -43,7 +43,7 @@ pub struct App {
     main: Main,
     requests: Sender<ui_actor::Command>,
     responses: Receiver<Response>,
-    entries: Vec<UiEntry>,
+    pub entries: Vec<UiEntry>,
 }
 
 enum Response {

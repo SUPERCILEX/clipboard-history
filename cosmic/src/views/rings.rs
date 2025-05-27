@@ -1,10 +1,21 @@
 use std::{io::Read, path::PathBuf};
 
 use cosmic::{
-    iced::{Alignment, Length::{self, Fill}}, iced_core::image::Bytes, iced_widget::{column, row, Column}, theme, widget::{self, button, container, icon, image}, Element, Task
+    Element, Task,
+    iced::{
+        Alignment,
+        Length::{self, Fill},
+    },
+    iced_core::image::Bytes,
+    iced_widget::{Column, column, row},
+    theme,
+    widget::{self, button, container, icon, image},
 };
 use ringboard_sdk::{
-    api::MoveToFrontRequest, core::{dirs::data_dir, protocol::RingKind, ring::Ring, IoErr, PathView}, DatabaseReader, Entry, EntryReader, RingReader
+    DatabaseReader, Entry, EntryReader, RingReader,
+    api::MoveToFrontRequest,
+    core::{IoErr, PathView, dirs::data_dir, protocol::RingKind, ring::Ring},
+    ui_actor::UiEntryCache,
 };
 
 use crate::{
@@ -93,7 +104,7 @@ impl Rings {
         })
         .spacing(theme::spacing().space_xxs);
 
-        let non_favourites_column = Column::from_vec({
+        /* let non_favourites_column = Column::from_vec({
             let mut vec: Vec<Element<'static, Message>> = Vec::new();
 
             for entry in &self.entries {
@@ -102,7 +113,20 @@ impl Rings {
 
             vec
         })
-        .spacing(theme::spacing().space_xxs);
+        .spacing(theme::spacing().space_xxs); */
+
+        let non_favourites_column = Column::from_vec({
+            let mut elements = Vec::new();
+            for entry in &app.entries {
+                let element = match &entry.cache {
+                    UiEntryCache::Text { one_liner } => widget::text(one_liner.to_string()),
+                    _ => widget::text("Error displaying entry"),
+                };
+
+                elements.push(element.into());
+            }
+            elements
+        });
 
         let scroll_content = column![]
             .push_maybe(if app.config.show_favourites {
