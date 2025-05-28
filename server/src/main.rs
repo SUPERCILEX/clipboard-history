@@ -94,6 +94,7 @@ fn run() -> Result<(), CliError> {
 
     {
         let data_dir = data_dir();
+        let data_dir = fs::read_link(&data_dir).unwrap_or(data_dir);
         info!("Using database in {data_dir:?}.");
 
         fs::create_dir_all(&data_dir)
