@@ -27,16 +27,23 @@ impl Default for X11Config {
 pub struct X11V1Config {
     #[serde(default = "x11_auto_paste_")]
     pub auto_paste: bool,
+    #[serde(default = "fast_path_optimizations_")]
+    pub fast_path_optimizations: bool,
 }
 
 impl Default for X11V1Config {
     fn default() -> Self {
         Self {
             auto_paste: x11_auto_paste_(),
+            fast_path_optimizations: fast_path_optimizations_(),
         }
     }
 }
 
 const fn x11_auto_paste_() -> bool {
+    true
+}
+
+const fn fast_path_optimizations_() -> bool {
     true
 }

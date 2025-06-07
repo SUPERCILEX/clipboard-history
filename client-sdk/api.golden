@@ -273,6 +273,7 @@ impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::config
 impl<T> serde::de::DeserializeOwned for clipboard_history_client_sdk::config::X11Config where T: for<'de> serde::de::Deserialize<'de>
 pub struct clipboard_history_client_sdk::config::X11V1Config
 pub clipboard_history_client_sdk::config::X11V1Config::auto_paste: bool
+pub clipboard_history_client_sdk::config::X11V1Config::fast_path_optimizations: bool
 impl core::default::Default for clipboard_history_client_sdk::config::X11V1Config
 pub fn clipboard_history_client_sdk::config::X11V1Config::default() -> Self
 impl core::fmt::Debug for clipboard_history_client_sdk::config::X11V1Config

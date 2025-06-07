@@ -267,7 +267,10 @@ fn run() -> Result<(), CliError> {
         env!("CARGO_PKG_VERSION")
     );
 
-    let ref config @ X11V1Config { auto_paste } = load_config()?;
+    let ref config @ X11V1Config {
+        auto_paste,
+        fast_path_optimizations,
+    } = load_config()?;
     info!("Using configuration {config:?}");
 
     let server = {
@@ -401,6 +404,7 @@ fn run() -> Result<(), CliError> {
                 &mut allocator,
                 &server,
                 &mut deduplicator,
+                fast_path_optimizations,
                 paste_window,
                 root,
                 paste_timer.as_ref(),
@@ -455,6 +459,7 @@ fn handle_x11_event(
     allocator: &mut TransferAtomAllocator,
     server: impl AsFd,
     deduplicator: &mut CopyDeduplication,
+    fast_path_optimizations: bool,
 
     paste_window: Window,
     root: Window,
@@ -717,13 +722,23 @@ fn handle_x11_event(
 
             info!("Selection notification received.");
             let (state, transfer_window, transfer_atom) = allocator.alloc();
-            *state = State::FastPathPendingSelection;
+            *state = if fast_path_optimizations {
+                State::FastPathPendingSelection
+            } else {
+                State::TargetsRequest {
+                    allow_plain_text: true,
+                }
+            };
             trace!("Initialized transfer state for atom {transfer_atom}: {state:?}");
 
             conn.convert_selection(
                 transfer_window,
                 event.selection,
-                utf8_string_atom,
+                if fast_path_optimizations {
+                    utf8_string_atom
+                } else {
+                    targets_atom
+                },
                 transfer_atom,
                 x11rb::CURRENT_TIME,
             )?;

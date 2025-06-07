@@ -176,9 +176,24 @@ struct ConfigureX11 {
     /// automatically paste the selected item into the previously focused
     /// application.
     #[clap(long)]
-    #[clap(default_value_t = true)]
     #[clap(action = ArgAction::Set)]
-    auto_paste: bool,
+    auto_paste: Option<bool>,
+
+    /// Disable this option to support blocking passwords from password managers
+    /// that support the `x-kde-passwordManagerHint` mime type.
+    ///
+    /// ### Technical details
+    ///
+    /// In X11, it is possible to ask applications for their selection with a
+    /// mime type before knowing if the selection is available in that format.
+    /// Since the majority of clipboard entries are expected to be text based,
+    /// Ringboard skips a round trip with the application by immediately asking
+    /// for a plain text mime type selection. Only if this request fails will
+    /// Ringboard ask the application for the supported mime types on its
+    /// selection.
+    #[clap(long)]
+    #[clap(action = ArgAction::Set)]
+    fast_path_optimizations: Option<bool>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -2011,7 +2026,8 @@ fn fuzz(
     }
 }
 
-fn configure_x11(ConfigureX11 { auto_paste }: ConfigureX11) -> Result<(), CliError> {
+#[allow(clippy::needless_pass_by_value)]
+fn configure_x11(x11: ConfigureX11) -> Result<(), CliError> {
     let path = x11_config_file();
     {
         let parent = path.parent().unwrap();
@@ -2019,7 +2035,24 @@ fn configure_x11(ConfigureX11 { auto_paste }: ConfigureX11) -> Result<(), CliErr
     }
     let mut file = File::create(&path).map_io_err(|| format!("Failed to open file: {path:?}"))?;
 
-    let config = toml::to_string_pretty(&X11Config::V1(X11V1Config { auto_paste }))?;
+    let mut config = X11V1Config::default();
+    {
+        let ConfigureX11 {
+            auto_paste,
+            fast_path_optimizations,
+        } = x11;
+        let X11V1Config {
+            auto_paste: ref mut auto_paste_,
+            fast_path_optimizations: ref mut fast_path_optimizations_,
+        } = config;
+        if let Some(auto_paste) = auto_paste {
+            *auto_paste_ = auto_paste;
+        }
+        if let Some(fast_path_optimizations) = fast_path_optimizations {
+            *fast_path_optimizations_ = fast_path_optimizations;
+        }
+    }
+    let config = toml::to_string_pretty(&X11Config::V1(config))?;
     file.write_all(config.as_bytes())
         .map_io_err(|| format!("Failed to write to config file: {path:?}"))?;
 

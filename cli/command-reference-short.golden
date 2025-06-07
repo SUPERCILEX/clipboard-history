@@ -179,10 +179,14 @@ Edit the X11 watcher settings
 Usage: clipboard-history configure x11 [OPTIONS]
 
 Options:
-      --auto-paste <AUTO_PASTE>  Instead of simply placing selected items in the clipboard, attempt
-                                 to automatically paste the selected item into the previously
-                                 focused application [default: true] [possible values: true, false]
-  -h, --help                     Print help (use `--help` for more detail)
+      --auto-paste <AUTO_PASTE>
+          Instead of simply placing selected items in the clipboard, attempt to automatically paste
+          the selected item into the previously focused application [possible values: true, false]
+      --fast-path-optimizations <FAST_PATH_OPTIMIZATIONS>
+          Disable this option to support blocking passwords from password managers that support the
+          `x-kde-passwordManagerHint` mime type [possible values: true, false]
+  -h, --help
+          Print help (use `--help` for more detail)
 
 ---
 
