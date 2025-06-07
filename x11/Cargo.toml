@@ -18,7 +18,7 @@ ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path 
 ringboard-watcher-utils = { package = "clipboard-history-watcher-utils", version = "0", path = "../watcher-utils" }
 rustix = { version = "1.0.7", features = ["fs", "time"] }
 thiserror = "2.0.12"
-toml = { version = "0.8.22", default-features = false, features = ["parse"] }
+toml = { version = "0.8.23", default-features = false, features = ["parse"] }
 x11rb = { version = "0.13.1", features = ["xfixes", "xtest"] }
 
 [features]

@@ -144,12 +144,12 @@ impl DatabaseReader {
     }
 
     #[must_use]
-    pub fn main(&self) -> RingReader {
+    pub fn main(&self) -> RingReader<'_> {
         RingReader::from_ring(&self.main, RingKind::Main)
     }
 
     #[must_use]
-    pub fn favorites(&self) -> RingReader {
+    pub fn favorites(&self) -> RingReader<'_> {
         RingReader::from_ring(&self.favorites, RingKind::Favorites)
     }
 }
@@ -341,7 +341,7 @@ impl<T> LoadedEntry<'_, T> {
         )
     }
 
-    pub fn backing_file(&self) -> Option<BorrowedFd> {
+    pub fn backing_file(&self) -> Option<BorrowedFd<'_>> {
         self.fd.as_ref().map(|fd| match fd {
             LoadedEntryFd::Owned(o) => o.as_fd(),
             LoadedEntryFd::HackySelfReference(b) => *b,
@@ -589,12 +589,12 @@ impl EntryReader {
     }
 
     #[must_use]
-    pub fn direct(&self) -> BorrowedFd {
+    pub fn direct(&self) -> BorrowedFd<'_> {
         self.direct.as_fd()
     }
 
     #[must_use]
-    pub fn metadata(&self) -> Option<BorrowedFd> {
+    pub fn metadata(&self) -> Option<BorrowedFd<'_>> {
         self.metadata.as_ref().map(OwnedFd::as_fd)
     }
 }

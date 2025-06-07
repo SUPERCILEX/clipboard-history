@@ -662,7 +662,7 @@ impl Widget for &mut AppWrapper<'_> {
     }
 }
 
-fn ui_entry_line(UiEntry { entry: _, cache }: &UiEntry) -> Line {
+fn ui_entry_line(UiEntry { entry: _, cache }: &UiEntry) -> Line<'_> {
     match cache {
         &UiEntryCache::HighlightedText {
             ref one_liner,
