@@ -79,6 +79,8 @@ impl<Id: id::AsId<Id: Eq>> BestMimeTypeFinder<Id> {
             x_special
         } else if mime == "chromium/x-web-custom-data" {
             chromium_custom
+        } else if mime.starts_with("chromium/x-internal") {
+            return;
         } else if mime.starts_with("text/") {
             any_text
         } else if mime == "x-kde-passwordManagerHint" {
