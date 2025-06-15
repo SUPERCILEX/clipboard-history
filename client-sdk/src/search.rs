@@ -242,7 +242,7 @@ fn search_impl(
                 let Some((start, end)) = query.find(entry) else {
                     continue;
                 };
-                if let Err(SenderError::HangUp) = sender
+                match sender
                     .send(Ok(QueryResult {
                         location: EntryLocation::Bucketed {
                             bucket: u8::try_from(bucket).unwrap(),
@@ -252,7 +252,8 @@ fn search_impl(
                         end,
                     }))
                 {
-                    break;
+                    Ok(()) => (),
+                    Err(SenderError::HangUp) => break,
                 }
             }
         });
@@ -376,8 +377,9 @@ fn stream_through_direct_allocations<T>(
         match run() {
             Ok(()) => (),
             Err(e) => {
-                if let Err(SenderError::HangUp) = sender.send(Err(e)) {
-                    break;
+                match sender.send(Err(e)) {
+                    Ok(()) => (),
+                    Err(SenderError::HangUp) => break,
                 }
             }
         }
