@@ -339,8 +339,6 @@ fn stream_through_direct_allocations<T>(
                 None
             };
 
-            unshare(UnshareFlags::FILES).map_io_err(|| "Failed to unshare FD table.")?;
-
             Ok((direct_dir, metadata_dir))
         };
 
