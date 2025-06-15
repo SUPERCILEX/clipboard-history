@@ -198,7 +198,7 @@ pub fn controller<E>(
         }
     };
     let mut reader = Some(reader);
-    let (_, spawner) = LocknessExecutor::builder().build();
+    let executor = LocknessExecutor::builder().build();
     let mut cache = Default::default();
 
     for command in once(Command::LoadFirstPage).chain(commands) {
@@ -209,7 +209,7 @@ pub fn controller<E>(
             &mut send,
             &mut database,
             &mut reader,
-            spawner,
+            executor.spawner(),
             &mut cache,
         )
         .unwrap_or_else(|e| Some(Message::Error(e)));
