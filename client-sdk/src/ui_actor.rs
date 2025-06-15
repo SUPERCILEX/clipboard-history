@@ -198,6 +198,7 @@ pub fn controller<E>(
         }
     };
     let mut reader = Some(reader);
+    let (_, spawner) = LocknessExecutor::builder().build();
     let mut cache = Default::default();
 
     for command in once(Command::LoadFirstPage).chain(commands) {
@@ -208,6 +209,7 @@ pub fn controller<E>(
             &mut send,
             &mut database,
             &mut reader,
+            spawner,
             &mut cache,
         )
         .unwrap_or_else(|e| Some(Message::Error(e)));
@@ -228,6 +230,7 @@ fn handle_command<E>(
     send: impl FnMut(Message) -> Result<(), E>,
     database: &mut DatabaseReader,
     reader_: &mut Option<EntryReader>,
+    spawner: Spawner<()>,
     cache: &mut SearchCache,
 ) -> Result<Option<Message>, CommandError> {
     let shitty_refresh = |database: &mut DatabaseReader| {
@@ -342,7 +345,7 @@ fn handle_command<E>(
                 SearchKind::Mime => Query::Mimes(Regex::new(&query)?),
             };
             Ok(Some(Message::SearchResults(
-                do_search(query, reader_, database, send, cache).into(),
+                do_search(spawner, query, reader_, database, send, cache).into(),
             )))
         }
         Command::LoadImage(id) => {
@@ -530,6 +533,7 @@ impl Ord for SearchEntry {
 }
 
 fn do_search<E>(
+    spawner: Spawner<()>,
     query: Query,
     reader_: &mut Option<EntryReader>,
     database: &mut DatabaseReader,
@@ -540,8 +544,10 @@ fn do_search<E>(
 
     let reader = Arc::new(reader_.take().unwrap());
 
-    let (result_stream, threads) = search(query, reader.clone());
-    let _ = send(Message::PendingSearch(result_stream.cancellation_token()));
+    let result_stream = search(spawner, query, reader.clone());
+    let _ = send(Message::PendingSearch(
+        result_stream.cancellation_token().clone(),
+    ));
 
     if *cached_write_heads
         != Some((
@@ -616,9 +622,6 @@ fn do_search<E>(
         }
     }
 
-    for thread in threads {
-        let _ = thread.join();
-    }
     let reader = reader_.insert(Arc::into_inner(reader).unwrap());
 
     let mut results = results.into_vec();

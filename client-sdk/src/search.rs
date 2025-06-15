@@ -17,9 +17,6 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
-use lockness_executor::{
-    LocknessExecutor, LocknessExecutorBuilder, MessageIterator, SimpleLocknessExecutor,
-};
 use memchr::memmem::Finder;
 use regex::bytes::Regex;
 use ringboard_core::{
@@ -132,64 +129,70 @@ pub enum EntryLocation {
     File { entry_id: u64 },
 }
 
-type Executor = SimpleLocknessExecutor<Result<QueryResult, CoreError>>;
-
 #[derive(Clone, Debug)]
 pub struct CancellationToken {
-    executor: Executor,
+    stop: Arc<AtomicBool>,
 }
 
 impl CancellationToken {
-    fn new(executor: Executor) -> Self {
-        Self { executor }
+    fn new() -> Self {
+        Self {
+            stop: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     pub fn cancel(&self) {
-        self.executor.cancel();
+        self.stop.store(true, Ordering::Relaxed);
     }
 
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
-        self.executor.is_cancelled()
+        self.stop.load(Ordering::Relaxed)
     }
 }
 
-pub struct QueryIter {
-    executor: Executor,
+pub struct QueryResults {
+    receiver: lockness_bags::mpsc::IntoIter<Result<QueryResult, CoreError>>,
+    token: CancellationToken,
 }
 
-impl QueryIter {
+impl QueryResults {
     #[must_use]
-    pub const fn cancellation_token(&self) -> CancellationToken {
-        CancellationToken {
-            executor: self.executor.clone(),
-        }
+    pub const fn cancellation_token(&self) -> &CancellationToken {
+        &self.token
     }
 }
 
-impl IntoIterator for QueryIter {
+impl Iterator for QueryResults {
     type Item = Result<QueryResult, CoreError>;
-    type IntoIter = MessageIterator<Self::Item>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        // TODO
-        self.executor.finish().unwrap()
+    fn next(&mut self) -> Option<Self::Item> {
+        self.receiver.next()
+    }
+}
+
+impl Drop for QueryResults {
+    fn drop(&mut self) {
+        self.token.cancel();
     }
 }
 
 pub fn search(
+    spawner: Spawner<()>,
     query: Query,
     reader: Arc<EntryReader>,
-) -> (
-    QueryIter,
-    impl Iterator<Item = JoinHandle<()>> + Send + Sync + 'static,
-) {
-    let (results, threads) = match query {
-        Query::Plain(p) => search_impl(PlainQuery(Arc::new(Finder::new(p).into_owned())), reader),
+) -> QueryResults {
+    let results = match query {
+        Query::Plain(p) => search_impl(
+            spawner,
+            PlainQuery(Arc::new(Finder::new(p).into_owned())),
+            reader,
+        ),
         Query::PlainIgnoreCase(CaselessQuery { mut query, trim }) => {
             query.make_ascii_lowercase();
             let query = if trim { query.trim_ascii() } else { &query };
             search_impl(
+                spawner,
                 PlainIgnoreCaseQuery {
                     inner: PlainQuery(Arc::new(Finder::new(query).into_owned())),
                     cache: Vec::new(),
@@ -197,22 +200,20 @@ pub fn search(
                 reader,
             )
         }
-        Query::Regex(r) => search_impl(RegexQuery(r), reader),
-        Query::Mimes(r) => mime_search_impl(RegexQuery(r), reader),
+        Query::Regex(r) => search_impl(spawner, RegexQuery(r), reader),
+        Query::Mimes(r) => mime_search_impl(spawner, RegexQuery(r), reader),
     };
-    (results, threads.into_iter())
+    results
 }
 
 fn search_impl(
+    spawner: Spawner<()>,
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
-) -> (QueryIter, arrayvec::IntoIter<JoinHandle<()>, 13>) {
-    let (sender, receiver) = mpsc::sync_channel(0);
+) -> QueryResults {
+    let (sender, receiver) = lockness_bags::mpsc();
     let token = CancellationToken::new();
-    let mut threads = ArrayVec::<_, 13>::new_const();
 
-    let mut extra_direct_threads = 1;
-    let (direct_file_sender, direct_file_receiver) = crossbeam_channel::bounded(8);
     for bucket in usize::from(size_to_bucket(
         u16::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u16::MAX),
     ))..reader.buckets().len()
@@ -221,57 +222,45 @@ fn search_impl(
         let reader = reader.clone();
         let sender = sender.clone();
         let token = token.clone();
-        let direct_file_receiver = if extra_direct_threads > 0 {
-            extra_direct_threads -= 1;
-            Some(direct_file_receiver.clone())
-        } else {
-            None
-        };
-        threads.push(thread::spawn(move || {
+        spawner.spawn(move || {
+            let bucket_size = usize::from(bucket_to_length(bucket));
+            let midpoint = if bucket_size == 4 {
+                1
+            } else {
+                bucket_size / 2 + 1
+            };
+            for (index, entry) in reader.buckets()[bucket]
+                .chunks_exact(bucket_size)
+                .enumerate()
             {
-                let bucket_size = usize::from(bucket_to_length(bucket));
-                let midpoint = if bucket_size == 4 {
-                    1
-                } else {
-                    bucket_size / 2 + 1
-                };
-                for (index, entry) in reader.buckets()[bucket]
-                    .chunks_exact(bucket_size)
-                    .enumerate()
-                {
-                    if token.is_cancelled() {
-                        break;
-                    }
+                if token.is_cancelled() {
+                    break;
+                }
 
-                    let entry = memchr::memchr(0, &entry[midpoint..])
-                        .map_or(entry, |stop| &entry[..midpoint + stop]);
-                    let Some((start, end)) = query.find(entry) else {
-                        continue;
-                    };
-                    if sender
-                        .send(Ok(QueryResult {
-                            location: EntryLocation::Bucketed {
-                                bucket: u8::try_from(bucket).unwrap(),
-                                index: u32::try_from(index).unwrap(),
-                            },
-                            start,
-                            end,
-                        }))
-                        .is_err()
-                    {
-                        break;
-                    }
+                let entry = memchr::memchr(0, &entry[midpoint..])
+                    .map_or(entry, |stop| &entry[..midpoint + stop]);
+                let Some((start, end)) = query.find(entry) else {
+                    continue;
+                };
+                if let Err(SenderError::HangUp) = sender
+                    .send(Ok(QueryResult {
+                        location: EntryLocation::Bucketed {
+                            bucket: u8::try_from(bucket).unwrap(),
+                            index: u32::try_from(index).unwrap(),
+                        },
+                        start,
+                        end,
+                    }))
+                {
+                    break;
                 }
             }
-            if let Some(directs) = direct_file_receiver {
-                direct_alloc_search_stream(&token, &mut query, directs, |r| sender.send(r));
-            }
-        }));
+        });
     }
-    threads.push(thread::spawn({
+    spawner.spawn({
         let token = token.clone();
         let sender = sender.clone();
-        move || {
+        move |spawner, ()| {
             stream_through_direct_allocations(
                 &reader,
                 &token,
@@ -293,92 +282,48 @@ fn search_impl(
                             context: format!(
                                 "Direct allocation file name is of invalid size: {file_name:?}"
                             )
-                            .into(),
+                                .into(),
                         })?;
-                    direct_file_sender.send((data, file_name))?;
+                    spawner.spawn_blocking(|| {
+                        let mut run = || {
+                            if token.is_cancelled() {
+                                return Ok(None);
+                            }
+                            let Some((start, end)) = query.find(&data) else {
+                                return Ok(None);
+                            };
+
+                            let id = entry_id_from_direct_file_name(&file_name)?;
+                            Ok(Some(QueryResult {
+                                location: EntryLocation::File { entry_id: id },
+                                start,
+                                end,
+                            }))
+                        };
+
+                        let Ok(()) | Err(SenderError::HangUp) = match run() {
+                            Ok(Some(r)) => sender.send(Ok(r)),
+                            Ok(None) => Ok(()),
+                            Err(e) => sender.send(Err(e)),
+                        };
+                    });
                     Ok(())
                 },
             );
         }
-    }));
-    threads.push(thread::spawn({
-        let token = token.clone();
-        move || {
-            direct_alloc_search_stream(&token, &mut query, direct_file_receiver, |r| {
-                sender.send(r)
-            });
-        }
-    }));
+    });
 
-    (
-        QueryIter {
-            stream: receiver.into_iter(),
-            token,
-        },
-        threads.into_iter(),
-    )
-}
-
-fn direct_alloc_search_stream<U>(
-    token: &CancellationToken,
-    query: &mut impl QueryImpl,
-    inputs: impl IntoIterator<Item = (Mmap, [u8; DIRECT_FILE_NAME_LEN])>,
-    mut send: impl FnMut(Result<QueryResult, CoreError>) -> Result<(), U>,
-) {
-    for (file, file_name) in inputs {
-        if token.is_cancelled() {
-            break;
-        }
-
-        let mut run = || {
-            let Some((start, end)) = query.find(&file) else {
-                return Ok(None);
-            };
-
-            let id = entry_id_from_direct_file_name(&file_name)?;
-            Ok(Some(QueryResult {
-                location: EntryLocation::File { entry_id: id },
-                start,
-                end,
-            }))
-        };
-
-        if match run() {
-            Ok(Some(r)) => send(Ok(r)),
-            Ok(None) => Ok(()),
-            Err(e) => send(Err(e)),
-        }
-        .is_err()
-        {
-            break;
-        }
-    }
-}
-
-#[derive(Error, Debug)]
-enum DirectIterError {
-    #[error("{0}")]
-    Core(#[from] CoreError),
-    #[error("Receiver closed the connection.")]
-    Send,
-}
-
-impl<T> From<SendError<T>> for DirectIterError {
-    fn from(_: SendError<T>) -> Self {
-        Self::Send
-    }
-}
-
-impl<T> From<crossbeam_channel::SendError<T>> for DirectIterError {
-    fn from(_: crossbeam_channel::SendError<T>) -> Self {
-        Self::Send
+    QueryResults {
+        stream: receiver.into_iter(),
+        token,
     }
 }
 
 fn stream_through_direct_allocations<T>(
     reader: &EntryReader,
-    executor: &Executor,
-    mut f: impl FnMut(&CStr, OwnedFd, &str) -> Result<(), DirectIterError>,
+    token: &CancellationToken,
+    sender: &Sender<Result<T, CoreError>>,
+    mut f: impl FnMut(&CStr, OwnedFd, &str) -> Result<(), CoreError>,
 ) {
     let (direct_dir, metadata_dir) = {
         let run = || {
@@ -401,7 +346,7 @@ fn stream_through_direct_allocations<T>(
         match run() {
             Ok(d) => d,
             Err(e) => {
-                let _ = executor.send(Err(e));
+                let Ok(()) | Err(SenderError::HangUp) = sender.send(Err(e));
                 return;
             }
         }
@@ -410,7 +355,7 @@ fn stream_through_direct_allocations<T>(
     let mut buf = [MaybeUninit::uninit(); 8192];
     let mut iter = RawDir::new(&direct_dir, &mut buf);
     while let Some(file) = iter.next() {
-        if executor.is_cancelled() {
+        if token.is_cancelled() {
             break;
         }
 
@@ -430,12 +375,11 @@ fn stream_through_direct_allocations<T>(
 
         match run() {
             Ok(()) => (),
-            Err(DirectIterError::Core(e)) => {
-                if executor.send(Err(e)).is_err() {
+            Err(e) => {
+                if let Err(SenderError::HangUp) = sender.send(Err(e)) {
                     break;
                 }
             }
-            Err(DirectIterError::Send) => break,
         }
     }
 }
@@ -450,33 +394,46 @@ fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, CoreError> {
                 "Invalid direct allocation file name: {}",
                 file_name.escape_ascii()
             )
-            .into(),
+                .into(),
         })
 }
 
 fn mime_search_impl(
+    spawner: Spawner<()>,
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
-) -> QueryIter {
-    let executor = LocknessExecutor::builder().build();
+) -> QueryResults {
+    let (sender, receiver) = lockness_bags::mpsc();
+    let token = CancellationToken::new();
 
-    executor.spawn(|(_, executor)| {
-        stream_through_direct_allocations(&reader, &executor, |file_name, _fd, mime_type| {
-            if mime_type.is_empty() {
-                return Ok(());
-            }
+    spawner.spawn({
+        let token = token.clone();
+        move || {
+            stream_through_direct_allocations(
+                &reader,
+                &token,
+                &sender,
+                |file_name, _, mime_type| {
+                    if mime_type.is_empty() {
+                        return Ok(());
+                    }
 
-            if query.find(mime_type.as_bytes()).is_some() {
-                let id = entry_id_from_direct_file_name(file_name.to_bytes())?;
-                executor.send(Ok(QueryResult {
-                    location: EntryLocation::File { entry_id: id },
-                    start: 0,
-                    end: 0,
-                }))?;
-            }
-            Ok(())
-        });
+                    if query.find(mime_type.as_bytes()).is_some() {
+                        let id = entry_id_from_direct_file_name(file_name.to_bytes())?;
+                        let Ok(()) | Err(SenderError::HangUp) = sender.send(Ok(QueryResult {
+                            location: EntryLocation::File { entry_id: id },
+                            start: 0,
+                            end: 0,
+                        }));
+                    }
+                    Ok(())
+                },
+            );
+        }
     });
 
-    QueryIter { executor }
+    QueryResults {
+        stream: receiver.into_iter(),
+        token,
+    }
 }
