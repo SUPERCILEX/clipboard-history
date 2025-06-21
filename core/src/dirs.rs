@@ -51,7 +51,7 @@ pub fn push_sockets_prefix(file: &mut PathBuf) {
 #[must_use]
 pub fn config_file_dir() -> PathBuf {
     let mut dir = dirs::config_local_dir().unwrap_or_else(|| PathBuf::from("/tmp/config"));
-    dir.reserve("/ringboard/x11.toml".len());
+    dir.reserve("/ringboard/wayland.toml".len());
     dir.push("ringboard");
     dir
 }

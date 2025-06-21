@@ -20,7 +20,7 @@ use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
     api::{AddRequest, MoveToFrontRequest, PasteCommand, connect_to_server},
-    config::{X11Config, X11V1Config, x11_config_file},
+    config,
     core::{
         Error, IoErr, create_tmp_file,
         dirs::{paste_socket_file, socket_file},
@@ -246,19 +246,17 @@ enum PasteFile {
     Large(Rc<Mmap>),
 }
 
-fn load_config() -> Result<X11V1Config, CliError> {
-    let path = x11_config_file();
+fn load_config() -> Result<config::x11::Latest, CliError> {
+    let path = config::x11::file();
     let mut file = match File::open(&path) {
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(X11V1Config::default()),
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(config::x11::Latest::default()),
         r => r.map_io_err(|| format!("Failed to open file: {path:?}"))?,
     };
 
     let mut config = String::new();
     file.read_to_string(&mut config)
         .map_io_err(|| format!("Failed to read config: {path:?}"))?;
-    Ok(match toml::from_str::<X11Config>(&config)? {
-        X11Config::V1(c) => c,
-    })
+    Ok(toml::from_str::<config::x11::Config>(&config)?.to_latest())
 }
 
 fn run() -> Result<(), CliError> {
@@ -267,7 +265,7 @@ fn run() -> Result<(), CliError> {
         env!("CARGO_PKG_VERSION")
     );
 
-    let ref config @ X11V1Config {
+    let ref config @ config::x11::Latest {
         auto_paste,
         fast_path_optimizations,
     } = load_config()?;

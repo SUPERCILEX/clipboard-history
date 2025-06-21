@@ -42,7 +42,7 @@ use ringboard_sdk::{
         AddRequest, GarbageCollectRequest, MoveToFrontRequest, RemoveRequest, SwapRequest,
         connect_to_paste_server, connect_to_server, connect_to_server_with, send_paste_buffer,
     },
-    config::{X11Config, X11V1Config, x11_config_file},
+    config,
     core::{
         BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, SendQuitAndWait, acquire_lock_file,
         bucket_to_length, create_tmp_file,
@@ -168,6 +168,10 @@ enum Configure {
     /// Edit the X11 watcher settings.
     #[command(aliases = ["x"])]
     X11(ConfigureX11),
+
+    /// Edit the Wayland watcher settings.
+    #[command(aliases = ["w"])]
+    Wayland(ConfigureWayland),
 }
 
 #[derive(Args, Debug)]
@@ -194,6 +198,16 @@ struct ConfigureX11 {
     #[clap(long)]
     #[clap(action = ArgAction::Set)]
     fast_path_optimizations: Option<bool>,
+}
+
+#[derive(Args, Debug)]
+struct ConfigureWayland {
+    /// Instead of simply placing selected items in the clipboard, attempt to
+    /// automatically paste the selected item into the previously focused
+    /// application.
+    #[clap(long)]
+    #[clap(action = ArgAction::Set)]
+    auto_paste: Option<bool>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -482,6 +496,7 @@ fn run() -> Result<(), CliError> {
         Cmd::GarbageCollect(data) => garbage_collect(connect_to_server(&server_addr)?, data),
         Cmd::Import(data) => import(connect_to_server(&server_addr)?, data),
         Cmd::Configure(Configure::X11(data)) => configure_x11(data),
+        Cmd::Configure(Configure::Wayland(data)) => configure_wayland(data),
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump) => dump(),
         Cmd::Debug(Dev::Generate(data)) => generate(connect_to_server(&server_addr)?, data),
@@ -2028,20 +2043,20 @@ fn fuzz(
 
 #[allow(clippy::needless_pass_by_value)]
 fn configure_x11(x11: ConfigureX11) -> Result<(), CliError> {
-    let path = x11_config_file();
+    let path = config::x11::file();
     {
         let parent = path.parent().unwrap();
         create_dir_all(parent).map_io_err(|| format!("Failed to create dir: {parent:?}"))?;
     }
     let mut file = File::create(&path).map_io_err(|| format!("Failed to open file: {path:?}"))?;
 
-    let mut config = X11V1Config::default();
+    let mut config = config::x11::Latest::default();
     {
         let ConfigureX11 {
             auto_paste,
             fast_path_optimizations,
         } = x11;
-        let X11V1Config {
+        let config::x11::Latest {
             auto_paste: ref mut auto_paste_,
             fast_path_optimizations: ref mut fast_path_optimizations_,
         } = config;
@@ -2052,7 +2067,34 @@ fn configure_x11(x11: ConfigureX11) -> Result<(), CliError> {
             *fast_path_optimizations_ = fast_path_optimizations;
         }
     }
-    let config = toml::to_string_pretty(&X11Config::V1(config))?;
+    let config = toml::to_string_pretty(&config::x11::Config::V1(config))?;
+    file.write_all(config.as_bytes())
+        .map_io_err(|| format!("Failed to write to config file: {path:?}"))?;
+
+    println!("Saved configuration file to {path:?}.");
+    Ok(())
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn configure_wayland(wayland: ConfigureWayland) -> Result<(), CliError> {
+    let path = config::wayland::file();
+    {
+        let parent = path.parent().unwrap();
+        create_dir_all(parent).map_io_err(|| format!("Failed to create dir: {parent:?}"))?;
+    }
+    let mut file = File::create(&path).map_io_err(|| format!("Failed to open file: {path:?}"))?;
+
+    let mut config = config::wayland::Latest::default();
+    {
+        let ConfigureWayland { auto_paste } = wayland;
+        let config::wayland::Latest {
+            auto_paste: ref mut auto_paste_,
+        } = config;
+        if let Some(auto_paste) = auto_paste {
+            *auto_paste_ = auto_paste;
+        }
+    }
+    let config = toml::to_string_pretty(&config::wayland::Config::V1(config))?;
     file.write_all(config.as_bytes())
         .map_io_err(|| format!("Failed to write to config file: {path:?}"))?;
 

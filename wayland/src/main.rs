@@ -5,7 +5,7 @@ use std::{
     fs::File,
     hash::BuildHasherDefault,
     io,
-    io::ErrorKind::WouldBlock,
+    io::{ErrorKind, ErrorKind::WouldBlock, Read},
     mem,
     mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
@@ -18,6 +18,7 @@ use error_stack::Report;
 use log::{debug, error, info, trace, warn};
 use ringboard_sdk::{
     api::{AddRequest, MoveToFrontRequest, PasteCommand, connect_to_server},
+    config,
     core::{
         Error, IoErr, create_tmp_file,
         dirs::{paste_socket_file, socket_file},
@@ -85,6 +86,8 @@ enum CliError {
         message: &'static str,
         interface: &'static str,
     },
+    #[error("Serde TOML deserialization failed")]
+    Toml(#[from] toml::de::Error),
 }
 
 impl From<IdNotFoundError> for CliError {
@@ -123,7 +126,21 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
             message: _,
             interface: _,
         } => Report::new(wrapper),
+        CliError::Toml(e) => Report::new(e).change_context(wrapper),
     }
+}
+
+fn load_config() -> Result<config::wayland::Latest, CliError> {
+    let path = config::wayland::file();
+    let mut file = match File::open(&path) {
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(config::wayland::Latest::default()),
+        r => r.map_io_err(|| format!("Failed to open file: {path:?}"))?,
+    };
+
+    let mut config = String::new();
+    file.read_to_string(&mut config)
+        .map_io_err(|| format!("Failed to read config: {path:?}"))?;
+    Ok(toml::from_str::<config::wayland::Config>(&config)?.to_latest())
 }
 
 fn run() -> Result<(), CliError> {
@@ -131,6 +148,9 @@ fn run() -> Result<(), CliError> {
         "Starting Ringboard Wayland clipboard listener v{}.",
         env!("CARGO_PKG_VERSION")
     );
+
+    let ref config @ config::wayland::Latest { auto_paste } = load_config()?;
+    info!("Using configuration {config:?}");
 
     let server = {
         let socket_file = socket_file();
@@ -236,6 +256,7 @@ fn run() -> Result<(), CliError> {
                     &qh,
                     app.inner.manager.as_ref(),
                     &app.inner.seats,
+                    auto_paste,
                     &mut app.inner.pending_paste,
                     &mut app.inner.sources,
                     &server,
@@ -1098,6 +1119,7 @@ fn handle_paste_event(
     qh: &QueueHandle<App>,
     manager: Option<&AutoDestroy<ZwlrDataControlManagerV1>>,
     seats: &Seats,
+    auto_paste: bool,
     pending_paste: &mut bool,
     sources: &mut Sources,
 
@@ -1196,7 +1218,7 @@ fn handle_paste_event(
     }
     info!("Claimed selection ownership.");
 
-    *pending_paste = trigger_paste;
+    *pending_paste = auto_paste && trigger_paste;
 
     Ok(())
 }

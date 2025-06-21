@@ -772,6 +772,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "rustix 1.0.7",
  "thiserror 2.0.12",
+ "toml",
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-misc",
