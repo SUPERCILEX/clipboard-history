@@ -284,7 +284,6 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
         );
     };
 
-    last_error.take();
     match message {
         Message::FatalDbOpen(e) => *fatal_error = Some(e.into()),
         Message::Error(e) => {
@@ -391,6 +390,7 @@ fn search_ui(
                 ref mut queued_searches,
                 ref was_focused,
                 ref mut uri_buf,
+                ref mut last_error,
                 ..
             },
     }: &mut State,
@@ -400,6 +400,7 @@ fn search_ui(
 ) {
     macro_rules! search {
         () => {
+            *last_error = None;
             if let Some(token) = pending_search_token {
                 token.cancel();
             }
@@ -455,6 +456,7 @@ fn search_ui(
         *query = String::new();
         *search_results = Box::default();
         *search_highlighted_id = None;
+        *last_error = None;
     };
 
     if ui.input(|input| input.key_pressed(Key::Escape)) && ui.memory(|mem| !mem.any_popup_open()) {
@@ -500,6 +502,7 @@ fn main_ui(
 ) {
     let State { entries, ui: state } = state_;
     let refresh = |state: &mut UiState| {
+        state.last_error.take();
         let _ = requests.send(Command::LoadFirstPage);
         if !state.query.is_empty() {
             if let Some(token) = &state.pending_search_token {
