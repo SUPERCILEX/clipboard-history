@@ -566,7 +566,7 @@ fn main_ui(
                 RichText::new(if state.queued_searches > 0 {
                     "Loading…"
                 } else {
-                    "Nothing to see here…"
+                    "Nothing to see here"
                 })
                 .heading(),
             );

@@ -727,7 +727,7 @@ impl AppWrapper<'_> {
         outer_block.render(entries_area, buf);
 
         if active_entries!(entries, ui).is_empty() {
-            Line::raw("Nothing to see here…")
+            Line::raw("Nothing to see here")
                 .italic()
                 .render(inner_area, buf);
         } else {
