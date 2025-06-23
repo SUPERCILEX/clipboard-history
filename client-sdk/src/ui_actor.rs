@@ -46,6 +46,8 @@ pub enum CommandError {
     Regex(#[from] regex::Error),
     #[error("failed to load image")]
     Image(#[from] ImageError),
+    #[error("search crashed")]
+    Search,
 }
 
 impl From<IdNotFoundError> for CommandError {
@@ -67,6 +69,7 @@ mod error_stack_compat {
                 Self::Sdk(e) => e.into_report(wrapper),
                 Self::Regex(e) => Report::new(e).change_context(wrapper),
                 Self::Image(e) => Report::new(e).change_context(wrapper),
+                Self::Search => Report::new(wrapper),
             }
         }
     }
@@ -619,7 +622,8 @@ fn do_search<E>(
     }
 
     for thread in threads {
-        let _ = thread.join();
+        let Err(_) = thread.join() else { continue };
+        let _ = send(Message::Error(CommandError::Search));
     }
     let reader = reader_.insert(Arc::into_inner(reader).unwrap());
 

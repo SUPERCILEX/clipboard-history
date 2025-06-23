@@ -768,6 +768,7 @@ pub clipboard_history_client_sdk::ui_actor::CommandError::Core(clipboard_history
 pub clipboard_history_client_sdk::ui_actor::CommandError::Image(image::error::ImageError)
 pub clipboard_history_client_sdk::ui_actor::CommandError::Regex(regex::error::Error)
 pub clipboard_history_client_sdk::ui_actor::CommandError::Sdk(clipboard_history_client_sdk::ClientError)
+pub clipboard_history_client_sdk::ui_actor::CommandError::Search
 impl clipboard_history_client_sdk::ui_actor::CommandError
 pub fn clipboard_history_client_sdk::ui_actor::CommandError::into_report<W: error_stack::context::Context>(self, wrapper: W) -> error_stack::report::Report<W>
 impl core::convert::From<clipboard_history_client_sdk::ClientError> for clipboard_history_client_sdk::ui_actor::CommandError
