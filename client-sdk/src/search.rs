@@ -83,7 +83,6 @@ impl QueryImpl for PlainQuery {
     }
 }
 
-#[derive(Clone)]
 struct PlainIgnoreCaseQuery {
     inner: PlainQuery,
     cache: Vec<u8>,
@@ -100,6 +99,16 @@ impl QueryImpl for PlainIgnoreCaseQuery {
 
     fn needle_len(&self) -> Option<usize> {
         self.inner.needle_len()
+    }
+}
+
+impl Clone for PlainIgnoreCaseQuery {
+    fn clone(&self) -> Self {
+        let Self { inner, cache: _ } = self;
+        Self {
+            inner: inner.clone(),
+            cache: Vec::new(),
+        }
     }
 }
 
