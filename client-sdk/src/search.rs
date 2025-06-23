@@ -9,14 +9,13 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc,
-        mpsc::SyncSender,
     },
     thread,
     thread::JoinHandle,
 };
 
 use arrayvec::ArrayVec;
+use crossbeam_channel::{RecvError, SendError, Sender, TrySendError};
 use memchr::memmem::Finder;
 use regex::bytes::Regex;
 use ringboard_core::{
@@ -159,27 +158,43 @@ impl CancellationToken {
     }
 }
 
-pub struct QueryIter {
-    stream: mpsc::IntoIter<Result<QueryResult, CoreError>>,
+type Out = Result<QueryResult, CoreError>;
+
+pub struct QueryIter<const N: usize> {
+    receiver: crossbeam_channel::Receiver<ArrayVec<Out, N>>,
+    buf: ArrayVec<Out, N>,
     token: CancellationToken,
 }
 
-impl QueryIter {
+impl<const N: usize> QueryIter<N> {
     #[must_use]
     pub const fn cancellation_token(&self) -> &CancellationToken {
         &self.token
     }
 }
 
-impl Iterator for QueryIter {
-    type Item = Result<QueryResult, CoreError>;
+impl<const N: usize> Iterator for QueryIter<N> {
+    type Item = Out;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.stream.next()
+        let Self {
+            receiver,
+            buf,
+            token: _,
+        } = self;
+        loop {
+            if let Some(v) = buf.pop() {
+                return Some(v);
+            }
+            match receiver.recv() {
+                Ok(new) => *buf = new,
+                Err(RecvError) => return None,
+            }
+        }
     }
 }
 
-impl Drop for QueryIter {
+impl<const N: usize> Drop for QueryIter<N> {
     fn drop(&mut self) {
         self.token.cancel();
     }
@@ -189,7 +204,7 @@ pub fn search(
     query: Query,
     reader: Arc<EntryReader>,
 ) -> (
-    QueryIter,
+    QueryIter<16>,
     impl Iterator<Item = JoinHandle<()>> + Send + Sync + 'static,
 ) {
     let (results, threads) = match query {
@@ -211,16 +226,56 @@ pub fn search(
     (results, threads.into_iter())
 }
 
-fn search_impl(
+struct BufferedSender<const N: usize, T> {
+    buf: ArrayVec<T, N>,
+    sender: Sender<ArrayVec<T, N>>,
+}
+
+impl<const N: usize, T> BufferedSender<N, T> {
+    fn new(sender: Sender<ArrayVec<T, N>>) -> Self {
+        Self {
+            buf: ArrayVec::new_const(),
+            sender,
+        }
+    }
+
+    fn send(&mut self, value: T) -> Result<(), SendError<ArrayVec<T, N>>> {
+        let Self { buf, sender } = self;
+        buf.push(value);
+        if buf.is_full() {
+            sender.send(buf.take())
+        } else {
+            match sender.try_send(buf.take()) {
+                Ok(()) => Ok(()),
+                Err(TrySendError::Disconnected(buf)) => Err(SendError(buf)),
+                Err(TrySendError::Full(restore)) => {
+                    *buf = restore;
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
+impl<const N: usize, T> Drop for BufferedSender<N, T> {
+    fn drop(&mut self) {
+        let Self { buf, sender } = self;
+        if !buf.is_empty() {
+            let _ = sender.send(buf.take());
+        }
+    }
+}
+
+fn search_impl<const N: usize>(
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
-) -> (QueryIter, arrayvec::IntoIter<JoinHandle<()>, 13>) {
-    let (sender, receiver) = mpsc::sync_channel(0);
+) -> (QueryIter<N>, arrayvec::IntoIter<JoinHandle<()>, 13>) {
+    let (sender, receiver) = crossbeam_channel::bounded(0);
     let token = CancellationToken::new();
     let mut threads = ArrayVec::<_, 13>::new_const();
 
     let mut extra_direct_threads = 1;
-    let (direct_file_sender, direct_file_receiver) = crossbeam_channel::bounded(8);
+    let (direct_file_sender, direct_file_receiver) = crossbeam_channel::bounded(0);
     for bucket in usize::from(size_to_bucket(
         u16::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u16::MAX),
     ))..reader.buckets().len()
@@ -236,6 +291,7 @@ fn search_impl(
             None
         };
         threads.push(thread::spawn(move || {
+            let mut sender = BufferedSender::new(sender);
             {
                 let bucket_size = usize::from(bucket_to_length(bucket));
                 let midpoint = if bucket_size == 4 {
@@ -275,11 +331,12 @@ fn search_impl(
         let token = token.clone();
         let sender = sender.clone();
         move || {
+            let mut sender = BufferedSender::new(sender);
             stream_through_direct_allocations(
                 &reader,
                 &token,
-                &sender,
-                |file_name, fd, mime_type| {
+                &mut sender,
+                |_, file_name, fd, mime_type| {
                     if !is_text_mime(mime_type) {
                         return Ok(());
                     }
@@ -307,6 +364,7 @@ fn search_impl(
     threads.push(thread::spawn({
         let token = token.clone();
         move || {
+            let mut sender = BufferedSender::new(sender);
             direct_alloc_search_stream(&token, &mut query, direct_file_receiver, |r| {
                 sender.send(r)
             });
@@ -315,7 +373,8 @@ fn search_impl(
 
     (
         QueryIter {
-            stream: receiver.into_iter(),
+            receiver,
+            buf: ArrayVec::new_const(),
             token,
         },
         threads.into_iter(),
@@ -326,7 +385,7 @@ fn direct_alloc_search_stream<U>(
     token: &CancellationToken,
     query: &mut impl QueryImpl,
     inputs: impl IntoIterator<Item = (Mmap, [u8; DIRECT_FILE_NAME_LEN])>,
-    mut send: impl FnMut(Result<QueryResult, CoreError>) -> Result<(), U>,
+    mut send: impl FnMut(Out) -> Result<(), U>,
 ) {
     for (file, file_name) in inputs {
         if token.is_cancelled() {
@@ -358,11 +417,11 @@ fn direct_alloc_search_stream<U>(
     }
 }
 
-fn stream_through_direct_allocations<T>(
+fn stream_through_direct_allocations<const N: usize>(
     reader: &EntryReader,
     token: &CancellationToken,
-    sender: &SyncSender<Result<T, CoreError>>,
-    mut f: impl FnMut(&CStr, OwnedFd, &str) -> Result<(), CoreError>,
+    sender: &mut BufferedSender<N, Out>,
+    mut f: impl FnMut(&mut BufferedSender<N, Out>, &CStr, OwnedFd, &str) -> Result<(), CoreError>,
 ) {
     let (direct_dir, metadata_dir) = {
         let run = || {
@@ -409,7 +468,7 @@ fn stream_through_direct_allocations<T>(
             let fd = openat(&direct_dir, file_name, OFlags::RDONLY, Mode::empty())
                 .map_io_err(|| format!("Failed to open direct allocation: {file_name:?}"))?;
             let mime_type = xattr_mime_type(&fd, metadata_dir.as_ref().map(|d| (d, file_name)))?;
-            f(file_name, fd, &mime_type)
+            f(sender, file_name, fd, &mime_type)
         };
 
         match run() {
@@ -435,22 +494,23 @@ fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, CoreError> {
         })
 }
 
-fn mime_search_impl(
+fn mime_search_impl<const N: usize>(
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
-) -> (QueryIter, arrayvec::IntoIter<JoinHandle<()>, 13>) {
-    let (sender, receiver) = mpsc::sync_channel(0);
+) -> (QueryIter<N>, arrayvec::IntoIter<JoinHandle<()>, 13>) {
+    let (sender, receiver) = crossbeam_channel::bounded(0);
     let token = CancellationToken::new();
     let mut threads = ArrayVec::<_, 13>::new_const();
 
     threads.push(thread::spawn({
         let token = token.clone();
         move || {
+            let mut sender = BufferedSender::new(sender);
             stream_through_direct_allocations(
                 &reader,
                 &token,
-                &sender,
-                |file_name, _, mime_type| {
+                &mut sender,
+                |sender, file_name, _, mime_type| {
                     if mime_type.is_empty() {
                         return Ok(());
                     }
@@ -471,7 +531,8 @@ fn mime_search_impl(
 
     (
         QueryIter {
-            stream: receiver.into_iter(),
+            receiver,
+            buf: ArrayVec::new_const(),
             token,
         },
         threads.into_iter(),
