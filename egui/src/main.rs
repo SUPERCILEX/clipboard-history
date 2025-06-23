@@ -398,19 +398,8 @@ fn search_ui(
     up_pressed: bool,
     down_pressed: bool,
 ) {
-    macro_rules! search {
-        () => {
-            *last_error = None;
-            if let Some(token) = pending_search_token {
-                token.cancel();
-            }
-            let _ = requests.send(Command::Search {
-                query: query.clone().into(),
-                kind: *search_kind,
-            });
-            *queued_searches += 1;
-        };
-    }
+    #[allow(clippy::useless_let_if_seq)]
+    let mut search_changed = false;
 
     if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::X)) {
         *search_kind = match search_kind {
@@ -418,7 +407,7 @@ fn search_ui(
             SearchKind::Plain | SearchKind::Mime => SearchKind::Regex,
         };
         ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))));
-        search!();
+        search_changed = true;
     }
     if ui.input_mut(|i| i.consume_key(Modifiers::ALT, Key::M)) {
         *search_kind = match search_kind {
@@ -426,7 +415,7 @@ fn search_ui(
             SearchKind::Plain | SearchKind::Regex => SearchKind::Mime,
         };
         ui.input_mut(|i| i.events.retain(|e| !matches!(e, Event::Text(_))));
-        search!();
+        search_changed = true;
     }
 
     let response = ui.add(
@@ -462,9 +451,9 @@ fn search_ui(
     if ui.input(|input| input.key_pressed(Key::Escape)) && ui.memory(|mem| !mem.any_popup_open()) {
         if query.is_empty() {
             ui.ctx().send_viewport_cmd(ViewportCommand::Close);
-        } else {
-            reset(query);
+            return;
         }
+        reset(query);
     }
     if up_pressed || down_pressed {
         response.surrender_focus();
@@ -477,7 +466,7 @@ fn search_ui(
         response.request_focus();
     }
 
-    if !response.changed() {
+    if !search_changed && !response.changed() {
         return;
     }
     if query.is_empty() {
@@ -485,7 +474,15 @@ fn search_ui(
         return;
     }
 
-    search!();
+    *last_error = None;
+    if let Some(token) = pending_search_token {
+        token.cancel();
+    }
+    let _ = requests.send(Command::Search {
+        query: query.clone().into(),
+        kind: *search_kind,
+    });
+    *queued_searches += 1;
 }
 
 fn show_error(ui: &mut Ui, e: &dyn Error) {

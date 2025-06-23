@@ -408,11 +408,15 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
         ui.detailed_entry = None;
     };
     let search = |ui: &mut UiState, kind: SearchKind| {
+        if ui.query.is_empty() {
+            return;
+        }
+
         if let Some(token) = &ui.pending_search_token {
             token.cancel();
         }
         let _ = requests.send(Command::Search {
-            query: ui.query.lines().first().unwrap().to_string().into(),
+            query: ui.query.lines().first().unwrap().as_str().into(),
             kind,
         });
         ui.queued_searches += 1;
