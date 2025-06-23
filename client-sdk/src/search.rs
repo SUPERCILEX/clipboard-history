@@ -179,12 +179,11 @@ impl Drop for QueryIter {
 
 pub fn search(
     query: Query,
-    reader: EntryReader,
+    reader: Arc<EntryReader>,
 ) -> (
     QueryIter,
     impl Iterator<Item = JoinHandle<()>> + Send + Sync + 'static,
 ) {
-    let reader = Arc::new(reader);
     let (results, threads) = match query {
         Query::Plain(p) => search_impl(PlainQuery(Arc::new(Finder::new(p).into_owned())), reader),
         Query::PlainIgnoreCase(CaselessQuery { mut query, trim }) => {

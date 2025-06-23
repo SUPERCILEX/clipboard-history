@@ -220,24 +220,6 @@ impl Mmap {
     pub const fn is_empty(&self) -> bool {
         self.requested_len == 0
     }
-
-    pub fn try_clone(&self) -> io::Result<Self> {
-        let &Self {
-            ptr,
-            requested_len,
-            backing_len,
-        } = self;
-        let ptr = unsafe {
-            NonNull::new_unchecked(
-                mremap(ptr.as_ptr().cast(), 0, backing_len, MremapFlags::MAYMOVE)?.cast(),
-            )
-        };
-        Ok(Self {
-            ptr,
-            requested_len,
-            backing_len,
-        })
-    }
 }
 
 impl Deref for Mmap {
