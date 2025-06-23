@@ -10,7 +10,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
         mpsc,
-        mpsc::{SendError, SyncSender},
+        mpsc::SyncSender,
     },
     thread,
     thread::JoinHandle,
@@ -26,7 +26,6 @@ use rustix::{
     fs::{Mode, OFlags, RawDir, openat},
     thread::{UnshareFlags, unshare},
 };
-use thiserror::Error;
 
 use crate::{
     EntryReader,
@@ -257,19 +256,14 @@ fn search_impl(
                     let Some((start, end)) = query.find(entry) else {
                         continue;
                     };
-                    if sender
-                        .send(Ok(QueryResult {
-                            location: EntryLocation::Bucketed {
-                                bucket: u8::try_from(bucket).unwrap(),
-                                index: u32::try_from(index).unwrap(),
-                            },
-                            start,
-                            end,
-                        }))
-                        .is_err()
-                    {
-                        break;
-                    }
+                    let _ = sender.send(Ok(QueryResult {
+                        location: EntryLocation::Bucketed {
+                            bucket: u8::try_from(bucket).unwrap(),
+                            index: u32::try_from(index).unwrap(),
+                        },
+                        start,
+                        end,
+                    }));
                 }
             }
             if let Some(directs) = direct_file_receiver {
@@ -304,7 +298,7 @@ fn search_impl(
                             )
                             .into(),
                         })?;
-                    direct_file_sender.send((data, file_name))?;
+                    let _ = direct_file_sender.send((data, file_name));
                     Ok(())
                 },
             );
@@ -364,31 +358,11 @@ fn direct_alloc_search_stream<U>(
     }
 }
 
-#[derive(Error, Debug)]
-enum DirectIterError {
-    #[error("{0}")]
-    Core(#[from] CoreError),
-    #[error("Receiver closed the connection.")]
-    Send,
-}
-
-impl<T> From<SendError<T>> for DirectIterError {
-    fn from(_: SendError<T>) -> Self {
-        Self::Send
-    }
-}
-
-impl<T> From<crossbeam_channel::SendError<T>> for DirectIterError {
-    fn from(_: crossbeam_channel::SendError<T>) -> Self {
-        Self::Send
-    }
-}
-
 fn stream_through_direct_allocations<T>(
     reader: &EntryReader,
     token: &CancellationToken,
     sender: &SyncSender<Result<T, CoreError>>,
-    mut f: impl FnMut(&CStr, OwnedFd, &str) -> Result<(), DirectIterError>,
+    mut f: impl FnMut(&CStr, OwnedFd, &str) -> Result<(), CoreError>,
 ) {
     let (direct_dir, metadata_dir) = {
         let run = || {
@@ -440,12 +414,9 @@ fn stream_through_direct_allocations<T>(
 
         match run() {
             Ok(()) => (),
-            Err(DirectIterError::Core(e)) => {
-                if sender.send(Err(e)).is_err() {
-                    break;
-                }
+            Err(e) => {
+                let _ = sender.send(Err(e));
             }
-            Err(DirectIterError::Send) => break,
         }
     }
 }
@@ -486,11 +457,11 @@ fn mime_search_impl(
 
                     if query.find(mime_type.as_bytes()).is_some() {
                         let id = entry_id_from_direct_file_name(file_name.to_bytes())?;
-                        sender.send(Ok(QueryResult {
+                        let _ = sender.send(Ok(QueryResult {
                             location: EntryLocation::File { entry_id: id },
                             start: 0,
                             end: 0,
-                        }))?;
+                        }));
                     }
                     Ok(())
                 },
