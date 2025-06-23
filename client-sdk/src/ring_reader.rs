@@ -597,6 +597,28 @@ impl EntryReader {
     pub fn metadata(&self) -> Option<BorrowedFd<'_>> {
         self.metadata.as_ref().map(OwnedFd::as_fd)
     }
+
+    pub fn try_clone(&self) -> io::Result<Self> {
+        let Self {
+            buckets,
+            direct,
+            metadata,
+        } = self;
+        let mut cloned = ArrayVec::new_const();
+        for bucket in buckets {
+            cloned.push(bucket.try_clone()?);
+        }
+        let buckets = cloned.into_inner().unwrap();
+        Ok(Self {
+            buckets,
+            direct: direct.try_clone()?,
+            metadata: if let Some(m) = metadata {
+                Some(m.try_clone()?)
+            } else {
+                None
+            },
+        })
+    }
 }
 
 struct BucketTooShort {

@@ -182,7 +182,7 @@ pub fn controller<E>(
 ) {
     let mut server = None;
     let mut paste_server = None;
-    let (mut database, reader) = {
+    let (mut database, mut reader) = {
         let run = || {
             let mut dir = data_dir();
 
@@ -200,7 +200,6 @@ pub fn controller<E>(
             }
         }
     };
-    let mut reader = Some(reader);
     let mut cache = Default::default();
 
     for command in once(Command::LoadFirstPage).chain(commands) {
@@ -230,7 +229,7 @@ fn handle_command<E>(
     paste_server: &mut Option<OwnedFd>,
     send: impl FnMut(Message) -> Result<(), E>,
     database: &mut DatabaseReader,
-    reader_: &mut Option<EntryReader>,
+    reader: &mut EntryReader,
     cache: &mut SearchCache,
 ) -> Result<Option<Message>, CommandError> {
     let shitty_refresh = |database: &mut DatabaseReader| {
@@ -254,7 +253,6 @@ fn handle_command<E>(
         run(database.main_ring_mut());
     };
 
-    let reader = reader_.as_mut().unwrap();
     match command {
         Command::LoadFirstPage => {
             shitty_refresh(database);
@@ -345,7 +343,7 @@ fn handle_command<E>(
                 SearchKind::Mime => Query::Mimes(Regex::new(&query)?),
             };
             Ok(Some(Message::SearchResults(
-                do_search(query, reader_, database, send, cache).into(),
+                do_search(query, reader, database, send, cache).into(),
             )))
         }
         Command::LoadImage(id) => {
@@ -534,16 +532,20 @@ impl Ord for SearchEntry {
 
 fn do_search<E>(
     query: Query,
-    reader_: &mut Option<EntryReader>,
+    reader: &mut EntryReader,
     database: &mut DatabaseReader,
     mut send: impl FnMut(Message) -> Result<(), E>,
     (cached_write_heads, reverse_index_cache, search_result_buf): &mut SearchCache,
 ) -> Vec<UiEntry> {
     const MAX_SEARCH_ENTRIES: usize = 256;
 
-    let reader = Arc::new(reader_.take().unwrap());
-
-    let (result_stream, threads) = search(query, reader.clone());
+    let (result_stream, threads) = search(
+        query,
+        reader
+            .try_clone()
+            .map_io_err(|| "Failed to clone reader")
+            .unwrap(),
+    );
     let _ = send(Message::PendingSearch(
         result_stream.cancellation_token().clone(),
     ));
@@ -581,6 +583,7 @@ fn do_search<E>(
         let ring = ring.ring();
         ring.prev_entry(ring.write_head())
     });
+    let token = result_stream.cancellation_token().clone();
     for entry in result_stream.flatten().flat_map(
         |QueryResult {
              location,
@@ -611,6 +614,10 @@ fn do_search<E>(
             })
         },
     ) {
+        if token.is_cancelled() {
+            return Vec::new();
+        }
+
         if results.len() == MAX_SEARCH_ENTRIES {
             if entry < *results.peek().unwrap() {
                 results.pop();
@@ -625,7 +632,6 @@ fn do_search<E>(
         let Err(_) = thread.join() else { continue };
         let _ = send(Message::Error(CommandError::Search));
     }
-    let reader = reader_.insert(Arc::into_inner(reader).unwrap());
 
     let mut results = results.into_vec();
     results.sort_unstable();
