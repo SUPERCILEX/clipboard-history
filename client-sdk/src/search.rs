@@ -479,7 +479,7 @@ fn mime_search_impl(
                 &reader,
                 &token,
                 &sender,
-                |file_name, _fd, mime_type| {
+                |file_name, _, mime_type| {
                     if mime_type.is_empty() {
                         return Ok(());
                     }
