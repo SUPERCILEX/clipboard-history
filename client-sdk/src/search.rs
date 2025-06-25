@@ -232,7 +232,7 @@ struct BufferedSender<const N: usize, T> {
 }
 
 impl<const N: usize, T> BufferedSender<N, T> {
-    fn new(sender: Sender<ArrayVec<T, N>>) -> Self {
+    const fn new(sender: Sender<ArrayVec<T, N>>) -> Self {
         Self {
             buf: ArrayVec::new_const(),
             sender,
