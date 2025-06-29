@@ -15,7 +15,7 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
-use crossbeam_channel::{RecvError, SendError, Sender, TrySendError};
+use crossbeam_channel::{RecvError, SendError, Sender};
 use memchr::memmem::Finder;
 use regex::bytes::Regex;
 use ringboard_core::{
@@ -245,14 +245,7 @@ impl<const N: usize, T> BufferedSender<N, T> {
         if buf.is_full() {
             sender.send(buf.take())
         } else {
-            match sender.try_send(buf.take()) {
-                Ok(()) => Ok(()),
-                Err(TrySendError::Disconnected(buf)) => Err(SendError(buf)),
-                Err(TrySendError::Full(restore)) => {
-                    *buf = restore;
-                    Ok(())
-                }
-            }
+            Ok(())
         }
     }
 }
@@ -270,12 +263,12 @@ fn search_impl<const N: usize>(
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
 ) -> (QueryIter<N>, arrayvec::IntoIter<JoinHandle<()>, 13>) {
-    let (sender, receiver) = crossbeam_channel::bounded(0);
+    let (sender, receiver) = crossbeam_channel::bounded(1);
     let token = CancellationToken::new();
     let mut threads = ArrayVec::<_, 13>::new_const();
 
     let mut extra_direct_threads = 1;
-    let (direct_file_sender, direct_file_receiver) = crossbeam_channel::bounded(0);
+    let (direct_file_sender, direct_file_receiver) = crossbeam_channel::bounded(1);
     for bucket in usize::from(size_to_bucket(
         u16::try_from(query.needle_len().unwrap_or(0)).unwrap_or(u16::MAX),
     ))..reader.buckets().len()
