@@ -16,7 +16,7 @@ ratatui-image = { version = "8.0.1", features = ["crossterm"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "ui"] }
 rustix = { version = "1.0.7", features = ["stdio"] }
 thiserror = "2.0.12"
-tracy-client = { version = "0.18.1", optional = true }
+tracy-client = { version = "0.18.2", optional = true }
 tui-textarea = "0.7.0"
 
 [features]

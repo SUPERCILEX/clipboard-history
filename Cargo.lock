@@ -170,9 +170,9 @@ checksum = "dde20b3d026af13f561bdd0f15edf01fc734f0dafcedbaf42bba506a9517f223"
 
 [[package]]
 name = "arboard"
-version = "3.5.0"
+version = "3.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1df21f715862ede32a0c525ce2ca4d52626bb0007f8c18b87a384503ac33e70"
+checksum = "55f533f8e0af236ffe5eb979b99381df3258853f00ba2e44b6e1955292c75227"
 dependencies = [
  "clipboard-win",
  "image",
@@ -643,7 +643,7 @@ checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
 name = "clipboard-history"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "arrayvec",
  "ask-cli",
@@ -656,7 +656,7 @@ dependencies = [
  "error-stack",
  "fuc_engine",
  "mime_guess",
- "quick-xml",
+ "quick-xml 0.38.0",
  "rand 0.9.1",
  "rand_distr",
  "rand_xoshiro",
@@ -672,7 +672,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-client-sdk"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-core",
@@ -691,7 +691,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-core"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "arrayvec",
  "dirs",
@@ -704,7 +704,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-egui"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -719,7 +719,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-server"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "arrayvec",
  "bitcode",
@@ -739,7 +739,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-tui"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "clipboard-history-client-sdk",
  "error-stack",
@@ -753,7 +753,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-watcher-utils"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "clipboard-history-client-sdk",
  "log",
@@ -764,7 +764,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-wayland"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -784,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-x11"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -994,9 +994,9 @@ dependencies = [
 
 [[package]]
 name = "crunchy"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43da5946c66ffcc7745f48db692ffbb10a83bfe0afd96235c5c2a4fb23994929"
+checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
 name = "cursor-icon"
@@ -1934,9 +1934,9 @@ checksum = "d0263a3d970d5c054ed9312c0057b4f3bde9c0b33836d3637361d4a9e6e7a408"
 
 [[package]]
 name = "indexmap"
-version = "2.9.0"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
+checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
 dependencies = [
  "equivalent",
  "hashbrown",
@@ -2148,9 +2148,9 @@ checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
 name = "libredox"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0ff37bd590ca25063e35af745c343cb7a0271906fb7b37e4813e8f79f00268d"
+checksum = "1580801010e535496706ba011c15f8532df6b42297d2e471fec38ceadd8c0638"
 dependencies = [
  "bitflags 2.9.1",
  "libc",
@@ -3099,6 +3099,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "331e97a1af0bf59823e6eadffe373d7b27f485be8748f71471c662c1f269b7fb"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.38.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8927b0664f5c5a98265138b7e3f90aa19a6b21353182469ace36d4ac527b7b1b"
+dependencies = [
+ "memchr",
  "serde",
 ]
 
@@ -3760,9 +3769,9 @@ dependencies = [
 
 [[package]]
 name = "supercilex-tests"
-version = "0.4.18"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36c25306576d1b609849f7e34018b5429335bc27c39e4bf51c6a72848237b750"
+checksum = "faa9e70ce9d23f189f38a95dbf1e3f8624695404a98e7e521dd5bb732a75ccd6"
 dependencies = [
  "clap_builder",
  "expect-test",
@@ -4011,9 +4020,9 @@ dependencies = [
 
 [[package]]
 name = "tracy-client"
-version = "0.18.1"
+version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3927832d93178f979a970d26deed7b03510586e328f31b0f9ad7a73985b8332a"
+checksum = "ef54005d3d760186fd662dad4b7bb27ecd5531cdef54d1573ebd3f20a9205ed7"
 dependencies = [
  "loom",
  "once_cell",
@@ -4022,9 +4031,9 @@ dependencies = [
 
 [[package]]
 name = "tracy-client-sys"
-version = "0.25.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c032d68a49d25d9012a864fef1c64ac17aee43c87e0477bf7301d8ae8bfea7b7"
+checksum = "5f9612d9503675b07b244922ea6f6f3cdd88c43add1b3498084613fc88cdf69d"
 dependencies = [
  "cc",
  "windows-targets 0.52.6",
@@ -4301,7 +4310,7 @@ dependencies = [
 
 [[package]]
 name = "wayland-interface-check"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "rustc-hash 2.1.1",
  "wayland-client",
@@ -4365,7 +4374,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "896fdafd5d28145fce7958917d69f2fd44469b1d4e861cb5961bcbeebc6d1484"
 dependencies = [
  "proc-macro2",
- "quick-xml",
+ "quick-xml 0.37.5",
  "quote",
 ]
 

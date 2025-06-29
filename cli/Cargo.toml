@@ -20,7 +20,7 @@ dirs = "6.0.0"
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
 fuc_engine = "3.1.0"
 mime_guess = { version = "2.0.5", default-features = false }
-quick-xml = { version = "0.37.5", features = ["serialize"] }
+quick-xml = { version = "0.38.0", features = ["serialize"] }
 rand = { version = "0.9.1", default-features = false, features = ["std"] }
 rand_distr = "0.5.1"
 rand_xoshiro = "0.7.0"
@@ -34,7 +34,7 @@ thiserror = "2.0.12"
 toml = { version = "0.8.23", default-features = false, features = ["display"] }
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.18", default-features = false, features = ["clap"] }
+supercilex-tests = { version = "0.4.19", default-features = false, features = ["clap"] }
 
 [[bin]]
 name = "ringboard"

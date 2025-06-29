@@ -18,7 +18,7 @@ itoa = "1.0.15"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
 rustc-hash = "2.1.1"
 rustix = { version = "1.0.7", features = ["fs"] }
-tracy-client = { version = "0.18.1", optional = true }
+tracy-client = { version = "0.18.2", optional = true }
 
 [features]
 default = ["x11", "wayland"]
