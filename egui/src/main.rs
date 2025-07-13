@@ -19,7 +19,7 @@ use arrayvec::ArrayVec;
 use eframe::{
     egui,
     egui::{
-        CentralPanel, Event, FontId, Frame, Image, Key, Label, Margin, Modifiers,
+        CentralPanel, Event, FontId, Frame, Image, Key, Label, Margin, Modifiers, Popup,
         PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke, TextEdit,
         TextFormat, ThemePreference, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand,
         Widget,
@@ -448,7 +448,7 @@ fn search_ui(
         *last_error = None;
     };
 
-    if ui.input(|input| input.key_pressed(Key::Escape)) && ui.memory(|mem| !mem.any_popup_open()) {
+    if ui.input(|input| input.key_pressed(Key::Escape)) && !Popup::is_any_open(ui.ctx()) {
         if query.is_empty() {
             ui.ctx().send_viewport_cmd(ViewportCommand::Close);
             return;
@@ -459,7 +459,7 @@ fn search_ui(
         response.surrender_focus();
     }
     if ui.input(|input| input.key_pressed(Key::Slash)) {
-        ui.memory_mut(egui::Memory::close_popup);
+        Popup::close_all(ui.ctx());
         response.request_focus();
     }
     if !was_focused && ui.input(|i| i.focused) {
@@ -540,11 +540,11 @@ fn main_ui(
             *state_ = State::default();
             state_.ui.was_focused = was_focused;
         }
-        ui.memory_mut(egui::Memory::close_popup);
+        Popup::close_all(ui.ctx());
         refresh(&mut state_.ui);
         return;
     }
-    let no_popups_open = ui.memory(|mem| !mem.any_popup_open());
+    let no_popups_open = !Popup::is_any_open(ui.ctx());
     if !active_entries!(entries, state).is_empty() && no_popups_open {
         handle_arrow_keys(
             active_entries!(entries, state),
@@ -791,99 +791,96 @@ fn row_ui(
     }
     frame.paint(ui);
 
-    let popup_id = ui.make_persistent_id(entry_id);
+    let popup = Popup::menu(&response).close_behavior(PopupCloseBehavior::CloseOnClickOutside);
+    let popup_id = popup.get_id();
+
     if response.secondary_clicked() || (try_popup && *highlighted_id == Some(entry_id)) {
-        ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+        Popup::toggle_id(ui.ctx(), popup_id);
     }
-    egui::popup::popup_below_widget(
-        ui,
-        popup_id,
-        &response,
-        PopupCloseBehavior::CloseOnClickOutside,
-        |ui| {
-            if state.details_requested != Some(entry_id) {
-                state.details_requested = Some(entry_id);
-                state.detailed_entry = None;
-                let _ = requests.send(Command::GetDetails {
-                    id: entry_id,
-                    with_text: cache.is_text(),
-                });
-            }
 
-            ui.set_max_width(frame.content_ui.available_width());
-            ui.set_max_height(max_popup_height);
-
-            ui.horizontal(|ui| {
-                let mut run = |ui: &mut Ui, command| {
-                    let _ = requests.send(command);
-                    refresh(state);
-                    ui.memory_mut(egui::Memory::close_popup);
-                };
-
-                match entry.ring() {
-                    RingKind::Favorites => {
-                        if ui.button("Unfavorite").clicked() {
-                            run(ui, Command::Unfavorite(entry_id));
-                        }
-                    }
-                    RingKind::Main => {
-                        if ui.button("Favorite").clicked() {
-                            run(ui, Command::Favorite(entry_id));
-                        }
-                    }
-                }
-                if ui.button("Delete").clicked() {
-                    run(ui, Command::Delete(entry_id));
-
-                    let entries = active_entries!(entries, state);
-                    *active_highlighted_id!(state) = entries
-                        .get(index.saturating_add(1))
-                        .or_else(|| entries.get(index.saturating_sub(1)))
-                        .map(|e| e.entry.id());
-                }
+    popup.show(|ui| {
+        if state.details_requested != Some(entry_id) {
+            state.details_requested = Some(entry_id);
+            state.detailed_entry = None;
+            let _ = requests.send(Command::GetDetails {
+                id: entry_id,
+                with_text: cache.is_text(),
             });
-            ui.separator();
+        }
 
-            ui.label(format!("Id: {entry_id}"));
-            match &state.detailed_entry {
-                None => {
-                    ui.separator();
-                    ui.label("Loading…");
-                }
-                Some(Ok(DetailedEntry {
-                    mime_type,
-                    full_text,
-                })) => {
-                    if !mime_type.is_empty() {
-                        ui.label(format!("Mime type: {mime_type}"));
-                    }
-                    ui.separator();
-                    if let Some(full) = full_text {
-                        ScrollArea::both()
-                            .auto_shrink([false, true])
-                            .show(ui, |ui| {
-                                ui.label(RichText::new(&**full).monospace());
-                            });
-                    } else if matches!(cache, UiEntryCache::Image) {
-                        ScrollArea::vertical()
-                            .auto_shrink([false, true])
-                            .show(ui, |ui| {
-                                ui.add(
-                                    Image::new(state.uri_buf.format(entry.id()))
-                                        .max_width(ui.available_width())
-                                        .fit_to_original_size(1.),
-                                );
-                            });
-                    } else {
-                        ui.label("Binary data.");
+        ui.set_max_width(frame.content_ui.available_width());
+        ui.set_max_height(max_popup_height);
+
+        ui.horizontal(|ui| {
+            let mut run = |ui: &mut Ui, command| {
+                let _ = requests.send(command);
+                refresh(state);
+                Popup::close_id(ui.ctx(), popup_id);
+            };
+
+            match entry.ring() {
+                RingKind::Favorites => {
+                    if ui.button("Unfavorite").clicked() {
+                        run(ui, Command::Unfavorite(entry_id));
                     }
                 }
-                Some(Err(e)) => {
-                    ui.label(format!("Failed to get entry details:\n{e}"));
+                RingKind::Main => {
+                    if ui.button("Favorite").clicked() {
+                        run(ui, Command::Favorite(entry_id));
+                    }
                 }
             }
-        },
-    );
+            if ui.button("Delete").clicked() {
+                run(ui, Command::Delete(entry_id));
+
+                let entries = active_entries!(entries, state);
+                *active_highlighted_id!(state) = entries
+                    .get(index.saturating_add(1))
+                    .or_else(|| entries.get(index.saturating_sub(1)))
+                    .map(|e| e.entry.id());
+            }
+        });
+        ui.separator();
+
+        ui.label(format!("Id: {entry_id}"));
+        match &state.detailed_entry {
+            None => {
+                ui.separator();
+                ui.label("Loading…");
+            }
+            Some(Ok(DetailedEntry {
+                mime_type,
+                full_text,
+            })) => {
+                if !mime_type.is_empty() {
+                    ui.label(format!("Mime type: {mime_type}"));
+                }
+                ui.separator();
+                if let Some(full) = full_text {
+                    ScrollArea::both()
+                        .auto_shrink([false, true])
+                        .show(ui, |ui| {
+                            ui.label(RichText::new(&**full).monospace());
+                        });
+                } else if matches!(cache, UiEntryCache::Image) {
+                    ScrollArea::vertical()
+                        .auto_shrink([false, true])
+                        .show(ui, |ui| {
+                            ui.add(
+                                Image::new(state.uri_buf.format(entry.id()))
+                                    .max_width(ui.available_width())
+                                    .fit_to_original_size(1.),
+                            );
+                        });
+                } else {
+                    ui.label("Binary data.");
+                }
+            }
+            Some(Err(e)) => {
+                ui.label(format!("Failed to get entry details:\n{e}"));
+            }
+        }
+    });
     response
 }
 

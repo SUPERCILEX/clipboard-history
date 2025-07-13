@@ -16,4 +16,4 @@ rustc-hash = "2.1.1"
 rustix = { version = "1.0.7", features = ["fs"] }
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.19", default-features = false, features = ["api"] }
+supercilex-tests = { version = "0.4.20", default-features = false, features = ["api"] }
