@@ -808,7 +808,7 @@ fn row_ui(
             });
         }
 
-        ui.set_max_width(frame.content_ui.available_width());
+        ui.set_max_width(frame.content_ui.available_width() - frame.frame.inner_margin.rightf());
         ui.set_max_height(max_popup_height);
 
         ui.horizontal(|ui| {
