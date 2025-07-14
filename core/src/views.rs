@@ -15,14 +15,16 @@ use crate::{
 pub struct RingAndIndex(u32);
 
 impl RingAndIndex {
+    const KIND_SHIFT: u32 = const { u32::BITS - MAX_ENTRIES.leading_zeros() };
+
     #[must_use]
     pub fn new(ring: RingKind, index: u32) -> Self {
         const {
-            assert!(size_of::<RingKind>() == size_of::<u8>());
+            assert!(size_of::<RingKind>() * 8 <= (u32::BITS - Self::KIND_SHIFT) as usize);
         }
         debug_assert!(index <= MAX_ENTRIES);
 
-        Self((index << u8::BITS) | (ring as u32))
+        Self(((ring as u32) << Self::KIND_SHIFT) | (index & ((1 << Self::KIND_SHIFT) - 1)))
     }
 
     pub fn from_id(composite_id: u64) -> Result<Self, IdNotFoundError> {
@@ -31,13 +33,13 @@ impl RingAndIndex {
 
     #[must_use]
     pub fn ring(self) -> RingKind {
-        let ring = u8::try_from(self.0 & u32::from(u8::MAX)).unwrap();
+        let ring = u8::try_from(self.0 >> Self::KIND_SHIFT).unwrap();
         unsafe { transmute::<_, RingKind>(ring) }
     }
 
     #[must_use]
     pub const fn index(self) -> u32 {
-        self.0 >> u8::BITS
+        self.0 & ((1 << Self::KIND_SHIFT) - 1)
     }
 
     #[must_use]
