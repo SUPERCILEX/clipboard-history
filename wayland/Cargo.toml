@@ -17,7 +17,7 @@ log = { version = "0.4.27", features = ["release_max_level_info"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "config"] }
 ringboard-watcher-utils = { package = "clipboard-history-watcher-utils", version = "0", path = "../watcher-utils" }
 rustc-hash = "2.1.1"
-rustix = { version = "1.0.7", features = ["pipe", "event"] }
+rustix = { version = "1.0.8", features = ["pipe", "event"] }
 thiserror = "2.0.12"
 toml = { version = "0.9.2", default-features = false, features = ["serde", "parse"] }
 wayland-client = "0.31.10"

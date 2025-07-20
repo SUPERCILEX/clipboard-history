@@ -462,7 +462,7 @@ pub fn read_at_to_end<Fd: AsFd>(
         }
         match {
             let offset = offset + u64::try_from(buf.written()).unwrap();
-            pread(&file, buf.uninit_mut(), offset)
+            pread(&file, unsafe { buf.as_mut() }, offset)
         } {
             Ok(([], _)) => break Ok(()),
             Ok((init, _)) => {

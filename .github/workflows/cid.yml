@@ -57,16 +57,7 @@ jobs:
         id: auth
       - name: Publish release
         run: |
-          cargo publish --package clipboard-history-core
-          cargo publish --package clipboard-history-client-sdk
-          cargo publish --package clipboard-history-server
-          cargo publish --package clipboard-history
-          cargo publish --package wayland-interface-check
-          cargo publish --package clipboard-history-watcher-utils
-          cargo publish --package clipboard-history-x11
-          cargo publish --package clipboard-history-wayland
-          cargo publish --package clipboard-history-egui
-          cargo publish --package clipboard-history-tui
+          cargo publish --workspace
 
           sed -i 's/name = "clipboard-history-server"/name = "ringboard-server"/' server/Cargo.toml
           cargo publish --package ringboard-server --allow-dirty

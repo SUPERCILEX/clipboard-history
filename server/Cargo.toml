@@ -19,7 +19,7 @@ io-uring = "0.7.8"
 libc = "0.2.174"
 log = { version = "0.4.27", features = ["release_max_level_info"] }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core", features = ["error-stack"] }
-rustix = { version = "1.0.7", features = ["fs", "process", "net", "io_uring"] }
+rustix = { version = "1.0.8", features = ["fs", "process", "net", "io_uring"] }
 sd-notify = { version = "0.4.5", optional = true }
 smallvec = "2.0.0-alpha.11"
 thiserror = "2.0.12"

@@ -23,7 +23,7 @@ use ringboard_core::{
 };
 use rustix::{
     fs::{Mode, OFlags, RawDir, openat},
-    thread::{UnshareFlags, unshare},
+    thread::{UnshareFlags, unshare_unsafe},
 };
 
 use crate::{
@@ -429,7 +429,9 @@ fn stream_through_direct_allocations<const N: usize>(
                 None
             };
 
-            unshare(UnshareFlags::FILES).map_io_err(|| "Failed to unshare FD table.")?;
+            unsafe {
+                unshare_unsafe(UnshareFlags::FILES).map_io_err(|| "Failed to unshare FD table.")?;
+            }
 
             Ok((direct_dir, metadata_dir))
         };

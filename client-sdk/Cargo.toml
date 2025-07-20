@@ -18,13 +18,13 @@ memchr = { version = "2.7.5", optional = true }
 regex = { version = "1.11.1", optional = true }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core" }
 rustc-hash = { version = "2.1.1", optional = true }
-rustix = { version = "1.0.7", features = ["net", "fs", "thread"] }
+rustix = { version = "1.0.8", features = ["net", "fs", "thread"] }
 serde = { version = "1.0.219", features = ["derive"], optional = true }
 smallvec = { version = "2.0.0-alpha.11", optional = true }
 thiserror = "2.0.12"
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.20", default-features = false, features = ["api"] }
+supercilex-tests = { version = "0.4.21", default-features = false, features = ["api"] }
 
 [features]
 error-stack = ["dep:error-stack", "ringboard-core/error-stack"]

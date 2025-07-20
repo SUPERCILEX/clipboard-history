@@ -14,8 +14,8 @@ arrayvec = "0.7.6"
 dirs = "6.0.0"
 error-stack = { version = "0.5.0", default-features = false, optional = true }
 itoa = "1.0.15"
-rustix = { version = "1.0.7", features = ["fs", "mm", "process", "net", "event", "linux_latest"] }
+rustix = { version = "1.0.8", features = ["fs", "mm", "process", "net", "event", "linux_latest"] }
 thiserror = "2.0.12"
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.20", default-features = false, features = ["api"] }
+supercilex-tests = { version = "0.4.21", default-features = false, features = ["api"] }

@@ -27,14 +27,14 @@ rand_xoshiro = "0.7.0"
 regex = "1.11.1"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "deduplication", "search", "config"] }
 rustc-hash = "2.1.1"
-rustix = { version = "1.0.7", features = ["stdio", "event"] }
+rustix = { version = "1.0.8", features = ["stdio", "event"] }
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+serde_json = "1.0.141"
 thiserror = "2.0.12"
 toml = { version = "0.9.2", default-features = false, features = ["serde", "display"] }
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.20", default-features = false, features = ["clap"] }
+supercilex-tests = { version = "0.4.21", default-features = false, features = ["clap"] }
 
 [[bin]]
 name = "ringboard"

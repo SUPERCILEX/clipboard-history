@@ -303,7 +303,7 @@ pub fn xattr_mime_type<Fd: AsFd, MetadataFd: AsFd, MetadataPath: Arg + Copy + De
             .map_io_err(|| format!("Failed to read metadata file: {file_name:?}"))?;
     } else {
         let mut mime_type = mime_type.unfilled();
-        let len = match fgetxattr(fd, c"user.mime_type", mime_type.uninit_mut()) {
+        let len = match fgetxattr(fd, c"user.mime_type", unsafe { mime_type.as_mut() }) {
             Err(Errno::NODATA) => return Ok(MimeType::new_const()),
             r => r.map_io_err(|| "Failed to read extended attributes.")?,
         }
