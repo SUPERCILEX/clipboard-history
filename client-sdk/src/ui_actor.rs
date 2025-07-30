@@ -461,11 +461,16 @@ pub fn ui_entry_(
                 });
                 prev_char_is_whitespace = c.is_whitespace();
             }
-            if suffix_free.len() != prefix_free.len() {
-                one_liner.push('…');
-            }
-            if let Some((_, end)) = &mut highlight {
-                *end = min(*end, one_liner.len());
+            {
+                let prev_len = one_liner.len();
+                if suffix_free.len() != prefix_free.len() {
+                    one_liner.push('…');
+                }
+                if let Some((_, end)) = &mut highlight
+                    && *end > prev_len
+                {
+                    *end = one_liner.len();
+                }
             }
 
             UiEntry {
