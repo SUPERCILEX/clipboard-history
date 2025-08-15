@@ -288,6 +288,11 @@ struct Search {
     #[arg(conflicts_with = "regex")]
     ignore_case: bool,
 
+    /// Output JSON
+    #[arg(long)]
+    #[clap(default_value_t = false)]
+    json: bool,
+
     /// The query string to search for.
     #[arg(required = true)]
     query: String,
@@ -531,53 +536,80 @@ fn search(
     Search {
         regex,
         ignore_case,
+        json,
         query,
     }: Search,
 ) -> Result<(), CliError> {
     const PREFIX_CONTEXT: usize = 40;
     const CONTEXT_WINDOW: usize = 100;
 
-    let (mut database, reader) = open_db()?;
-    let mut output = io::stdout().lock();
-    let mut print_entry = |entry_id,
-                           buf: &[u8],
-                           mime_type: &str,
-                           start: usize,
-                           end: usize|
-     -> Result<(), CoreError> {
-        writeln!(
-            output,
-            "--- ENTRY {entry_id}{} ---",
-            if mime_type.is_empty() {
-                String::new()
-            } else {
-                format!("; {mime_type}")
+    enum Output<Text: AsFd, Json: SerializeSeq> {
+        Text(Text),
+        Json(Json),
+    }
+
+    let output = io::stdout().lock();
+    let mut seq = serde_json::Serializer::new(output);
+    let mut output = if json {
+        Output::Json(seq.serialize_seq(None)?)
+    } else {
+        Output::Text(seq.into_inner())
+    };
+    let mut emit_entry = |entry_id,
+                          buf: &[u8],
+                          mime_type: MimeType,
+                          start: usize,
+                          end: usize|
+     -> Result<(), CliError> {
+        match &mut output {
+            Output::Text(output) => {
+                writeln!(
+                    output,
+                    "--- ENTRY {entry_id}{} ---",
+                    if mime_type.is_empty() {
+                        String::new()
+                    } else {
+                        format!("; {mime_type}")
+                    }
+                )
+                .map_io_err(|| "Failed to write to stdout.")?;
+
+                let bold_start = start.min(PREFIX_CONTEXT);
+                let (prefix, suffix) = buf.split_at(bold_start);
+                let (middle, suffix) = suffix.split_at((end - start).min(suffix.len()));
+                let mut no_empty_write = |buf: &[u8]| -> Result<(), CoreError> {
+                    if !buf.is_empty() {
+                        output
+                            .write_all(buf)
+                            .map_io_err(|| "Failed to write to stdout.")?;
+                    }
+                    Ok(())
+                };
+
+                no_empty_write(prefix)?;
+                no_empty_write(b"\x1b[1m")?;
+                no_empty_write(middle)?;
+                no_empty_write(b"\x1b[0m")?;
+                no_empty_write(suffix)?;
+                no_empty_write(b"\n\n")?;
+
+                Ok(())
             }
-        )
-        .map_io_err(|| "Failed to write to stdout.")?;
-
-        let bold_start = start.min(PREFIX_CONTEXT);
-        let (prefix, suffix) = buf.split_at(bold_start);
-        let (middle, suffix) = suffix.split_at((end - start).min(suffix.len()));
-        let mut no_empty_write = |buf: &[u8]| -> Result<(), CoreError> {
-            if !buf.is_empty() {
-                output
-                    .write_all(buf)
-                    .map_io_err(|| "Failed to write to stdout.")?;
+            Output::Json(seq) => {
+                seq.serialize_element(&ExportEntry {
+                    id: entry_id,
+                    data: str::from_utf8(buf).map_or_else(
+                        |_| ExportData::Bytes(buf.into()),
+                        |data| ExportData::Human(data.into()),
+                    ),
+                    mime_type,
+                })?;
+                Ok(())
             }
-            Ok(())
-        };
-
-        no_empty_write(prefix)?;
-        no_empty_write(b"\x1b[1m")?;
-        no_empty_write(middle)?;
-        no_empty_write(b"\x1b[0m")?;
-        no_empty_write(suffix)?;
-        no_empty_write(b"\n\n")?;
-
-        Ok(())
+        }
     };
 
+    let (mut database, reader) = open_db()?;
     let reader = Arc::new(reader);
     let (result_stream, threads) = {
         // TODO https://github.com/rust-lang/rust-clippy/issues/13227
@@ -610,18 +642,23 @@ fn search(
             }
             EntryLocation::File { entry_id } => {
                 let entry = unsafe { database.get(entry_id)? };
-                let file = entry.to_file_raw(&reader)?.unwrap();
+                if json {
+                    let bytes = entry.to_slice_raw(&reader)?.unwrap();
+                    emit_entry(entry_id, &bytes, bytes.mime_type()?, start, end)?;
+                } else {
+                    let file = entry.to_file_raw(&reader)?.unwrap();
 
-                let mut buf = [MaybeUninit::uninit(); CONTEXT_WINDOW];
-                let mut buf = BorrowedBuf::from(buf.as_mut_slice());
-                read_at_to_end(
-                    &*file,
-                    buf.unfilled(),
-                    u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap(),
-                )
-                .map_io_err(|| format!("failed to read from direct entry {entry_id}."))?;
+                    let mut buf = [MaybeUninit::uninit(); CONTEXT_WINDOW];
+                    let mut buf = BorrowedBuf::from(buf.as_mut_slice());
+                    read_at_to_end(
+                        &*file,
+                        buf.unfilled(),
+                        u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap(),
+                    )
+                    .map_io_err(|| format!("failed to read from direct entry {entry_id}."))?;
 
-                print_entry(entry_id, buf.filled(), &file.mime_type()?, start, end)?;
+                    emit_entry(entry_id, buf.filled(), file.mime_type()?, start, end)?;
+                }
             }
         }
     }
@@ -643,14 +680,24 @@ fn search(
         let (start, end) = (usize::from(start), usize::from(end));
 
         let bytes = entry.to_slice(&mut reader)?;
-        let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
-        print_entry(
-            entry.id(),
-            &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
-            &bytes.mime_type()?,
-            start,
-            end,
-        )?;
+        let mime_type = bytes.mime_type()?;
+        if json {
+            emit_entry(entry.id(), &bytes, mime_type, start, end)?;
+        } else {
+            let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
+            emit_entry(
+                entry.id(),
+                &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
+                mime_type,
+                start,
+                end,
+            )?;
+        }
+    }
+
+    match output {
+        Output::Text(_) => (),
+        Output::Json(seq) => SerializeSeq::end(seq)?,
     }
 
     Ok(())

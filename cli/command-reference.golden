@@ -62,6 +62,9 @@ Options:
   -i, --ignore-case
           Ignore ASCII casing when searching
 
+      --json
+          Output JSON
+
   -h, --help
           Print help (use `-h` for a summary)
 
