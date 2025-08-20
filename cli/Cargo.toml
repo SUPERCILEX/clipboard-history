@@ -14,14 +14,14 @@ arrayvec = { version = "0.7.6", features = ["serde"] }
 ask = { package = "ask-cli", version = "0.3.0" }
 base64 = "0.22.1"
 base64-serde = "0.8.0"
-clap = { version = "4.5.41", features = ["derive", "wrap_help"] }
+clap = { version = "4.5.45", features = ["derive", "wrap_help"] }
 clap-num = "1.2.0"
 dirs = "6.0.0"
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
-fuc_engine = "3.1.0"
+fuc_engine = "3.1.1"
 mime_guess = { version = "2.0.5", default-features = false }
-quick-xml = { version = "0.38.0", features = ["serialize"] }
-rand = { version = "0.9.1", default-features = false, features = ["std"] }
+quick-xml = { version = "0.38.2", features = ["serialize"] }
+rand = { version = "0.9.2", default-features = false, features = ["std"] }
 rand_distr = "0.5.1"
 rand_xoshiro = "0.7.0"
 regex = "1.11.1"
@@ -29,9 +29,9 @@ ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path 
 rustc-hash = "2.1.1"
 rustix = { version = "1.0.8", features = ["stdio", "event"] }
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.141"
-thiserror = "2.0.12"
-toml = { version = "0.9.2", default-features = false, features = ["serde", "display"] }
+serde_json = "1.0.143"
+thiserror = "2.0.15"
+toml = { version = "0.9.5", default-features = false, features = ["serde", "display"] }
 
 [dev-dependencies]
 supercilex-tests = { version = "0.4.21", default-features = false, features = ["clap"] }

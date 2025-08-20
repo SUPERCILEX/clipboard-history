@@ -11,7 +11,7 @@ license.workspace = true
 
 [dependencies]
 arrayvec = "0.7.6"
-eframe = { version = "0.32.0", default-features = false, features = ["glow"] }
+eframe = { version = "0.32.1", default-features = false, features = ["glow"] }
 font-kit = { version = "0.14.3", optional = true }
 image = "0.25.6"
 itoa = "1.0.15"
