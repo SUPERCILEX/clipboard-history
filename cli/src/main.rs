@@ -4,6 +4,7 @@ use std::{
     borrow::Cow,
     cmp::{max, min},
     collections::{BTreeMap, HashMap, VecDeque},
+    fmt,
     fmt::{Debug, Display, Formatter},
     fs,
     fs::{File, create_dir_all},
@@ -1309,85 +1310,104 @@ fn stats() -> Result<(), CliError> {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             let mut s = f.debug_struct("Stats");
 
-            s.field_with("raw", |f| {
-                f.debug_struct("Raw")
-                    .field("rings", &self.rings)
-                    .field("buckets", &self.buckets)
-                    .field("direct_files", &self.direct_files)
-                    .finish()
-            });
-            s.field_with("computed", |f| {
-                f.debug_struct("Computed")
-                    .field_with("rings", |f| {
-                        let mut rings = f.debug_map();
-                        for (
-                            kind,
-                            &RingStats {
-                                capacity: _,
-                                len,
-                                bucketed_entry_count,
-                                file_entry_count,
-                                num_duplicates: _,
-                                min_entry_size: _,
-                                max_entry_size: _,
-                                owned_bytes,
-                            },
-                        ) in &self.rings
-                        {
-                            rings.key(kind).value_with(|f| {
-                                let num_entries = bucketed_entry_count + file_entry_count;
-                                let mut s = f.debug_struct("Ring");
-                                s.field("num_entries", &num_entries)
-                                    .field("uninitialized_entry_count", &(len - num_entries))
-                                    .field(
-                                        "mean_entry_size",
-                                        &(owned_bytes as f64 / f64::from(num_entries)),
-                                    );
-                                s.finish()
-                            });
-                        }
-                        rings.finish()
-                    })
-                    .field_with("buckets", |f| {
-                        let mut buckets = f.debug_map();
-                        for &BucketStats {
-                            size_class,
-                            num_slots,
-                            used_slots,
-                            owned_bytes,
-                        } in &self.buckets
-                        {
-                            let length = bucket_to_length(size_class - 2);
-                            let used_bytes = u64::from(length) * u64::from(used_slots);
-                            let fragmentation = used_bytes - owned_bytes;
-                            buckets.key(&length).value_with(|f| {
-                                f.debug_struct("Bucket")
-                                    .field("free_slots", &(num_slots - used_slots))
-                                    .field("fragmentation_bytes", &fragmentation)
+            s.field(
+                "raw",
+                &fmt::from_fn(|f| {
+                    f.debug_struct("Raw")
+                        .field("rings", &self.rings)
+                        .field("buckets", &self.buckets)
+                        .field("direct_files", &self.direct_files)
+                        .finish()
+                }),
+            );
+            s.field(
+                "computed",
+                &fmt::from_fn(|f| {
+                    f.debug_struct("Computed")
+                        .field(
+                            "rings",
+                            &fmt::from_fn(|f| {
+                                let mut rings = f.debug_map();
+                                for (
+                                    kind,
+                                    &RingStats {
+                                        capacity: _,
+                                        len,
+                                        bucketed_entry_count,
+                                        file_entry_count,
+                                        num_duplicates: _,
+                                        min_entry_size: _,
+                                        max_entry_size: _,
+                                        owned_bytes,
+                                    },
+                                ) in &self.rings
+                                {
+                                    rings.key(kind).value(&fmt::from_fn(|f| {
+                                        let num_entries = bucketed_entry_count + file_entry_count;
+                                        let mut s = f.debug_struct("Ring");
+                                        s.field("num_entries", &num_entries)
+                                            .field(
+                                                "uninitialized_entry_count",
+                                                &(len - num_entries),
+                                            )
+                                            .field(
+                                                "mean_entry_size",
+                                                &(owned_bytes as f64 / f64::from(num_entries)),
+                                            );
+                                        s.finish()
+                                    }));
+                                }
+                                rings.finish()
+                            }),
+                        )
+                        .field(
+                            "buckets",
+                            &fmt::from_fn(|f| {
+                                let mut buckets = f.debug_map();
+                                for &BucketStats {
+                                    size_class,
+                                    num_slots,
+                                    used_slots,
+                                    owned_bytes,
+                                } in &self.buckets
+                                {
+                                    let length = bucket_to_length(size_class - 2);
+                                    let used_bytes = u64::from(length) * u64::from(used_slots);
+                                    let fragmentation = used_bytes - owned_bytes;
+                                    buckets.key(&length).value(&fmt::from_fn(|f| {
+                                        f.debug_struct("Bucket")
+                                            .field("free_slots", &(num_slots - used_slots))
+                                            .field("fragmentation_bytes", &fragmentation)
+                                            .field(
+                                                "fragmentation_ratio",
+                                                &(fragmentation as f64 / used_bytes as f64),
+                                            )
+                                            .finish()
+                                    }));
+                                }
+                                buckets.finish()
+                            }),
+                        )
+                        .field(
+                            "direct_files",
+                            &fmt::from_fn(|f| {
+                                let &DirectFileStats {
+                                    owned_bytes,
+                                    allocated_bytes,
+                                    mime_types: _,
+                                } = &self.direct_files;
+                                f.debug_struct("DirectFiles")
                                     .field(
                                         "fragmentation_ratio",
-                                        &(fragmentation as f64 / used_bytes as f64),
+                                        &((allocated_bytes - owned_bytes) as f64
+                                            / allocated_bytes as f64),
                                     )
                                     .finish()
-                            });
-                        }
-                        buckets.finish()
-                    })
-                    .field_with("direct_files", |f| {
-                        let &DirectFileStats {
-                            owned_bytes,
-                            allocated_bytes,
-                            mime_types: _,
-                        } = &self.direct_files;
-                        f.debug_struct("DirectFiles")
-                            .field(
-                                "fragmentation_ratio",
-                                &((allocated_bytes - owned_bytes) as f64 / allocated_bytes as f64),
-                            )
-                            .finish()
-                    })
-                    .finish()
-            });
+                            }),
+                        )
+                        .finish()
+                }),
+            );
 
             s.finish()
         }
