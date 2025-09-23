@@ -1,5 +1,3 @@
-#![feature(core_io_borrowed_buf)]
-
 use std::borrow::Cow;
 
 pub use ring_reader::{

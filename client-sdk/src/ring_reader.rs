@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Formatter},
     fs::File,
     io,
-    io::{BorrowedBuf, ErrorKind},
+    io::ErrorKind,
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
     os::{
@@ -17,6 +17,7 @@ use std::{
 use arrayvec::ArrayVec;
 use ringboard_core::{
     IoErr, NUM_BUCKETS, PathView, RingAndIndex, bucket_to_length, direct_file_name, open_buckets,
+    polyfills::BorrowedBuf,
     protocol::{IdNotFoundError, MimeType, RingKind, composite_id, decompose_id},
     read_at_to_end,
     ring::{InitializedEntry, Mmap, Ring},

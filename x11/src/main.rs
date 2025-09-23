@@ -1,5 +1,3 @@
-#![feature(if_let_guard)]
-
 use std::{
     borrow::Cow,
     fmt::Display,
@@ -644,47 +642,163 @@ fn handle_x11_event(
                 info!("Lost selection ownership.");
             }
         }
-        Event::PropertyNotify(event)
+        Event::PropertyNotify(event) => {
             if let Some((requestor, paste_transfer)) = paste_allocations
                 .iter_mut()
-                .find(|&&mut (requestor, _)| requestor == event.window) =>
-        {
-            if event.state != Property::DELETE {
-                trace!(
-                    "Ignoring irrelevant property state change: {:?}.",
-                    event.state
-                );
-                return Ok(());
-            }
-            let Some((target, data, start)) = paste_transfer else {
-                error!("Received property notification after INCR transfer completed.");
-                return Ok(());
-            };
+                .find(|&&mut (requestor, _)| requestor == event.window)
+            {
+                if event.state != Property::DELETE {
+                    trace!(
+                        "Ignoring irrelevant property state change: {:?}.",
+                        event.state
+                    );
+                    return Ok(());
+                }
+                let Some((target, data, start)) = paste_transfer else {
+                    error!("Received property notification after INCR transfer completed.");
+                    return Ok(());
+                };
 
-            let end = start.saturating_add(MAX_TRANSFER_SIZE).min(data.len());
-            if *start == end {
-                conn.change_window_attributes(
+                let end = start.saturating_add(MAX_TRANSFER_SIZE).min(data.len());
+                if *start == end {
+                    conn.change_window_attributes(
+                        event.window,
+                        &ChangeWindowAttributesAux::new().event_mask(EventMask::NO_EVENT),
+                    )?;
+                }
+                conn.change_property8(
+                    PropMode::REPLACE,
                     event.window,
-                    &ChangeWindowAttributesAux::new().event_mask(EventMask::NO_EVENT),
+                    event.atom,
+                    *target,
+                    &data[*start..end],
                 )?;
-            }
-            conn.change_property8(
-                PropMode::REPLACE,
-                event.window,
-                event.atom,
-                *target,
-                &data[*start..end],
-            )?;
-            if *start == end {
-                info!("Responded to paste request with large selection.");
-                *requestor = x11rb::NONE;
-                *paste_transfer = None;
+                if *start == end {
+                    info!("Responded to paste request with large selection.");
+                    *requestor = x11rb::NONE;
+                    *paste_transfer = None;
+                } else {
+                    debug!(
+                        "Continuing INCR transfer with {} bytes remaining.",
+                        data.len() - end
+                    );
+                    *start = end;
+                }
             } else {
-                debug!(
-                    "Continuing INCR transfer with {} bytes remaining.",
-                    data.len() - end
+                if event.atom == window_name_atom {
+                    trace!("Ignoring window name property change.");
+                    return Ok(());
+                }
+                if event.state != Property::NEW_VALUE {
+                    trace!(
+                        "Ignoring irrelevant property state change: {:?}.",
+                        event.state
+                    );
+                    return Ok(());
+                }
+                let Some((state, _)) = allocator.get(event.window) else {
+                    warn!(
+                        "Ignoring property notify to unknown requester {}.",
+                        event.window
+                    );
+                    return Ok(());
+                };
+
+                trace!(
+                    "Processing property notification for atom {}<{}>: {state:?}",
+                    event.atom,
+                    debug_get_atom_name(conn, event.atom)?,
                 );
-                *start = end;
+                match state {
+                    State::PendingIncr { .. } => {
+                        let State::PendingIncr {
+                            mime_atom,
+                            mime_type,
+                            file,
+                            written,
+                        } = mem::take(state)
+                        else {
+                            unreachable!()
+                        };
+                        let property = conn.get_property(
+                            true,
+                            event.window,
+                            event.atom,
+                            GetPropertyType::ANY,
+                            0,
+                            u32::MAX,
+                        )?;
+                        conn.flush()?;
+
+                        let file = if let Some(file) = file {
+                            file
+                        } else {
+                            File::from(
+                                create_tmp_file(
+                                    tmp_file_unsupported,
+                                    CWD,
+                                    c".",
+                                    c".ringboard-x11-scratchpad",
+                                    OFlags::RDWR,
+                                    Mode::empty(),
+                                )
+                                .map_io_err(|| "Failed to create selection transfer temp file.")?,
+                            )
+                        };
+
+                        let property = property.reply()?;
+                        if property.value.is_empty() {
+                            if written == 0 {
+                                warn!("Dropping empty INCR selection.");
+                                return Ok(());
+                            }
+
+                            let data_hash = CopyDeduplication::hash(CopyData::File(&file), written);
+                            if let Some(existing) =
+                                deduplicator.check(data_hash, CopyData::File(&file))
+                            {
+                                info!("Promoting duplicate large selection to front.");
+                                if let MoveToFrontResponse::Success { id } =
+                                    MoveToFrontRequest::response(&server, existing, None)?
+                                {
+                                    deduplicator.remember(data_hash, id);
+                                    return Ok(());
+                                }
+                            }
+
+                            let AddResponse::Success { id } = AddRequest::response_add_unchecked(
+                                &server,
+                                RingKind::Main,
+                                &mime_type,
+                                file,
+                            )?;
+                            deduplicator.remember(data_hash, id);
+                            info!("Large selection transfer complete.");
+                        } else {
+                            debug!("Writing {} bytes for INCR transfer.", property.value.len());
+                            file.write_all_at(&property.value, written)
+                                .map_io_err(|| "Failed to write data to temp file.")?;
+                            *state = State::PendingIncr {
+                                mime_atom,
+                                mime_type,
+                                file: Some(file),
+                                written: written + u64::try_from(property.value.len()).unwrap(),
+                            }
+                        }
+                    }
+                    State::FastPathPendingSelection
+                    | State::TargetsRequest { .. }
+                    | State::PendingSelection { .. } => {
+                        trace!("Ignoring property to be processed in selection notification.");
+                    }
+                    State::Free => {
+                        error!(
+                            "Received property notification for free atom {}<{}>.",
+                            event.atom,
+                            debug_get_atom_name(conn, event.atom)?,
+                        );
+                    }
+                }
             }
         }
         Event::FocusIn(e) => {
@@ -951,121 +1065,6 @@ fn handle_x11_event(
                         },
                         event.property,
                         debug_get_atom_name(conn, event.property)?,
-                    );
-                }
-            }
-        }
-        Event::PropertyNotify(event) => {
-            if event.atom == window_name_atom {
-                trace!("Ignoring window name property change.");
-                return Ok(());
-            }
-            if event.state != Property::NEW_VALUE {
-                trace!(
-                    "Ignoring irrelevant property state change: {:?}.",
-                    event.state
-                );
-                return Ok(());
-            }
-            let Some((state, _)) = allocator.get(event.window) else {
-                warn!(
-                    "Ignoring property notify to unknown requester {}.",
-                    event.window
-                );
-                return Ok(());
-            };
-
-            trace!(
-                "Processing property notification for atom {}<{}>: {state:?}",
-                event.atom,
-                debug_get_atom_name(conn, event.atom)?,
-            );
-            match state {
-                State::PendingIncr { .. } => {
-                    let State::PendingIncr {
-                        mime_atom,
-                        mime_type,
-                        file,
-                        written,
-                    } = mem::take(state)
-                    else {
-                        unreachable!()
-                    };
-                    let property = conn.get_property(
-                        true,
-                        event.window,
-                        event.atom,
-                        GetPropertyType::ANY,
-                        0,
-                        u32::MAX,
-                    )?;
-                    conn.flush()?;
-
-                    let file = if let Some(file) = file {
-                        file
-                    } else {
-                        File::from(
-                            create_tmp_file(
-                                tmp_file_unsupported,
-                                CWD,
-                                c".",
-                                c".ringboard-x11-scratchpad",
-                                OFlags::RDWR,
-                                Mode::empty(),
-                            )
-                            .map_io_err(|| "Failed to create selection transfer temp file.")?,
-                        )
-                    };
-
-                    let property = property.reply()?;
-                    if property.value.is_empty() {
-                        if written == 0 {
-                            warn!("Dropping empty INCR selection.");
-                            return Ok(());
-                        }
-
-                        let data_hash = CopyDeduplication::hash(CopyData::File(&file), written);
-                        if let Some(existing) = deduplicator.check(data_hash, CopyData::File(&file))
-                        {
-                            info!("Promoting duplicate large selection to front.");
-                            if let MoveToFrontResponse::Success { id } =
-                                MoveToFrontRequest::response(&server, existing, None)?
-                            {
-                                deduplicator.remember(data_hash, id);
-                                return Ok(());
-                            }
-                        }
-
-                        let AddResponse::Success { id } = AddRequest::response_add_unchecked(
-                            &server,
-                            RingKind::Main,
-                            &mime_type,
-                            file,
-                        )?;
-                        deduplicator.remember(data_hash, id);
-                        info!("Large selection transfer complete.");
-                    } else {
-                        debug!("Writing {} bytes for INCR transfer.", property.value.len());
-                        file.write_all_at(&property.value, written)
-                            .map_io_err(|| "Failed to write data to temp file.")?;
-                        *state = State::PendingIncr {
-                            mime_atom,
-                            mime_type,
-                            file: Some(file),
-                            written: written + u64::try_from(property.value.len()).unwrap(),
-                        }
-                    }
-                }
-                State::FastPathPendingSelection
-                | State::TargetsRequest { .. }
-                | State::PendingSelection { .. } => {
-                    trace!("Ignoring property to be processed in selection notification.");
-                }
-                State::Free => {
-                    error!(
-                        "Received property notification for free atom {}<{}>.",
-                        event.atom,
-                        debug_get_atom_name(conn, event.atom)?,
                     );
                 }
             }

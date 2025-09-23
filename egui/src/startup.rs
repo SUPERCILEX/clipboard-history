@@ -6,7 +6,7 @@ use std::{
     mem::MaybeUninit,
     os::{fd::AsFd, unix::ffi::OsStringExt},
     path::PathBuf,
-    process::ExitCode,
+    process::exit,
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -48,7 +48,7 @@ pub fn maybe_open_existing_instance_and_exit() -> Result<(), CoreError> {
 
     unlinkat(CWD, &path, AtFlags::empty())
         .map_io_err(|| format!("Failed to remove sleep file: {path:?}"))?;
-    ExitCode::SUCCESS.exit_process()
+    exit(0)
 }
 
 pub fn maintain_single_instance(

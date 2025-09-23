@@ -1,16 +1,13 @@
-#![feature(debug_closure_helpers, core_io_borrowed_buf)]
-
 use std::{
     borrow::Cow,
     cmp::{max, min},
     collections::{BTreeMap, HashMap, VecDeque},
-    fmt,
     fmt::{Debug, Display, Formatter},
     fs,
     fs::{File, create_dir_all},
     hash::BuildHasherDefault,
     io,
-    io::{BorrowedBuf, BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
+    io::{BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
     mem::MaybeUninit,
     os::{
         fd::{AsFd, OwnedFd},
@@ -22,7 +19,6 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
-use ask::Answer;
 use base64_serde::base64_serde_type;
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
@@ -48,6 +44,7 @@ use ringboard_sdk::{
         BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, SendQuitAndWait, acquire_lock_file,
         bucket_to_length, create_tmp_file,
         dirs::{data_dir, paste_socket_file, socket_file},
+        polyfills::BorrowedBuf,
         protocol::{
             AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
             RemoveResponse, Response, RingKind, SwapResponse, decompose_id,
@@ -70,6 +67,255 @@ use rustix::{
 };
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeSeq};
 use thiserror::Error;
+
+use crate::ask::Answer;
+
+mod ask {
+    use std::{
+        io,
+        io::{Read, Write},
+        mem,
+        mem::MaybeUninit,
+        process::{ExitCode, Termination},
+    };
+
+    use ringboard_sdk::core::polyfills::BorrowedBuf;
+
+    /// The answer to a question posed in [ask].
+    #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+    pub enum Answer {
+        Yes,
+        No,
+        Unknown,
+    }
+
+    impl Termination for Answer {
+        fn report(self) -> ExitCode {
+            match self {
+                Self::Yes => ExitCode::SUCCESS,
+                Self::No => ExitCode::FAILURE,
+                Self::Unknown => ExitCode::from(2),
+            }
+        }
+    }
+
+    enum State {
+        Start,
+        Ask {
+            /// Passthrough for [`State::Read`].
+            pending_crlf: bool,
+        },
+        /// Continuously reads from stdin until encountering a newline,
+        /// returning the index of its first byte.
+        ///
+        /// This state deals with a number of edge cases:
+        /// - If stdin reaches the EOF, exit the process *after* processing all
+        ///   remaining input.
+        /// - If a \r byte is seen on the border of the buffer, fail the input
+        ///   (because it will be at a higher index than the max length of all
+        ///   possible valid replies and therefore cannot be a valid reply) and
+        ///   consume a \n if it is the next byte. Note that this consumption
+        ///   cannot happen before printing the question again or we might get
+        ///   blocked on stdin if there are no more bytes available.
+        /// - If no newline was found within the buffer, fail the reply since it
+        ///   cannot possibly be valid.
+        Read {
+            /// The reply is known to be invalid, but we have not yet seen a
+            /// newline.
+            failed: bool,
+            /// A CRLF might be striding the buffer.
+            pending_crlf: bool,
+        },
+        HandleReply {
+            newline_index: usize,
+        },
+    }
+
+    /// Ask the user a yes or no question on stdout, reading the reply from
+    /// stdin.
+    ///
+    /// Replies are delimited by newlines of any kind and must be one of ''
+    /// (maps to yes), 'y', 'yes', 'n', 'no', case-insensitive. If the reply
+    /// fails to parse, the question will be asked again ad infinitum.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::{io, str::from_utf8};
+    /// use ask_cli::{Answer, ask};
+    ///
+    /// assert!(matches!(
+    ///     ask(
+    ///         "Continue? [Y/n] ",
+    ///         Answer::Yes,
+    ///         &mut "y\n".as_bytes(),
+    ///         &mut io::sink()
+    ///     ),
+    ///     Ok(Answer::Yes)
+    /// ));
+    /// assert!(matches!(
+    ///     ask(
+    ///         "Continue? [Y/n] ",
+    ///         Answer::Yes,
+    ///         &mut "n\n".as_bytes(),
+    ///         &mut io::sink()
+    ///     ),
+    ///     Ok(Answer::No)
+    /// ));
+    /// assert!(matches!(
+    ///     ask(
+    ///         "Continue? [Y/n] ",
+    ///         Answer::Yes,
+    ///         &mut "".as_bytes(),
+    ///         &mut io::sink()
+    ///     ),
+    ///     Ok(Answer::Unknown)
+    /// ));
+    /// assert!(matches!(
+    ///     ask(
+    ///         "Continue? [y/N] ",
+    ///         Answer::No,
+    ///         &mut "\n".as_bytes(),
+    ///         &mut io::sink()
+    ///     ),
+    ///     Ok(Answer::No)
+    /// ));
+    ///
+    /// // Here we use 3 different kinds of line endings
+    /// let mut stdout = Vec::new();
+    /// let answer = ask(
+    ///     "Continue? [Y/n] ",
+    ///     Answer::Yes,
+    ///     &mut "a\nb\rc\r\nyes\n".as_bytes(),
+    ///     &mut stdout,
+    /// )
+    /// .unwrap();
+    /// assert_eq!(
+    ///     "Continue? [Y/n] Continue? [Y/n] Continue? [Y/n] Continue? [Y/n] ",
+    ///     from_utf8(&stdout).unwrap()
+    /// );
+    /// assert!(matches!(answer, Answer::Yes));
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Underlying I/O errors are bubbled up.
+    pub fn ask<Q: AsRef<[u8]>, In: Read, Out: Write>(
+        question: Q,
+        default: Answer,
+        stdin: &mut In,
+        stdout: &mut Out,
+    ) -> Result<Answer, io::Error> {
+        // max_len(yes, no, y, n) = 3 -> 3 + 2 bytes for new lines
+        const BUF_LEN: usize = 5;
+
+        let (mut buf, mut buf2) = (
+            [MaybeUninit::uninit(); BUF_LEN],
+            [MaybeUninit::uninit(); BUF_LEN],
+        );
+        let (mut buf, mut buf2) = (
+            BorrowedBuf::from(buf.as_mut()),
+            BorrowedBuf::from(buf2.as_mut()),
+        );
+
+        macro_rules! consume_bytes {
+            ($count:expr) => {
+                buf2.clear();
+                buf2.unfilled().append(&buf.filled()[$count..]);
+                mem::swap(&mut buf, &mut buf2);
+            };
+        }
+
+        macro_rules! consume_newline {
+            ($newline_index:expr) => {
+                let newline_index = $newline_index;
+                let is_crlf = buf.filled()[newline_index] == b'\r'
+                    && matches!(buf.filled().get(newline_index + 1), Some(b'\n'));
+                let skip = if is_crlf { 2 } else { 1 };
+                consume_bytes!(newline_index + skip);
+            };
+        }
+
+        let mut state = State::Start;
+        loop {
+            state = match state {
+                State::Start => State::Ask {
+                    pending_crlf: false,
+                },
+                State::Ask { pending_crlf } => {
+                    stdout.write_all(question.as_ref())?;
+                    stdout.flush()?;
+                    State::Read {
+                        failed: false,
+                        pending_crlf,
+                    }
+                }
+                State::Read {
+                    failed,
+                    pending_crlf,
+                } => {
+                    debug_assert!(buf.len() < buf.capacity());
+
+                    let prev_count = buf.len();
+                    {
+                        let mut buf = buf.unfilled();
+                        let r = stdin.read(buf.ensure_init().init_mut())?;
+                        buf.advance(r);
+                    }
+
+                    if pending_crlf && matches!(buf.filled().first(), Some(b'\n')) {
+                        consume_bytes!(1);
+                    }
+
+                    match buf.filled().iter().position(|&b| b == b'\n' || b == b'\r') {
+                        Some(newline_index) if newline_index == BUF_LEN - 1 => {
+                            let pending_crlf = buf.filled()[newline_index] == b'\r';
+                            buf.clear();
+                            State::Ask { pending_crlf }
+                        }
+                        Some(newline_index) if failed => {
+                            consume_newline!(newline_index);
+                            State::Ask {
+                                pending_crlf: false,
+                            }
+                        }
+                        Some(newline_index) => State::HandleReply { newline_index },
+                        None if buf.len() == buf.capacity() => {
+                            buf.clear();
+                            State::Read {
+                                failed: true,
+                                pending_crlf: false,
+                            }
+                        }
+                        None if !pending_crlf && buf.len() == prev_count => {
+                            // Reached EOF
+                            return Ok(Answer::Unknown);
+                        }
+                        None => State::Read {
+                            failed,
+                            pending_crlf: false,
+                        },
+                    }
+                }
+                State::HandleReply { newline_index } => {
+                    let reply = &mut buf.filled_mut()[..newline_index];
+                    reply.make_ascii_lowercase();
+                    match &*reply {
+                        b"" => return Ok(default),
+                        b"y" | b"yes" => return Ok(Answer::Yes),
+                        b"n" | b"no" => return Ok(Answer::No),
+                        _ => {
+                            consume_newline!(newline_index);
+                            State::Ask {
+                                pending_crlf: false,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// The Ringboard (clipboard history) CLI.
 ///
@@ -1328,13 +1574,43 @@ fn stats() -> Result<(), CliError> {
         direct_files: DirectFileStats,
     }
 
+    pub fn from_fn<F: Fn(&mut core::fmt::Formatter<'_>) -> core::fmt::Result>(f: F) -> FromFn<F> {
+        FromFn(f)
+    }
+
+    /// Implements [`core::fmt::Debug`] and [`core::fmt::Display`] using a
+    /// function.
+    ///
+    /// Created with [`std::from_fn`].
+    pub struct FromFn<F>(F)
+    where
+        F: Fn(&mut core::fmt::Formatter<'_>) -> core::fmt::Result;
+
+    impl<F> core::fmt::Debug for FromFn<F>
+    where
+        F: Fn(&mut core::fmt::Formatter<'_>) -> core::fmt::Result,
+    {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            (self.0)(f)
+        }
+    }
+
+    impl<F> core::fmt::Display for FromFn<F>
+    where
+        F: Fn(&mut core::fmt::Formatter<'_>) -> core::fmt::Result,
+    {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            (self.0)(f)
+        }
+    }
+
     impl Display for Stats {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             let mut s = f.debug_struct("Stats");
 
             s.field(
                 "raw",
-                &fmt::from_fn(|f| {
+                &from_fn(|f| {
                     f.debug_struct("Raw")
                         .field("rings", &self.rings)
                         .field("buckets", &self.buckets)
@@ -1344,11 +1620,11 @@ fn stats() -> Result<(), CliError> {
             );
             s.field(
                 "computed",
-                &fmt::from_fn(|f| {
+                &from_fn(|f| {
                     f.debug_struct("Computed")
                         .field(
                             "rings",
-                            &fmt::from_fn(|f| {
+                            &from_fn(|f| {
                                 let mut rings = f.debug_map();
                                 for (
                                     kind,
@@ -1364,7 +1640,7 @@ fn stats() -> Result<(), CliError> {
                                     },
                                 ) in &self.rings
                                 {
-                                    rings.key(kind).value(&fmt::from_fn(|f| {
+                                    rings.key(kind).value(&from_fn(|f| {
                                         let num_entries = bucketed_entry_count + file_entry_count;
                                         let mut s = f.debug_struct("Ring");
                                         s.field("num_entries", &num_entries)
@@ -1384,7 +1660,7 @@ fn stats() -> Result<(), CliError> {
                         )
                         .field(
                             "buckets",
-                            &fmt::from_fn(|f| {
+                            &from_fn(|f| {
                                 let mut buckets = f.debug_map();
                                 for &BucketStats {
                                     size_class,
@@ -1396,7 +1672,7 @@ fn stats() -> Result<(), CliError> {
                                     let length = bucket_to_length(size_class - 2);
                                     let used_bytes = u64::from(length) * u64::from(used_slots);
                                     let fragmentation = used_bytes - owned_bytes;
-                                    buckets.key(&length).value(&fmt::from_fn(|f| {
+                                    buckets.key(&length).value(&from_fn(|f| {
                                         f.debug_struct("Bucket")
                                             .field("free_slots", &(num_slots - used_slots))
                                             .field("fragmentation_bytes", &fragmentation)
@@ -1412,7 +1688,7 @@ fn stats() -> Result<(), CliError> {
                         )
                         .field(
                             "direct_files",
-                            &fmt::from_fn(|f| {
+                            &from_fn(|f| {
                                 let &DirectFileStats {
                                     owned_bytes,
                                     allocated_bytes,

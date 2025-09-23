@@ -1,5 +1,3 @@
-#![feature(exitcode_exit_method)]
-
 use std::{
     collections::HashSet,
     env,
@@ -83,7 +81,7 @@ impl Dispatch<WlRegistry, ()> for State {
             }
             this.interfaces.remove(interface.as_bytes());
             if this.interfaces.is_empty() && !this.verbose {
-                ExitCode::SUCCESS.exit_process()
+                std::process::exit(0);
             }
         }
     }

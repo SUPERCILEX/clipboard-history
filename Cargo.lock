@@ -215,12 +215,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ask-cli"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d0776d651c3fdfb0e539c3ad61107ed4c040daf83f744823a59095235d76575"
-
-[[package]]
 name = "atomic"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -734,7 +728,6 @@ name = "clipboard-history"
 version = "0.14.0"
 dependencies = [
  "arrayvec",
- "ask-cli",
  "base64",
  "base64-serde",
  "clap",
