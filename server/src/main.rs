@@ -1,5 +1,3 @@
-#![feature(write_all_vectored)]
-
 use std::{borrow::Cow, collections::VecDeque, fs, path::PathBuf};
 
 use error_stack::Report;

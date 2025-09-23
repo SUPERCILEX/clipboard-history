@@ -6,7 +6,7 @@ use std::{
     fmt::Debug,
     fs::File,
     io,
-    io::{ErrorKind, ErrorKind::AlreadyExists, IoSlice, Read, Seek, SeekFrom, Write},
+    io::{Error, ErrorKind, ErrorKind::AlreadyExists, IoSlice, Read, Seek, SeekFrom, Write},
     mem,
     mem::{ManuallyDrop, MaybeUninit},
     ops::{Index, IndexMut},
@@ -64,7 +64,29 @@ impl RingWriter {
                         version,
                         write_head,
                     } = &Header::default();
-                    f.write_all_vectored(&mut [
+                    fn write_all_vectored(
+                        mut self_: impl Write,
+                        mut bufs: &mut [IoSlice<'_>],
+                    ) -> std::io::Result<()> {
+                        // Guarantee that bufs is empty if it contains no data,
+                        // to avoid calling write_vectored if there is no data to be written.
+                        IoSlice::advance_slices(&mut bufs, 0);
+                        while !bufs.is_empty() {
+                            match self_.write_vectored(bufs) {
+                                Ok(0) => {
+                                    return Err(Error::new(
+                                        ErrorKind::WriteZero,
+                                        "failed to write whole buffer",
+                                    ));
+                                }
+                                Ok(n) => IoSlice::advance_slices(&mut bufs, n),
+                                Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+                                Err(e) => return Err(e),
+                            }
+                        }
+                        Ok(())
+                    }
+                    write_all_vectored(&mut f, &mut [
                         IoSlice::new(magic),
                         IoSlice::new(slice::from_ref(version)),
                         IoSlice::new(&write_head.to_le_bytes()),
