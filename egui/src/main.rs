@@ -1,4 +1,3 @@
-#![feature(exitcode_exit_method)]
 #![allow(clippy::significant_drop_tightening)]
 
 use std::{

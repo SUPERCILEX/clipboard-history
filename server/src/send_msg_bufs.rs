@@ -167,7 +167,16 @@ impl LengthlessVec {
 
 impl From<Vec<u8>> for LengthlessVec {
     fn from(value: Vec<u8>) -> Self {
-        let (ptr, _len, cap) = value.into_parts();
+        pub fn into_raw_parts<T>(v: Vec<T>) -> (*mut T, usize, usize) {
+            let mut me = ManuallyDrop::new(v);
+            (me.as_mut_ptr(), me.len(), me.capacity())
+        }
+        pub fn into_parts<T>(v: Vec<T>) -> (NonNull<T>, usize, usize) {
+            let (ptr, len, capacity) = into_raw_parts(v);
+            // SAFETY: A `Vec` always has a non-null pointer.
+            (unsafe { NonNull::new_unchecked(ptr) }, len, capacity)
+        }
+        let (ptr, _len, cap) = into_parts(value);
         Self { ptr, cap }
     }
 }
