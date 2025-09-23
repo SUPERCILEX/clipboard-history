@@ -3,7 +3,7 @@ use std::{
     fmt::Debug,
     fs::File,
     io,
-    io::{BorrowedBuf, BorrowedCursor, ErrorKind, Write},
+    io::{ErrorKind, Write},
     mem::{MaybeUninit, size_of},
     num::NonZeroI32,
     os::{
@@ -33,6 +33,7 @@ use rustix::{
 
 use crate::{
     Error, IoErr, Result,
+    polyfills::{BorrowedBuf, BorrowedCursor},
     protocol::{RingKind, composite_id},
 };
 

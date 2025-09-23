@@ -7,7 +7,6 @@ use std::{
         unix::ffi::{OsStrExt, OsStringExt},
     },
     path::{MAIN_SEPARATOR, PathBuf},
-    process::ExitCode,
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -47,7 +46,7 @@ pub fn maybe_open_existing_instance_and_exit() -> Result<Token, CoreError> {
     } else {
         unlinkat(CWD, &path, AtFlags::empty())
             .map_io_err(|| format!("Failed to remove sleep file: {path:?}"))?;
-        ExitCode::SUCCESS.exit_process()
+        std::process::exit(0)
     }
 }
 
