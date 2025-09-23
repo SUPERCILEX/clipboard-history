@@ -1,5 +1,3 @@
-#![feature(default_field_values)]
-
 use std::{
     fmt::Write,
     fs::File,
@@ -73,10 +71,25 @@ struct App {
     state: State,
 }
 
-#[derive(Default)]
 struct State {
     entries: UiEntries,
     ui: UiState,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            entries: UiEntries::default(),
+            ui: {
+                let mut ui = UiState::default();
+                ui.search_state = Some(SearchState {
+                    focused: true,
+                    kind: SearchKind::Plain,
+                });
+                ui
+            },
+        }
+    }
 }
 
 #[derive(Default)]
@@ -99,10 +112,7 @@ struct UiState {
     detail_image_state: Option<ImageState>,
 
     query: TextArea<'static>,
-    search_state: Option<SearchState> = Some(SearchState {
-        focused: true,
-        kind: SearchKind::Plain,
-    }),
+    search_state: Option<SearchState>,
     pending_search_token: Option<CancellationToken>,
     queued_searches: u32,
 

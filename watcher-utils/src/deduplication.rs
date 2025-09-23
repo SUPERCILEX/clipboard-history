@@ -1,7 +1,6 @@
 use std::{
     fs::File,
     hash::{Hash, Hasher},
-    io::BorrowedBuf,
     mem::MaybeUninit,
 };
 
@@ -11,6 +10,7 @@ use ringboard_sdk::{
     core::{
         Error as CoreError, IoErr,
         dirs::data_dir,
+        polyfills::BorrowedBuf,
         protocol::{RingKind, composite_id, decompose_id},
         read_at_to_end,
         ring::Mmap,

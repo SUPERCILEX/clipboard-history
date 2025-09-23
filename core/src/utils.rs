@@ -4,7 +4,7 @@ use std::{
     fs,
     fs::File,
     io,
-    io::{BorrowedBuf, BorrowedCursor, ErrorKind, Write},
+    io::{ErrorKind, Write},
     mem,
     mem::{MaybeUninit, size_of},
     os::{
@@ -35,6 +35,7 @@ use rustix::{
 
 use crate::{
     Error, IoErr, Result,
+    polyfills::{BorrowedBuf, BorrowedCursor},
     protocol::{RingKind, composite_id},
 };
 
