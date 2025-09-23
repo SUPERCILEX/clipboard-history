@@ -1,11 +1,12 @@
 use std::{
     collections::BTreeMap,
     hash::{Hash, Hasher},
-    io::BorrowedBuf,
     mem::MaybeUninit,
 };
 
-use ringboard_core::{IoErr, RingAndIndex, protocol::IdNotFoundError, read_at_to_end};
+use ringboard_core::{
+    IoErr, RingAndIndex, polyfills::BorrowedBuf, protocol::IdNotFoundError, read_at_to_end,
+};
 use rustc_hash::FxHasher;
 use rustix::fs::{AtFlags, StatxFlags, statx};
 use smallvec::SmallVec;

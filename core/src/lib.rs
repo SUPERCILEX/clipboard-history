@@ -1,5 +1,3 @@
-#![feature(core_io_borrowed_buf)]
-
 use std::{borrow::Cow, io, num::ParseIntError};
 
 use thiserror::Error;
@@ -9,6 +7,7 @@ pub use views::{BucketAndIndex, PathView, RingAndIndex, StringView};
 use crate::protocol::IdNotFoundError;
 
 pub mod dirs;
+pub mod polyfills;
 pub mod protocol;
 pub mod ring;
 mod utils;
