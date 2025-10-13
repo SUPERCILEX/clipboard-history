@@ -1,0 +1,45 @@
+[package]
+name = "cosmic-applet"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0"
+description = "This applet is a Ringboard client that provides direkt integration with the Cosmic Desktop"
+repository = "https://github.com/SUPERCILEX/clipboard-history"
+
+[build-dependencies]
+vergen = { version = "8", features = ["git", "gitcl"] }
+
+[dependencies]
+constcat = "0.6.1"
+futures-util = "0.3.31"
+i18n-embed-fl = "0.9.2"
+open = "5.3.0"
+rust-embed = "8.5.0"
+tokio = { version = "1.41.0", features = ["full"] }
+ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
+anyhow = "1.0.100"
+
+[dependencies.i18n-embed]
+version = "0.15"
+features = ["fluent-system", "desktop-requester"]
+
+[dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic.git"
+# See https://github.com/pop-os/libcosmic/blob/master/Cargo.toml for available features.
+features = [
+    # Accessibility support
+    "a11y",
+    # Uses cosmic-settings-daemon to watch for config file changes
+    "dbus-config",
+    # On app startup, focuses an existing instance if the app is already open
+    "single-instance",
+    # Add Wayland support to winit
+    "wayland",
+    "applet"
+]
+
+# Uncomment to test a locally-cloned libcosmic
+# [patch.'https://github.com/pop-os/libcosmic']
+# libcosmic = { path = "../libcosmic" }
+# cosmic-config = { path = "../libcosmic/cosmic-config" }
+# cosmic-theme = { path = "../libcosmic/cosmic-theme" }

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.github.ringboard.cosmic-applet</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>Cosmic Applet</name>
+  <summary>This applet is a Ringboard client that provides direkt integration with the Cosmic Desktop</summary>
+  <icon type="remote" width="64" height="64" scale="1">
+    https://github.com/SUPERCILEX/clipboard-history/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
+  </icon>
+  <url type="vcs-browser">https://github.com/SUPERCILEX/clipboard-history</url>
+  <launchable type="desktop-id">com.github.ringboard.cosmic-applet.desktop</launchable>
+  <provides>
+    <id>com.github.ringboard.cosmic-applet</id>
+    <binaries>
+      <binary>cosmic-applet</binary>
+    </binaries>
+  </provides>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <categories>
+    <category>COSMIC</category>
+  </categories>
+  <keywords>
+    <keyword>COSMIC</keyword>
+  </keywords>
+  <content_rating type="oars-1.1" />
+</component>
+

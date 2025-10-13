@@ -1,8 +1,21 @@
+[package]
+name = "lint"
+version = "0.0.0"
+publish = false
+
+[package.edition]
+workspace = true
+
+[dev-dependencies.supercilex-tests]
+version = "0.4.21"
+default-features = false
+
 [workspace]
 members = [
     "cli",
     "client-sdk",
     "core",
+    "cosmic-applet",
     "egui",
     "server",
     "tui",
@@ -15,27 +28,18 @@ members = [
 [workspace.package]
 version = "0.12.2"
 authors = ["Alex Saveau <saveau.alexandre@gmail.com>"]
-edition = "2024"
-repository = "https://github.com/SUPERCILEX/clipboard-history"
 license = "Apache-2.0"
+repository = "https://github.com/SUPERCILEX/clipboard-history"
+edition = "2024"
 
-[package]
-name = "lint"
-version = "0.0.0"
-edition.workspace = true
-publish = false
-
-[dev-dependencies]
-supercilex-tests = { version = "0.4.21", default-features = false }
+[profile.dr]
+debug = 2
+debug-assertions = true
+inherits = "release"
+strip = false
 
 [profile.release]
 lto = true
 codegen-units = 1
-strip = true
 panic = "abort"
-
-[profile.dr]
-inherits = "release"
-debug = true
-debug-assertions = true
-strip = false
+strip = true
