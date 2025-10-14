@@ -2,33 +2,30 @@
 
 use cosmic::iced::futures::executor::block_on;
 use cosmic::iced::stream::channel;
-use cosmic::iced::{Alignment, Length, Limits, Subscription, futures, padding, window};
+use cosmic::iced::{Limits, Subscription, futures, window};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
-use cosmic::theme::Button;
-use cosmic::widget::button::Catalog;
-use cosmic::widget::{
-    MouseArea, Space, button, column, container, horizontal_space, row, scrollable, search_input,
-    text,
-};
+use cosmic::widget::{MouseArea, Space};
 use cosmic::{Action, prelude::*};
 use futures_util::SinkExt;
-use ringboard_sdk::ui_actor::{Command, Message, UiEntry, UiEntryCache, controller};
+use ringboard_sdk::search::CancellationToken;
+use ringboard_sdk::ui_actor::{Command, Message, UiEntry, controller};
 use std::any::TypeId;
 use std::ops::Deref;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use tokio::task::spawn_blocking;
 
+use crate::views::popup::popup_view;
+
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
 
-/// The application model stores app-specific state used to describe its interface and
-/// drive its logic.
 pub struct AppModel {
     /// Application state which is managed by the COSMIC runtime.
     core: cosmic::Core,
-    popup: Option<window::Id>,
+    popup: Option<Popup>,
     search: String,
+    pending_search: Option<CancellationToken>,
     // Arc because AppMessage needs to be Clone and Send
     entries: Arc<[UiEntry]>,
     command_sender: Sender<Command>,
@@ -36,12 +33,16 @@ pub struct AppModel {
     command_receiver: Arc<Mutex<Receiver<Command>>>,
 }
 
-/// Messages emitted by the application and its widgets.
+struct Popup {
+    id: window::Id,
+}
+
 #[derive(Debug, Clone)]
 pub enum AppMessage {
     TogglePopup,
     ClosePopup,
     Search(String),
+    SearchPending(CancellationToken),
     Items(Arc<[UiEntry]>),
     Paste(u64),
 }
@@ -55,8 +56,8 @@ impl AppModel {
     }
 
     fn close_popup(&mut self) -> Task<Action<AppMessage>> {
-        if let Some(popup) = self.popup.take() {
-            destroy_popup(popup)
+        if let Some(Popup { id, .. }) = self.popup.take() {
+            destroy_popup(id)
         } else {
             Task::none()
         }
@@ -64,7 +65,10 @@ impl AppModel {
 
     fn open_popup(&mut self) -> Task<Action<AppMessage>> {
         let id = window::Id::unique();
-        self.popup.replace(id);
+        self.popup.replace(Popup { id });
+        // directly focusing the text input does not work for some reason, so we can't select the text in the input
+        // to be replaced when starting to type so we just clear the input when opening the popup
+        self.search = String::new();
 
         let mut settings = self.core.applet.get_popup_settings(
             self.core.main_window_id().unwrap(),
@@ -82,123 +86,15 @@ impl AppModel {
 
         get_popup(settings)
     }
-
-    fn popup_view(&self) -> Element<'_, AppMessage> {
-        container(self.list_view())
-            .height(Length::Fixed(530f32))
-            .width(Length::Fixed(400f32))
-            .into()
-    }
-
-    fn list_view(&self) -> Element<'_, AppMessage> {
-        column()
-            .push(
-                container(
-                    row()
-                        .push(
-                            search_input("search", &self.search)
-                                .always_active()
-                                .on_input(AppMessage::Search)
-                                .on_paste(AppMessage::Search)
-                                .on_clear(AppMessage::Search("".into()))
-                                .width(Length::Fill),
-                        )
-                        .push(horizontal_space().width(5)),
-                )
-                .padding(padding::all(15f32).bottom(0)),
-            )
-            .push(
-                container({
-                    let entries: Vec<_> = self
-                        .entries
-                        .iter()
-                        .map(|entry| self.entry(entry, false))
-                        .collect();
-                    let column = column::with_children(entries)
-                        .spacing(5f32)
-                        .padding(padding::right(10));
-                    scrollable(column).apply(Element::from)
-                })
-                .padding(padding::all(20).top(0)),
-            )
-            .spacing(20)
-            .align_x(Alignment::Center)
-            .into()
-    }
-
-    fn entry(&self, entry: &UiEntry, is_focused: bool) -> Element<'_, AppMessage> {
-        let content = if let UiEntryCache::Text { one_liner }
-        | UiEntryCache::HighlightedText { one_liner, .. } = &entry.cache
-        {
-            one_liner
-        } else {
-            println!("Entry without text cache: {:?}", entry);
-            "<loading...>"
-        };
-
-        let btn = button::custom(text(content.to_string()))
-            .on_press(AppMessage::Paste(entry.entry.id()))
-            .padding([8, 16])
-            .class(Button::Custom {
-                active: Box::new(move |focused, theme| {
-                    let rad_s = theme.cosmic().corner_radii.radius_s;
-                    let focused = is_focused || focused;
-
-                    let a = if focused {
-                        theme.hovered(focused, focused, &Button::Text)
-                    } else {
-                        theme.hovered(focused, focused, &Button::Standard)
-                    };
-
-                    button::Style {
-                        border_radius: rad_s.into(),
-                        outline_width: 0.0,
-                        ..a
-                    }
-                }),
-                disabled: Box::new(move |theme| theme.disabled(&Button::Text)),
-                hovered: Box::new(move |focused, theme| {
-                    let rad_s = theme.cosmic().corner_radii.radius_s;
-                    let focused = is_focused || focused;
-
-                    let text = theme.hovered(focused, focused, &Button::Text);
-                    button::Style {
-                        border_radius: rad_s.into(),
-                        outline_width: 0.0,
-                        ..text
-                    }
-                }),
-                pressed: Box::new(move |focused, theme| {
-                    let rad_s = theme.cosmic().corner_radii.radius_s;
-                    let focused = is_focused || focused;
-
-                    let text = theme.pressed(focused, focused, &Button::Text);
-                    button::Style {
-                        border_radius: rad_s.into(),
-                        outline_width: 0.0,
-                        ..text
-                    }
-                }),
-            });
-
-        let btn: Element<_> = btn.width(Length::Fill).into();
-
-        btn
-    }
 }
 
-/// Create a COSMIC application from the app model
 impl cosmic::Application for AppModel {
-    /// The async executor that will be used to run your application's commands.
     type Executor = cosmic::executor::Default;
 
-    /// Data that your application receives to its init method.
     type Flags = ();
 
-    /// Messages which the application and its widgets will emit.
     type Message = AppMessage;
 
-    /// Unique identifier in RDNN (reverse domain name notation) format.
     const APP_ID: &'static str = "com.github.ringboard.cosmic-applet";
 
     fn core(&self) -> &cosmic::Core {
@@ -209,7 +105,6 @@ impl cosmic::Application for AppModel {
         &mut self.core
     }
 
-    /// Initializes the application with any given flags and startup commands.
     fn init(
         core: cosmic::Core,
         _flags: Self::Flags,
@@ -221,6 +116,7 @@ impl cosmic::Application for AppModel {
             core,
             popup: None,
             search: String::new(),
+            pending_search: None,
             entries: Arc::new([]),
             command_sender,
             command_receiver: Arc::new(Mutex::new(command_receiver)),
@@ -230,7 +126,7 @@ impl cosmic::Application for AppModel {
     }
 
     fn on_close_requested(&self, id: window::Id) -> Option<Self::Message> {
-        if let Some(popup) = &self.popup
+        if let Some(Popup { id: popup, .. }) = &self.popup
             && *popup == id
         {
             return Some(AppMessage::ClosePopup);
@@ -238,10 +134,6 @@ impl cosmic::Application for AppModel {
         None
     }
 
-    /// Describes the interface based on the current state of the application model.
-    ///
-    /// Application events will be processed through the view. Any messages emitted by
-    /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<'_, Self::Message> {
         let icon = self
             .core
@@ -252,30 +144,34 @@ impl cosmic::Application for AppModel {
         MouseArea::new(icon).into()
     }
 
-    fn view_window(&self, id: window::Id) -> Element<'_, Self::Message> {
-        let Some(popup) = &self.popup else {
+    fn view_window(&self, _id: window::Id) -> Element<'_, Self::Message> {
+        let Some(_) = &self.popup else {
             return Space::new(0, 0).into();
         };
 
-        let view = self.popup_view();
+        let view = popup_view(&self.entries, &self.search);
 
         self.core.applet.popup_container(view).into()
     }
 
-    /// Handles messages emitted by the application and its widgets.
-    ///
-    /// Tasks may be returned for asynchronous execution of code in the background
-    /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
             AppMessage::TogglePopup => return self.toggle_popup(),
             AppMessage::ClosePopup => return self.close_popup(),
             AppMessage::Search(search) => {
                 self.search = search;
+                if let Some(old_token) = self.pending_search.take() {
+                    old_token.cancel();
+                }
                 let _ = self.command_sender.send(Command::Search {
                     query: self.search.clone().into_boxed_str(),
                     kind: ringboard_sdk::ui_actor::SearchKind::Plain,
                 });
+            }
+            AppMessage::SearchPending(token) => {
+                if let Some(old_token) = self.pending_search.replace(token) {
+                    old_token.cancel();
+                }
             }
             AppMessage::Items(items) => {
                 self.entries = items;
@@ -303,31 +199,24 @@ impl cosmic::Application for AppModel {
                     let command_receiver = command_receiver.lock().unwrap();
                     controller::<anyhow::Error>(command_receiver.deref(), |m| {
                         match m {
-                            Message::Deleted(id) => println!("Deleted: {id}"),
                             Message::Error(e) => eprintln!("Error: {e}"),
                             Message::FatalDbOpen(e) => eprintln!("FatalDbOpen: {e}"),
-                            Message::Pasted => println!("Pasted"),
                             Message::FavoriteChange(id) => println!("FavoriteChange: {id}"),
-                            Message::PendingSearch(token) => println!("PendingSearch: {token:?}"),
-                            Message::SearchResults(results) => {
-                                println!("SearchResults: {}", results.len());
-                                block_on(output.send(AppMessage::Items(results.into())))?;
-                            }
-                            Message::LoadedImage { id, .. } => println!("LoadedImage: {id}"),
                             Message::EntryDetails { id, result } => {
                                 println!("EntryDetails: {id}, {result:?}")
                             }
-                            Message::LoadedFirstPage {
-                                entries,
-                                default_focused_id,
-                            } => {
-                                println!(
-                                    "LoadedFirstPage: {} entries, default_focused_id: {:?}",
-                                    entries.len(),
-                                    default_focused_id
-                                );
+                            Message::LoadedImage { id, .. } => println!("LoadedImage: {id}"),
+                            Message::SearchResults(results) => {
+                                block_on(output.send(AppMessage::Items(results.into())))?;
+                            }
+                            Message::PendingSearch(token) => {
+                                block_on(output.send(AppMessage::SearchPending(token)))?;
+                            }
+                            Message::LoadedFirstPage { entries, .. } => {
                                 block_on(output.send(AppMessage::Items(entries.into())))?;
                             }
+                            Message::Deleted(_) => (),
+                            Message::Pasted => (), // we don't need to handle this because the popup is closed immediately after sending the paste command,
                         }
                         Ok(())
                     });
