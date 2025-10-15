@@ -3,6 +3,7 @@
 mod app;
 mod config;
 mod i18n;
+mod util;
 mod views;
 
 fn main() -> cosmic::iced::Result {

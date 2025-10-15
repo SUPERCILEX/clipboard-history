@@ -1,17 +1,21 @@
 use cosmic::{
     Apply, Element,
     iced::{Alignment, Length, padding},
-    widget::{column, container, horizontal_space, row, scrollable, search_input},
+    widget::{column, container, horizontal_space, row, scrollable, search_input, text::heading},
 };
 use ringboard_sdk::ui_actor::UiEntry;
 
 use crate::{app::AppMessage, views::entry::entry_view};
 
-pub fn popup_view<'a>(entries: &'a [UiEntry], search: &'a str) -> Element<'a, AppMessage> {
+pub fn popup_view<'a>(
+    entries: &'a [UiEntry],
+    favorites: &'a [UiEntry],
+    search: &'a str,
+) -> Element<'a, AppMessage> {
     let search = container(
         row()
             .push(
-                search_input("search", search)
+                search_input("Search", search)
                     .always_active()
                     .on_input(AppMessage::Search)
                     .on_paste(AppMessage::Search)
@@ -23,14 +27,23 @@ pub fn popup_view<'a>(entries: &'a [UiEntry], search: &'a str) -> Element<'a, Ap
     .padding(padding::all(15f32).bottom(0));
 
     let list_view = container({
-        let entries: Vec<_> = entries
-            .iter()
-            .take(50)
-            .map(|entry| entry_view(entry, false))
-            .collect();
-        let column = column::with_children(entries)
-            .spacing(5f32)
-            .padding(padding::right(10));
+        let mut column = column();
+        if !favorites.is_empty() {
+            let fav_section = list_section(favorites, "Favorites", true);
+            column = column.push(fav_section);
+        }
+        if !entries.is_empty() {
+            if !favorites.is_empty() {
+                column = column.push(horizontal_space().height(5));
+            }
+            let others_section = list_section(entries, "History", false);
+            column = column.push(others_section);
+        }
+
+        if favorites.is_empty() && entries.is_empty() {
+            //column.push(caption("No items found").style(cosmic::theme::Text::Disabled));
+        }
+
         scrollable(column).apply(Element::from)
     })
     .padding(padding::all(20).top(0));
@@ -46,4 +59,19 @@ pub fn popup_view<'a>(entries: &'a [UiEntry], search: &'a str) -> Element<'a, Ap
         .height(Length::Fixed(530f32))
         .width(Length::Fixed(400f32))
         .into()
+}
+
+fn list_section<'a>(
+    ui_entries: &'a [UiEntry],
+    name: &'a str,
+    favoirte: bool,
+) -> Element<'a, AppMessage> {
+    let mut entries = vec![heading(name).into()];
+    entries.extend(ui_entries.iter().map(|entry| entry_view(entry, favoirte)));
+
+    let column = column::with_children(entries)
+        .spacing(5f32)
+        .padding(padding::right(10));
+
+    column.into()
 }

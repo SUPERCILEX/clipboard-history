@@ -7,6 +7,7 @@ use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::widget::{MouseArea, Space};
 use cosmic::{Action, prelude::*};
 use futures_util::SinkExt;
+use ringboard_sdk::core::protocol::RingKind;
 use ringboard_sdk::search::CancellationToken;
 use ringboard_sdk::ui_actor::{Command, Message, UiEntry, controller};
 use std::any::TypeId;
@@ -17,17 +18,14 @@ use tokio::task::spawn_blocking;
 
 use crate::views::popup::popup_view;
 
-const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
-const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
-
 pub struct AppModel {
     /// Application state which is managed by the COSMIC runtime.
     core: cosmic::Core,
     popup: Option<Popup>,
     search: String,
     pending_search: Option<CancellationToken>,
-    // Arc because AppMessage needs to be Clone and Send
-    entries: Arc<[UiEntry]>,
+    favorites: Vec<UiEntry>,
+    entries: Vec<UiEntry>,
     command_sender: Sender<Command>,
     // we need mutex because Receiver is not Sync
     command_receiver: Arc<Mutex<Receiver<Command>>>,
@@ -43,8 +41,12 @@ pub enum AppMessage {
     ClosePopup,
     Search(String),
     SearchPending(CancellationToken),
-    Items(Arc<[UiEntry]>),
+    Items(Arc<Mutex<Vec<UiEntry>>>), // arc mutex is required because UiEntry is not cloneable and AppMessage needs to be cloneable
     Paste(u64),
+    ChangeFavorite(u64, bool),
+    Delete(u64),
+    Deleted(u64),
+    Reload,
 }
 
 impl AppModel {
@@ -69,6 +71,8 @@ impl AppModel {
         // directly focusing the text input does not work for some reason, so we can't select the text in the input
         // to be replaced when starting to type so we just clear the input when opening the popup
         self.search = String::new();
+        // reload the first page when opening the popup again
+        let _ = self.command_sender.send(Command::LoadFirstPage);
 
         let mut settings = self.core.applet.get_popup_settings(
             self.core.main_window_id().unwrap(),
@@ -117,7 +121,8 @@ impl cosmic::Application for AppModel {
             popup: None,
             search: String::new(),
             pending_search: None,
-            entries: Arc::new([]),
+            favorites: vec![],
+            entries: vec![],
             command_sender,
             command_receiver: Arc::new(Mutex::new(command_receiver)),
         };
@@ -149,7 +154,7 @@ impl cosmic::Application for AppModel {
             return Space::new(0, 0).into();
         };
 
-        let view = popup_view(&self.entries, &self.search);
+        let view = popup_view(&self.entries, &self.favorites, &self.search);
 
         self.core.applet.popup_container(view).into()
     }
@@ -174,11 +179,35 @@ impl cosmic::Application for AppModel {
                 }
             }
             AppMessage::Items(items) => {
-                self.entries = items;
+                if let Ok(mut items) = items.lock() {
+                    let entries: Vec<UiEntry> = std::mem::replace(&mut items, vec![]);
+                    let (favorites, others): (Vec<_>, Vec<_>) = entries
+                        .into_iter()
+                        .partition(|e| e.entry.ring() == RingKind::Favorites);
+                    self.favorites = favorites;
+                    self.entries = others;
+                }
             }
             AppMessage::Paste(id) => {
                 let _ = self.command_sender.send(Command::Paste(id));
                 return self.close_popup();
+            }
+            AppMessage::ChangeFavorite(id, is_favorite) => {
+                if is_favorite {
+                    let _ = self.command_sender.send(Command::Unfavorite(id));
+                } else {
+                    let _ = self.command_sender.send(Command::Favorite(id));
+                }
+            }
+            AppMessage::Reload => {
+                let _ = self.command_sender.send(Command::LoadFirstPage);
+            }
+            AppMessage::Delete(id) => {
+                let _ = self.command_sender.send(Command::Delete(id));
+            }
+            AppMessage::Deleted(id) => {
+                self.favorites.retain(|entry| entry.entry.id() != id);
+                self.entries.retain(|entry| entry.entry.id() != id);
             }
         }
         Task::none()
@@ -201,21 +230,29 @@ impl cosmic::Application for AppModel {
                         match m {
                             Message::Error(e) => eprintln!("Error: {e}"),
                             Message::FatalDbOpen(e) => eprintln!("FatalDbOpen: {e}"),
-                            Message::FavoriteChange(id) => println!("FavoriteChange: {id}"),
                             Message::EntryDetails { id, result } => {
                                 println!("EntryDetails: {id}, {result:?}")
                             }
                             Message::LoadedImage { id, .. } => println!("LoadedImage: {id}"),
+                            Message::FavoriteChange(_) => {
+                                block_on(output.send(AppMessage::Reload))?; // because the id of the element changes when favoriting/unfavoriting we can't just update the entry in place
+                            }
                             Message::SearchResults(results) => {
-                                block_on(output.send(AppMessage::Items(results.into())))?;
+                                block_on(output.send(AppMessage::Items(Arc::new(Mutex::new(
+                                    results.into(),
+                                )))))?;
                             }
                             Message::PendingSearch(token) => {
                                 block_on(output.send(AppMessage::SearchPending(token)))?;
                             }
                             Message::LoadedFirstPage { entries, .. } => {
-                                block_on(output.send(AppMessage::Items(entries.into())))?;
+                                block_on(output.send(AppMessage::Items(Arc::new(Mutex::new(
+                                    entries.into(),
+                                )))))?;
                             }
-                            Message::Deleted(_) => (),
+                            Message::Deleted(id) => {
+                                block_on(output.send(AppMessage::Deleted(id)))?;
+                            }
                             Message::Pasted => (), // we don't need to handle this because the popup is closed immediately after sending the paste command,
                         }
                         Ok(())
