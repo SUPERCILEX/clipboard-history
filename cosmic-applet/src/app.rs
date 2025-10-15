@@ -154,7 +154,12 @@ impl cosmic::Application for AppModel {
             return Space::new(0, 0).into();
         };
 
-        let view = popup_view(&self.entries, &self.favorites, &self.search);
+        let view = popup_view(
+            &self.entries,
+            &self.favorites,
+            &self.search,
+            self.core.system_theme(),
+        );
 
         self.core.applet.popup_container(view).into()
     }
@@ -200,7 +205,14 @@ impl cosmic::Application for AppModel {
                 }
             }
             AppMessage::Reload => {
-                let _ = self.command_sender.send(Command::LoadFirstPage);
+                if self.search.is_empty() {
+                    let _ = self.command_sender.send(Command::LoadFirstPage);
+                } else {
+                    let _ = self.command_sender.send(Command::Search {
+                        query: self.search.clone().into_boxed_str(),
+                        kind: ringboard_sdk::ui_actor::SearchKind::Plain,
+                    });
+                }
             }
             AppMessage::Delete(id) => {
                 let _ = self.command_sender.send(Command::Delete(id));

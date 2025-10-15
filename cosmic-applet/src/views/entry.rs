@@ -1,7 +1,7 @@
 use cosmic::{
     Element,
     iced::{Color, Length},
-    iced_widget::hover,
+    iced_widget::{hover, rich_text, span},
     theme::{Button, Container},
     widget::{
         button::{self, Catalog},
@@ -12,17 +12,34 @@ use ringboard_sdk::ui_actor::{UiEntry, UiEntryCache};
 
 use crate::{app::AppMessage, icon};
 
-pub fn entry_view(entry: &UiEntry, favorite: bool) -> Element<'_, AppMessage> {
-    let content = if let UiEntryCache::Text { one_liner }
-    | UiEntryCache::HighlightedText { one_liner, .. } = &entry.cache
-    {
-        one_liner
-    } else {
-        println!("Entry without text cache: {:?}", entry.entry);
-        "<loading...>"
+pub fn entry_view<'a>(
+    entry: &'a UiEntry,
+    favorite: bool,
+    theme: &'a cosmic::Theme,
+) -> Element<'a, AppMessage> {
+    let content: Element<'_, AppMessage> = match &entry.cache {
+        UiEntryCache::Text { one_liner } => text(one_liner.to_string()).into(),
+        UiEntryCache::HighlightedText {
+            one_liner,
+            start,
+            end,
+        } => {
+            let pre = &one_liner[..*start];
+            let highlighted = &one_liner[*start..*end];
+            let post = &one_liner[*end..];
+
+            let color = theme.cosmic().accent_color();
+            let text = rich_text![pre, span(highlighted).color(color), post];
+
+            text.into()
+        }
+        _ => {
+            println!("Entry without highlighted text cache: {:?}", entry.entry);
+            text("< loading... >").into()
+        }
     };
 
-    let btn = button::custom(text(content.to_string()))
+    let btn = button::custom(content)
         .on_press(AppMessage::Paste(entry.entry.id()))
         .padding([8, 16])
         .width(Length::Fill)

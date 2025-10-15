@@ -1,5 +1,5 @@
 use cosmic::{
-    Apply, Element,
+    Apply, Element, Theme,
     iced::{Alignment, Length, padding},
     widget::{column, container, horizontal_space, row, scrollable, search_input, text::heading},
 };
@@ -11,6 +11,7 @@ pub fn popup_view<'a>(
     entries: &'a [UiEntry],
     favorites: &'a [UiEntry],
     search: &'a str,
+    theme: &'a Theme,
 ) -> Element<'a, AppMessage> {
     let search = container(
         row()
@@ -29,14 +30,14 @@ pub fn popup_view<'a>(
     let list_view = container({
         let mut column = column();
         if !favorites.is_empty() {
-            let fav_section = list_section(favorites, fl!("favorites-heading"), true);
+            let fav_section = list_section(favorites, fl!("favorites-heading"), true, theme);
             column = column.push(fav_section);
         }
         if !entries.is_empty() {
             if !favorites.is_empty() {
                 column = column.push(horizontal_space().height(5));
             }
-            let others_section = list_section(entries, fl!("history-heading"), false);
+            let others_section = list_section(entries, fl!("history-heading"), false, theme);
             column = column.push(others_section);
         }
 
@@ -61,9 +62,18 @@ pub fn popup_view<'a>(
         .into()
 }
 
-fn list_section(ui_entries: &[UiEntry], name: String, favoirte: bool) -> Element<'_, AppMessage> {
+fn list_section<'a>(
+    ui_entries: &'a [UiEntry],
+    name: String,
+    favoirte: bool,
+    theme: &'a Theme,
+) -> Element<'a, AppMessage> {
     let mut entries = vec![heading(name).into()];
-    entries.extend(ui_entries.iter().map(|entry| entry_view(entry, favoirte)));
+    entries.extend(
+        ui_entries
+            .iter()
+            .map(|entry| entry_view(entry, favoirte, theme)),
+    );
 
     let column = column::with_children(entries)
         .spacing(5f32)
