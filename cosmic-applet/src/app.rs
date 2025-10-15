@@ -5,7 +5,7 @@ use cosmic::iced::stream::channel;
 use cosmic::iced::{Limits, Subscription, futures, window};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::widget::{MouseArea, Space};
-use cosmic::{Action, prelude::*};
+use cosmic::{Action, cosmic_config, prelude::*};
 use futures_util::SinkExt;
 use ringboard_sdk::core::protocol::RingKind;
 use ringboard_sdk::search::CancellationToken;
@@ -16,11 +16,15 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use tokio::task::spawn_blocking;
 
+use crate::config::{Config, FilterMode};
 use crate::views::popup::popup_view;
+use crate::views::settings::settings_view;
 
 pub struct AppModel {
     /// Application state which is managed by the COSMIC runtime.
     core: cosmic::Core,
+    config: Config,
+    config_handler: cosmic_config::Config,
     popup: Option<Popup>,
     search: String,
     pending_search: Option<CancellationToken>,
@@ -33,11 +37,24 @@ pub struct AppModel {
 
 struct Popup {
     id: window::Id,
+    kind: PopupKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PopupKind {
+    Search,
+    Settings,
+}
+
+pub struct Flags {
+    pub config: Config,
+    pub config_handler: cosmic_config::Config,
 }
 
 #[derive(Debug, Clone)]
 pub enum AppMessage {
     TogglePopup,
+    ToggleSettings,
     ClosePopup,
     Search(String),
     SearchPending(CancellationToken),
@@ -47,13 +64,20 @@ pub enum AppMessage {
     Delete(u64),
     Deleted(u64),
     Reload,
+    SelectFilterMode(FilterMode),
 }
 
 impl AppModel {
-    fn toggle_popup(&mut self) -> Task<Action<AppMessage>> {
+    fn toggle_popup(&mut self, kind: PopupKind) -> Task<Action<AppMessage>> {
         match &self.popup {
-            Some(_) => self.close_popup(),
-            None => self.open_popup(),
+            Some(popup) => {
+                if popup.kind == PopupKind::Search {
+                    self.close_popup()
+                } else {
+                    Task::batch(vec![self.close_popup(), self.open_popup(kind)])
+                }
+            }
+            None => self.open_popup(kind),
         }
     }
 
@@ -65,9 +89,9 @@ impl AppModel {
         }
     }
 
-    fn open_popup(&mut self) -> Task<Action<AppMessage>> {
+    fn open_popup(&mut self, kind: PopupKind) -> Task<Action<AppMessage>> {
         let id = window::Id::unique();
-        self.popup.replace(Popup { id });
+        self.popup.replace(Popup { id, kind });
         // directly focusing the text input does not work for some reason, so we can't select the text in the input
         // to be replaced when starting to type so we just clear the input when opening the popup
         self.search = String::new();
@@ -95,7 +119,7 @@ impl AppModel {
 impl cosmic::Application for AppModel {
     type Executor = cosmic::executor::Default;
 
-    type Flags = ();
+    type Flags = Flags;
 
     type Message = AppMessage;
 
@@ -109,15 +133,14 @@ impl cosmic::Application for AppModel {
         &mut self.core
     }
 
-    fn init(
-        core: cosmic::Core,
-        _flags: Self::Flags,
-    ) -> (Self, Task<cosmic::Action<Self::Message>>) {
+    fn init(core: cosmic::Core, flags: Self::Flags) -> (Self, Task<cosmic::Action<Self::Message>>) {
         let (command_sender, command_receiver) = mpsc::channel();
 
         // Construct the app model with the runtime's core.
         let app = AppModel {
             core,
+            config: flags.config,
+            config_handler: flags.config_handler,
             popup: None,
             search: String::new(),
             pending_search: None,
@@ -146,27 +169,33 @@ impl cosmic::Application for AppModel {
             .icon_button(constcat::concat!(AppModel::APP_ID, "-symbolic"))
             .on_press(AppMessage::TogglePopup);
 
-        MouseArea::new(icon).into()
+        MouseArea::new(icon)
+            .on_right_release(AppMessage::ToggleSettings)
+            .into()
     }
 
     fn view_window(&self, _id: window::Id) -> Element<'_, Self::Message> {
-        let Some(_) = &self.popup else {
+        let Some(popup) = &self.popup else {
             return Space::new(0, 0).into();
         };
 
-        let view = popup_view(
-            &self.entries,
-            &self.favorites,
-            &self.search,
-            self.core.system_theme(),
-        );
+        let view = match popup.kind {
+            PopupKind::Search => popup_view(
+                &self.entries,
+                &self.favorites,
+                &self.search,
+                self.core.system_theme(),
+            ),
+            PopupKind::Settings => settings_view(&self.config),
+        };
 
         self.core.applet.popup_container(view).into()
     }
 
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
-            AppMessage::TogglePopup => return self.toggle_popup(),
+            AppMessage::TogglePopup => return self.toggle_popup(PopupKind::Search),
+            AppMessage::ToggleSettings => return self.toggle_popup(PopupKind::Settings),
             AppMessage::ClosePopup => return self.close_popup(),
             AppMessage::Search(search) => {
                 self.search = search;
@@ -175,7 +204,7 @@ impl cosmic::Application for AppModel {
                 }
                 let _ = self.command_sender.send(Command::Search {
                     query: self.search.clone().into_boxed_str(),
-                    kind: ringboard_sdk::ui_actor::SearchKind::Plain,
+                    kind: self.config.filter_mode.into(),
                 });
             }
             AppMessage::SearchPending(token) => {
@@ -210,7 +239,7 @@ impl cosmic::Application for AppModel {
                 } else {
                     let _ = self.command_sender.send(Command::Search {
                         query: self.search.clone().into_boxed_str(),
-                        kind: ringboard_sdk::ui_actor::SearchKind::Plain,
+                        kind: self.config.filter_mode.into(),
                     });
                 }
             }
@@ -220,6 +249,9 @@ impl cosmic::Application for AppModel {
             AppMessage::Deleted(id) => {
                 self.favorites.retain(|entry| entry.entry.id() != id);
                 self.entries.retain(|entry| entry.entry.id() != id);
+            }
+            AppMessage::SelectFilterMode(mode) => {
+                let _ = self.config.set_filter_mode(&self.config_handler, mode);
             }
         }
         Task::none()

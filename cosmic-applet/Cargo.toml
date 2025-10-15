@@ -21,6 +21,7 @@ rust-embed = "8.5.0"
 tokio = { version = "1.41.0", features = ["full"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
 anyhow = "1.0.100"
+serde = { version = "1.0.228", features = ["derive"] }
 
 [dependencies.i18n-embed]
 version = "0.15"

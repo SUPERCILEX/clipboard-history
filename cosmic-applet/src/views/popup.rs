@@ -42,7 +42,7 @@ pub fn popup_view<'a>(
         }
 
         if favorites.is_empty() && entries.is_empty() {
-            //column.push(caption("No items found").style(cosmic::theme::Text::Disabled));
+            column = column.push(heading("No items found"));
         }
 
         scrollable(column).apply(Element::from)
@@ -52,7 +52,7 @@ pub fn popup_view<'a>(
     let view: Element<_> = column()
         .push(search)
         .push(list_view)
-        .spacing(20)
+        .spacing(10)
         .align_x(Alignment::Center)
         .into();
 
