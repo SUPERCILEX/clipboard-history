@@ -1266,6 +1266,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "clipboard-history-cosmic-applet"
+version = "0.12.2"
+dependencies = [
+ "anyhow",
+ "clipboard-history-client-sdk",
+ "constcat",
+ "futures-util",
+ "i18n-embed 0.15.4",
+ "i18n-embed-fl 0.9.4",
+ "libcosmic",
+ "open",
+ "rust-embed",
+ "tokio",
+ "vergen",
+]
+
+[[package]]
 name = "clipboard-history-egui"
 version = "0.12.2"
 dependencies = [
@@ -1601,23 +1618,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77745e017f5edba1a9c1d854f6f3a52dac8a12dd5af5d2f54aecf61e43d80d30"
 dependencies = [
  "libm",
-]
-
-[[package]]
-name = "cosmic-applet"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clipboard-history-client-sdk",
- "constcat",
- "futures-util",
- "i18n-embed 0.15.4",
- "i18n-embed-fl 0.9.4",
- "libcosmic",
- "open",
- "rust-embed",
- "tokio",
- "vergen",
 ]
 
 [[package]]

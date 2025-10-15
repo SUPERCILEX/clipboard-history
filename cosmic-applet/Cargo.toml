@@ -1,10 +1,13 @@
 [package]
-name = "cosmic-applet"
-version = "0.1.0"
-edition = "2024"
-license = "GPL-3.0"
+name = "clipboard-history-cosmic-applet"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 description = "This applet is a Ringboard client that provides direkt integration with the Cosmic Desktop"
-repository = "https://github.com/SUPERCILEX/clipboard-history"
+repository.workspace = true
+keywords = ["ringboard", "clipboard", "tools", "cosmic"]
+categories = ["command-line-utilities", "development-tools", "filesystem"]
+license.workspace = true
 
 [build-dependencies]
 vergen = { version = "8", features = ["git", "gitcl"] }

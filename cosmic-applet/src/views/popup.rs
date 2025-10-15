@@ -5,7 +5,7 @@ use cosmic::{
 };
 use ringboard_sdk::ui_actor::UiEntry;
 
-use crate::{app::AppMessage, views::entry::entry_view};
+use crate::{app::AppMessage, fl, views::entry::entry_view};
 
 pub fn popup_view<'a>(
     entries: &'a [UiEntry],
@@ -15,7 +15,7 @@ pub fn popup_view<'a>(
     let search = container(
         row()
             .push(
-                search_input("Search", search)
+                search_input(fl!("search-placeholder"), search)
                     .always_active()
                     .on_input(AppMessage::Search)
                     .on_paste(AppMessage::Search)
@@ -29,14 +29,14 @@ pub fn popup_view<'a>(
     let list_view = container({
         let mut column = column();
         if !favorites.is_empty() {
-            let fav_section = list_section(favorites, "Favorites", true);
+            let fav_section = list_section(favorites, fl!("favorites-heading"), true);
             column = column.push(fav_section);
         }
         if !entries.is_empty() {
             if !favorites.is_empty() {
                 column = column.push(horizontal_space().height(5));
             }
-            let others_section = list_section(entries, "History", false);
+            let others_section = list_section(entries, fl!("history-heading"), false);
             column = column.push(others_section);
         }
 
@@ -61,11 +61,7 @@ pub fn popup_view<'a>(
         .into()
 }
 
-fn list_section<'a>(
-    ui_entries: &'a [UiEntry],
-    name: &'a str,
-    favoirte: bool,
-) -> Element<'a, AppMessage> {
+fn list_section(ui_entries: &[UiEntry], name: String, favoirte: bool) -> Element<'_, AppMessage> {
     let mut entries = vec![heading(name).into()];
     entries.extend(ui_entries.iter().map(|entry| entry_view(entry, favoirte)));
 
