@@ -4,8 +4,11 @@ use cosmic::{
     iced_widget::{hover, rich_text, span},
     theme::{Button, Container},
     widget::{
+        MouseArea, RcElementWrapper,
         button::{self, Catalog},
-        container, row, text,
+        container, context_menu,
+        menu::Tree,
+        row, text,
     },
 };
 use ringboard_sdk::ui_actor::{UiEntry, UiEntryCache};
@@ -82,54 +85,52 @@ pub fn entry_view<'a>(
             }),
         });
 
-    let overlay = container(
-        container(
-            row()
-                .push(
-                    button::icon(icon!("star"))
-                        .on_press(AppMessage::ChangeFavorite(entry.entry.id(), favorite))
-                        .class(Button::Custom {
-                            active: Box::new(move |focused, theme| {
-                                let mut style = theme.active(focused, false, &Button::Icon);
-                                if favorite {
-                                    style.icon_color = Some(Color::from_rgb(1f32, 0.84f32, 0f32)); // gold
-                                }
-                                style
-                            }),
-                            disabled: Box::new(move |theme| theme.disabled(&Button::Icon)),
-                            hovered: Box::new(move |focused, theme| button::Style {
-                                icon_color: Some(Color::from_rgb(1f32, 0.84f32, 0f32)), // gold
-                                ..theme.hovered(focused, false, &Button::Icon)
-                            }),
-                            pressed: Box::new(move |focused, theme| button::Style {
-                                icon_color: Some(Color::from_rgb(1f32, 0.84f32, 0f32)), // gold
-                                ..theme.pressed(focused, false, &Button::Icon)
-                            }),
-                        }),
-                )
-                .push(
-                    button::icon(icon!("trash"))
-                        .on_press(AppMessage::Delete(entry.entry.id()))
-                        .class(Button::Custom {
-                            active: Box::new(move |focused, theme| button::Style {
-                                ..theme.active(focused, false, &Button::Icon)
-                            }),
-                            disabled: Box::new(move |theme| theme.disabled(&Button::Icon)),
-                            hovered: Box::new(move |focused, theme| button::Style {
-                                icon_color: Some(Color::from_rgb(0.8f32, 0.2f32, 0.2f32)), // red
-                                ..theme.hovered(focused, false, &Button::Icon)
-                            }),
-                            pressed: Box::new(move |focused, theme| button::Style {
-                                icon_color: Some(Color::from_rgb(0.8f32, 0.2f32, 0.2f32)), // red
-                                ..theme.pressed(focused, false, &Button::Icon)
-                            }),
-                        }),
-                ),
+    let overlay: Element<'static, AppMessage> = row()
+        .push(
+            button::icon(icon!("star"))
+                .on_press(AppMessage::ChangeFavorite(entry.entry.id(), favorite))
+                .class(Button::Custom {
+                    active: Box::new(move |focused, theme| {
+                        let mut style = theme.active(focused, false, &Button::Icon);
+                        if favorite {
+                            style.icon_color = Some(Color::from_rgb(1f32, 0.84f32, 0f32)); // gold
+                        }
+                        style
+                    }),
+                    disabled: Box::new(move |theme| theme.disabled(&Button::Icon)),
+                    hovered: Box::new(move |focused, theme| button::Style {
+                        icon_color: Some(Color::from_rgb(1f32, 0.84f32, 0f32)), // gold
+                        ..theme.hovered(focused, false, &Button::Icon)
+                    }),
+                    pressed: Box::new(move |focused, theme| button::Style {
+                        icon_color: Some(Color::from_rgb(1f32, 0.84f32, 0f32)), // gold
+                        ..theme.pressed(focused, false, &Button::Icon)
+                    }),
+                }),
         )
-        .class(Container::Card),
-    )
-    .align_right(Length::Fill)
-    .padding([2, 0, 0, 4]);
+        .push(
+            button::icon(icon!("trash"))
+                .on_press(AppMessage::Delete(entry.entry.id()))
+                .class(Button::Custom {
+                    active: Box::new(move |focused, theme| button::Style {
+                        ..theme.active(focused, false, &Button::Icon)
+                    }),
+                    disabled: Box::new(move |theme| theme.disabled(&Button::Icon)),
+                    hovered: Box::new(move |focused, theme| button::Style {
+                        icon_color: Some(Color::from_rgb(0.8f32, 0.2f32, 0.2f32)), // red
+                        ..theme.hovered(focused, false, &Button::Icon)
+                    }),
+                    pressed: Box::new(move |focused, theme| button::Style {
+                        icon_color: Some(Color::from_rgb(0.8f32, 0.2f32, 0.2f32)), // red
+                        ..theme.pressed(focused, false, &Button::Icon)
+                    }),
+                }),
+        )
+        .into();
 
-    hover(btn, overlay)
+    let tree = Tree::new(RcElementWrapper::new(overlay));
+    //context_menu(btn, Some(vec![tree])).into()
+    MouseArea::new(btn)
+        .on_right_press(AppMessage::ViewDetails(entry.entry.id()))
+        .into()
 }

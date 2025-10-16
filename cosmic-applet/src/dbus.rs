@@ -1,6 +1,7 @@
-use std::{future::pending, sync::Arc};
+use std::{any::TypeId, future::pending, sync::Arc};
 
-use cosmic::iced::futures::executor::block_on;
+use cosmic::iced::{Subscription, futures::executor::block_on, stream::channel};
+use futures_util::SinkExt;
 use tokio::{sync::Notify, task::spawn_blocking};
 use tracing::info;
 use zbus::{
@@ -10,6 +11,8 @@ use zbus::{
     names::{ErrorName, OwnedErrorName},
     proxy,
 };
+
+use crate::app::AppMessage;
 
 struct OpenToggle {
     notify: Arc<Notify>,
@@ -77,4 +80,18 @@ pub async fn client() -> Result<bool> {
     };
     assert!(res, "Toggle failed");
     Ok(true)
+}
+
+struct WackupSubscription;
+
+pub fn wackup_sub(notify: Arc<Notify>) -> Subscription<AppMessage> {
+    Subscription::run_with_id(
+        TypeId::of::<WackupSubscription>(),
+        channel(1, move |mut output| async move {
+            loop {
+                notify.notified().await;
+                let _ = output.send(AppMessage::TogglePopup).await;
+            }
+        }),
+    )
 }

@@ -1,28 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use cosmic::cosmic_config::CosmicConfigEntry;
-use cosmic::iced::futures::executor::block_on;
 use cosmic::iced::keyboard::key::Named;
 use cosmic::iced::keyboard::{Key, Modifiers, on_key_press};
-use cosmic::iced::stream::channel;
 use cosmic::iced::{Limits, Subscription, window};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::widget::segmented_button::{Entity, SingleSelectModel};
 use cosmic::widget::{MouseArea, Space};
 use cosmic::{Action, cosmic_config, prelude::*};
-use futures_util::SinkExt;
 use ringboard_sdk::core::protocol::RingKind;
 use ringboard_sdk::search::CancellationToken;
-use ringboard_sdk::ui_actor::{Command, Message, UiEntry, controller};
-use std::any::TypeId;
-use std::ops::Deref;
+use ringboard_sdk::ui_actor::{Command, DetailedEntry, UiEntry};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
-use tokio::task::spawn_blocking;
 use tracing::{info, warn};
 
-use crate::config::{Config, FilterMode};
+use crate::client::ringboard_client_sub;
+use crate::config::{Config, FilterMode, config_sub};
+use crate::dbus::wackup_sub;
 use crate::icon_app;
 use crate::views::popup::popup_view;
 use crate::views::settings::{filter_mode_model, settings_view};
@@ -48,6 +43,12 @@ pub struct AppModel {
 struct Popup {
     id: window::Id,
     kind: PopupKind,
+    details: Option<Result<Details, String>>,
+}
+
+pub struct Details {
+    pub id: u64,
+    pub entry: DetailedEntry,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +73,9 @@ pub enum AppMessage {
     Items(Arc<Mutex<Vec<UiEntry>>>), // arc mutex is required because UiEntry is not cloneable and AppMessage needs to be cloneable
     Paste(u64),
     ChangeFavorite(u64, bool),
+    ViewDetails(u64),
+    DetailsLoaded(Result<(u64, Arc<Mutex<Option<DetailedEntry>>>), String>), // arc mutex is required because DetailedEntry is not cloneable and AppMessage needs to be cloneable
+    CloseDetails,
     Delete(u64),
     Deleted(u64),
     Reload,
@@ -108,7 +112,11 @@ impl AppModel {
 
     fn open_popup(&mut self, kind: PopupKind) -> Task<Action<AppMessage>> {
         let id = window::Id::unique();
-        self.popup.replace(Popup { id, kind });
+        self.popup.replace(Popup {
+            id,
+            kind,
+            details: None,
+        });
         // directly focusing the text input does not work for some reason, so we can't select the text in the input
         // to be replaced when starting to type so we just clear the input when opening the popup
         self.search = String::new();
@@ -272,6 +280,34 @@ impl cosmic::Application for AppModel {
                     let _ = self.command_sender.send(Command::Favorite(id));
                 }
             }
+            AppMessage::ViewDetails(id) => {
+                info!("Viewing details of item with id: {}", id);
+                let _ = self.command_sender.send(Command::GetDetails {
+                    id,
+                    with_text: true,
+                });
+            }
+            AppMessage::DetailsLoaded(result) => {
+                if let Some(popup) = self.popup.as_mut() {
+                    match result {
+                        Ok((id, details)) => {
+                            if let Ok(mut details) = details.lock() {
+                                if let Some(details) = details.take() {
+                                    popup.details = Some(Ok(Details { id, entry: details }));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            popup.details = Some(Err(e));
+                        }
+                    }
+                }
+            }
+            AppMessage::CloseDetails => {
+                if let Some(popup) = self.popup.as_mut() {
+                    popup.details = None;
+                }
+            }
             AppMessage::Reload => {
                 info!("Reloading items");
                 if self.search.is_empty() {
@@ -326,78 +362,13 @@ impl cosmic::Application for AppModel {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        struct RingboardSubscription;
         let command_receiver = self.command_receiver.clone();
-
-        let ringboard_client = Subscription::run_with_id(
-            TypeId::of::<RingboardSubscription>(),
-            channel(10, move |mut output| async move {
-                spawn_blocking(move || {
-                    let command_receiver = command_receiver.lock().unwrap();
-                    info!("Starting ringboard client");
-                    controller::<anyhow::Error>(command_receiver.deref(), |m| {
-                        match m {
-                            Message::Error(e) => eprintln!("Error: {e}"),
-                            Message::EntryDetails { id, result } => {
-                                println!("EntryDetails: {id}, {result:?}")
-                            }
-                            Message::LoadedImage { id, .. } => println!("LoadedImage: {id}"),
-                            Message::FatalDbOpen(e) => {
-                                let _ = block_on(output.send(AppMessage::FatalError(format!(
-                                    "Failed to open database: {}",
-                                    e
-                                ))));
-                            }
-                            Message::FavoriteChange(_) => {
-                                block_on(output.send(AppMessage::Reload))?; // because the id of the element changes when favoriting/unfavoriting we can't just update the entry in place
-                            }
-                            Message::SearchResults(results) => {
-                                block_on(output.send(AppMessage::Items(Arc::new(Mutex::new(
-                                    results.into(),
-                                )))))?;
-                            }
-                            Message::PendingSearch(token) => {
-                                block_on(output.send(AppMessage::SearchPending(token)))?;
-                            }
-                            Message::LoadedFirstPage { entries, .. } => {
-                                block_on(output.send(AppMessage::Items(Arc::new(Mutex::new(
-                                    entries.into(),
-                                )))))?;
-                            }
-                            Message::Deleted(id) => {
-                                block_on(output.send(AppMessage::Deleted(id)))?;
-                            }
-                            Message::Pasted => (), // we don't need to handle this because the popup is closed immediately after sending the paste command,
-                        }
-                        Ok(())
-                    });
-                })
-                .await
-                .unwrap();
-                info!("Ringboard client stopped");
-            }),
-        );
-
-        struct WackupSubscription;
+        let ringboard_client = ringboard_client_sub(command_receiver);
 
         let notify = self.notify.clone();
-        let wackup = Subscription::run_with_id(
-            TypeId::of::<WackupSubscription>(),
-            channel(1, move |mut output| async move {
-                loop {
-                    notify.notified().await;
-                    let _ = output.send(AppMessage::TogglePopup).await;
-                }
-            }),
-        );
+        let wackup = wackup_sub(notify);
 
-        struct ConfigSubscription;
-        let config_handler = cosmic_config::config_subscription(
-            TypeId::of::<ConfigSubscription>(),
-            Self::APP_ID.into(),
-            Config::VERSION,
-        )
-        .map(|update| AppMessage::ConfigUpdate(update.config));
+        let config_handler = config_sub();
 
         let keyboard_listener = on_key_press(key_press);
 

@@ -13,6 +13,7 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitEx
 use crate::{app::Flags, config::Config};
 
 mod app;
+mod client;
 mod config;
 mod dbus;
 mod i18n;
