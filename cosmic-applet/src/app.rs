@@ -9,7 +9,7 @@ use cosmic::widget::{MouseArea, Space};
 use cosmic::{Action, cosmic_config, prelude::*};
 use ringboard_sdk::core::protocol::RingKind;
 use ringboard_sdk::search::CancellationToken;
-use ringboard_sdk::ui_actor::{Command, DetailedEntry, UiEntry};
+use ringboard_sdk::ui_actor::{Command, UiEntry};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
@@ -19,6 +19,7 @@ use crate::client::ringboard_client_sub;
 use crate::config::{Config, FilterMode, config_sub};
 use crate::dbus::wackup_sub;
 use crate::icon_app;
+use crate::views::details::details_view;
 use crate::views::popup::popup_view;
 use crate::views::settings::{filter_mode_model, settings_view};
 
@@ -46,9 +47,19 @@ struct Popup {
     details: Option<Result<Details, String>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Details {
     pub id: u64,
-    pub entry: DetailedEntry,
+    pub favorite: bool,
+    pub entry: DetailData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DetailData {
+    Loading,
+    Text(String, String),
+    Image(Box<[u8]>, String),
+    Other(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,8 +84,8 @@ pub enum AppMessage {
     Items(Arc<Mutex<Vec<UiEntry>>>), // arc mutex is required because UiEntry is not cloneable and AppMessage needs to be cloneable
     Paste(u64),
     ChangeFavorite(u64, bool),
-    ViewDetails(u64),
-    DetailsLoaded(Result<(u64, Arc<Mutex<Option<DetailedEntry>>>), String>), // arc mutex is required because DetailedEntry is not cloneable and AppMessage needs to be cloneable
+    ViewDetails(u64, bool),
+    DetailsLoaded(Result<Details, String>), // arc mutex is required because DetailedEntry is not cloneable and AppMessage needs to be cloneable
     CloseDetails,
     Delete(u64),
     Deleted(u64),
@@ -83,7 +94,6 @@ pub enum AppMessage {
     ConfigUpdate(Config),
     KeyPressed(Key),
     FatalError(String),
-    Test,
 }
 
 impl AppModel {
@@ -212,13 +222,16 @@ impl cosmic::Application for AppModel {
         };
 
         let view = match popup.kind {
-            PopupKind::Search => popup_view(
-                &self.entries,
-                &self.favorites,
-                &self.search,
-                self.core.system_theme(),
-                self.fatal_error.as_deref(),
-            ),
+            PopupKind::Search => match &popup.details {
+                Some(details) => details_view(details.as_ref()),
+                None => popup_view(
+                    &self.entries,
+                    &self.favorites,
+                    &self.search,
+                    self.core.system_theme(),
+                    self.fatal_error.as_deref(),
+                ),
+            },
             PopupKind::Settings => settings_view(&self.filter_mode_model),
         };
 
@@ -279,31 +292,37 @@ impl cosmic::Application for AppModel {
                 } else {
                     let _ = self.command_sender.send(Command::Favorite(id));
                 }
+                return Task::done(Action::App(AppMessage::CloseDetails));
             }
-            AppMessage::ViewDetails(id) => {
+            AppMessage::ViewDetails(id, favorite) => {
                 info!("Viewing details of item with id: {}", id);
                 let _ = self.command_sender.send(Command::GetDetails {
                     id,
                     with_text: true,
                 });
-            }
-            AppMessage::DetailsLoaded(result) => {
                 if let Some(popup) = self.popup.as_mut() {
-                    match result {
-                        Ok((id, details)) => {
-                            if let Ok(mut details) = details.lock() {
-                                if let Some(details) = details.take() {
-                                    popup.details = Some(Ok(Details { id, entry: details }));
-                                }
-                            }
+                    popup.details = Some(Ok(Details {
+                        id,
+                        favorite,
+                        entry: DetailData::Loading,
+                    }));
+                }
+            }
+            AppMessage::DetailsLoaded(mut result) => {
+                info!("Details loaded");
+                if let Some(popup) = self.popup.as_mut() {
+                    if let Some(Ok(details)) = &popup.details {
+                        if let Ok(result) = &mut result {
+                            // we need to preserve the favorite status because it's not part of the details send by the server
+                            result.favorite = details.favorite;
                         }
-                        Err(e) => {
-                            popup.details = Some(Err(e));
-                        }
+                        // only update the details if we are still viewing the details
+                        popup.details = Some(result);
                     }
                 }
             }
             AppMessage::CloseDetails => {
+                info!("Closing details view");
                 if let Some(popup) = self.popup.as_mut() {
                     popup.details = None;
                 }
@@ -322,6 +341,9 @@ impl cosmic::Application for AppModel {
             AppMessage::Delete(id) => {
                 info!("Deleting item with id: {}", id);
                 let _ = self.command_sender.send(Command::Delete(id));
+                if let Some(popup) = self.popup.as_mut() {
+                    popup.details = None;
+                }
             }
             AppMessage::Deleted(id) => {
                 info!("Item with id: {} deleted", id);
@@ -348,10 +370,8 @@ impl cosmic::Application for AppModel {
                 }
             }
             AppMessage::FatalError(e) => {
+                info!("Fatal error occurred: {}", e);
                 self.fatal_error = Some(e);
-            }
-            AppMessage::Test => {
-                info!("Test message received");
             }
         }
         Task::none()

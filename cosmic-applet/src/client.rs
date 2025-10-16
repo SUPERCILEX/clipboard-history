@@ -10,7 +10,10 @@ use ringboard_sdk::ui_actor::{Command, Message, controller};
 use tokio::task::spawn_blocking;
 use tracing::info;
 
-use crate::app::AppMessage;
+use crate::{
+    app::{AppMessage, DetailData, Details},
+    fl,
+};
 
 struct RingboardSubscription;
 
@@ -30,15 +33,25 @@ pub fn ringboard_client_sub(
                         Message::EntryDetails { id, result } => {
                             let _ =
                                 block_on(output.send(AppMessage::DetailsLoaded(match result {
-                                    Ok(details) => Ok((id, Arc::new(Mutex::new(Some(details))))),
-                                    Err(e) => {
-                                        Err(format!("Failed to load details for entry {id}: {e}"))
-                                    }
+                                    Ok(details) => Ok(Details {
+                                        id,
+                                        favorite: false,
+                                        entry: if let Some(text) = details.full_text {
+                                            DetailData::Text(
+                                                text.to_string(),
+                                                "plain/text".to_string(),
+                                            )
+                                        } else {
+                                            DetailData::Other(details.mime_type.to_string())
+                                        },
+                                    }),
+                                    Err(e) => Err(format!("{}: {e}", fl!("error"))),
                                 })));
                         }
                         Message::FatalDbOpen(e) => {
                             let _ = block_on(output.send(AppMessage::FatalError(format!(
-                                "Failed to open database: {}",
+                                "{}: {}",
+                                fl!("db-error"),
                                 e
                             ))));
                         }
