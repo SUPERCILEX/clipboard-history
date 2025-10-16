@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use cosmic::cosmic_config::CosmicConfigEntry;
 use cosmic::iced::futures::executor::block_on;
+use cosmic::iced::keyboard::{Key, Modifiers, on_key_release};
 use cosmic::iced::stream::channel;
 use cosmic::iced::{Limits, Subscription, futures, window};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
@@ -15,6 +17,7 @@ use std::ops::Deref;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use tokio::task::spawn_blocking;
+use tracing::debug;
 
 use crate::config::{Config, FilterMode};
 use crate::views::popup::popup_view;
@@ -65,10 +68,13 @@ pub enum AppMessage {
     Deleted(u64),
     Reload,
     SelectFilterMode(FilterMode),
+    ConfigUpdate(Config),
+    KeyPressed(Key, Modifiers),
 }
 
 impl AppModel {
     fn toggle_popup(&mut self, kind: PopupKind) -> Task<Action<AppMessage>> {
+        debug!("Toggling popup: {:?}", kind);
         match &self.popup {
             Some(popup) => {
                 if popup.kind == PopupKind::Search {
@@ -83,6 +89,7 @@ impl AppModel {
 
     fn close_popup(&mut self) -> Task<Action<AppMessage>> {
         if let Some(Popup { id, .. }) = self.popup.take() {
+            debug!("Closing popup: {:?}", id);
             destroy_popup(id)
         } else {
             Task::none()
@@ -111,6 +118,8 @@ impl AppModel {
             .max_width(400.0)
             .min_height(200.0)
             .max_height(500.0);
+
+        debug!("Opening popup: {:?}", id);
 
         get_popup(settings)
     }
@@ -200,8 +209,10 @@ impl cosmic::Application for AppModel {
             AppMessage::Search(search) => {
                 self.search = search;
                 if let Some(old_token) = self.pending_search.take() {
+                    debug!("Cancelling previous search");
                     old_token.cancel();
                 }
+                debug!("Starting new search: {}", self.search);
                 let _ = self.command_sender.send(Command::Search {
                     query: self.search.clone().into_boxed_str(),
                     kind: self.config.filter_mode.into(),
@@ -209,6 +220,7 @@ impl cosmic::Application for AppModel {
             }
             AppMessage::SearchPending(token) => {
                 if let Some(old_token) = self.pending_search.replace(token) {
+                    debug!("Cancelling previous search");
                     old_token.cancel();
                 }
             }
@@ -218,15 +230,26 @@ impl cosmic::Application for AppModel {
                     let (favorites, others): (Vec<_>, Vec<_>) = entries
                         .into_iter()
                         .partition(|e| e.entry.ring() == RingKind::Favorites);
+                    debug!(
+                        "Received {} items ({} favorites, {} others)",
+                        favorites.len() + others.len(),
+                        favorites.len(),
+                        others.len()
+                    );
                     self.favorites = favorites;
                     self.entries = others;
                 }
             }
             AppMessage::Paste(id) => {
+                debug!("Pasting item with id: {}", id);
                 let _ = self.command_sender.send(Command::Paste(id));
                 return self.close_popup();
             }
             AppMessage::ChangeFavorite(id, is_favorite) => {
+                debug!(
+                    "Changing favorite status of item with id: {} to {}",
+                    id, !is_favorite
+                );
                 if is_favorite {
                     let _ = self.command_sender.send(Command::Unfavorite(id));
                 } else {
@@ -234,6 +257,7 @@ impl cosmic::Application for AppModel {
                 }
             }
             AppMessage::Reload => {
+                debug!("Reloading items");
                 if self.search.is_empty() {
                     let _ = self.command_sender.send(Command::LoadFirstPage);
                 } else {
@@ -244,14 +268,24 @@ impl cosmic::Application for AppModel {
                 }
             }
             AppMessage::Delete(id) => {
+                debug!("Deleting item with id: {}", id);
                 let _ = self.command_sender.send(Command::Delete(id));
             }
             AppMessage::Deleted(id) => {
+                debug!("Item with id: {} deleted", id);
                 self.favorites.retain(|entry| entry.entry.id() != id);
                 self.entries.retain(|entry| entry.entry.id() != id);
             }
             AppMessage::SelectFilterMode(mode) => {
+                debug!("Changing filter mode to: {:?}", mode);
                 let _ = self.config.set_filter_mode(&self.config_handler, mode);
+            }
+            AppMessage::ConfigUpdate(config) => {
+                debug!("Config updated: {:?}", config);
+                self.config = config;
+            }
+            AppMessage::KeyPressed(key, modifiers) => {
+                debug!("Key pressed: {:?} with modifiers: {:?}", key, modifiers);
             }
         }
         Task::none()
@@ -265,7 +299,7 @@ impl cosmic::Application for AppModel {
         struct RingboardSubscription;
         let command_receiver = self.command_receiver.clone();
 
-        Subscription::run_with_id(
+        let ringboard_client = Subscription::run_with_id(
             TypeId::of::<RingboardSubscription>(),
             channel(10, move |mut output| async move {
                 spawn_blocking(move || {
@@ -307,6 +341,22 @@ impl cosmic::Application for AppModel {
 
                 futures::future::pending().await
             }),
+        );
+
+        struct ConfigSubscription;
+        let config_handler = cosmic_config::config_subscription(
+            TypeId::of::<ConfigSubscription>(),
+            Self::APP_ID.into(),
+            Config::VERSION,
         )
+        .map(|update| AppMessage::ConfigUpdate(update.config));
+
+        let keyboard_listener = on_key_release(key_press);
+
+        Subscription::batch(vec![ringboard_client, config_handler, keyboard_listener])
     }
+}
+
+fn key_press(key: Key, modifiers: Modifiers) -> Option<AppMessage> {
+    Some(AppMessage::KeyPressed(key, modifiers))
 }

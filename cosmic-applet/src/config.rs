@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use std::fmt::Display;
-
 use cosmic::cosmic_config::{self, CosmicConfigEntry, cosmic_config_derive::CosmicConfigEntry};
 use ringboard_sdk::ui_actor::SearchKind;
 use serde::{Deserialize, Serialize};
@@ -27,16 +25,5 @@ impl From<FilterMode> for SearchKind {
             FilterMode::Regex => SearchKind::Regex,
             FilterMode::Mime => SearchKind::Mime,
         }
-    }
-}
-
-impl Display for FilterMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            FilterMode::Plain => "Plain",
-            FilterMode::Regex => "Regex",
-            FilterMode::Mime => "Mime",
-        };
-        write!(f, "{s}")
     }
 }

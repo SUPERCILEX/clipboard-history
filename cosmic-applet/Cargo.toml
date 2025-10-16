@@ -22,6 +22,8 @@ tokio = { version = "1.41.0", features = ["full"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
 anyhow = "1.0.100"
 serde = { version = "1.0.228", features = ["derive"] }
+tracing-subscriber = "0.3.20"
+tracing = "0.1.41"
 
 [dependencies.i18n-embed]
 version = "0.15"
@@ -39,11 +41,6 @@ features = [
     "single-instance",
     # Add Wayland support to winit
     "wayland",
-    "applet"
+    "applet",
+    "serde-keycode",
 ]
-
-# Uncomment to test a locally-cloned libcosmic
-# [patch.'https://github.com/pop-os/libcosmic']
-# libcosmic = { path = "../libcosmic" }
-# cosmic-config = { path = "../libcosmic/cosmic-config" }
-# cosmic-theme = { path = "../libcosmic/cosmic-theme" }
