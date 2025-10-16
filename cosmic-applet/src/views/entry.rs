@@ -129,7 +129,7 @@ pub fn entry_view<'a>(
         .class(Container::Card),
     )
     .align_right(Length::Fill)
-    .padding([1, 0, 0, 4]);
+    .padding([2, 0, 0, 4]);
 
     hover(btn, overlay)
 }

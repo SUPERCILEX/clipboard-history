@@ -22,8 +22,9 @@ tokio = { version = "1.41.0", features = ["full"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
 anyhow = "1.0.100"
 serde = { version = "1.0.228", features = ["derive"] }
-tracing-subscriber = "0.3.20"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 tracing = "0.1.41"
+zbus = { version = "5.12.0", default-features = false, features = ["tokio", "async-io"] }
 
 [dependencies.i18n-embed]
 version = "0.15"

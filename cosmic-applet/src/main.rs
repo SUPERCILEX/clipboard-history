@@ -1,29 +1,50 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use std::sync::Arc;
+
 use cosmic::{
     Application,
     cosmic_config::{self, CosmicConfigEntry},
 };
-use tracing::{debug, info};
+use tokio::sync::Notify;
+use tracing::info;
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{app::Flags, config::Config};
 
 mod app;
 mod config;
+mod dbus;
 mod i18n;
 mod util;
 mod views;
 
-fn main() -> cosmic::iced::Result {
-    tracing_subscriber::fmt().init();
+#[tokio::main]
+async fn main() -> cosmic::iced::Result {
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
+
+    let running = dbus::client().await.expect("Failed to contact D-Bus");
+    if running {
+        info!("Another instance is already running, exiting.");
+        return Ok(());
+    }
+
+    let notify = Arc::new(Notify::new());
+    dbus::server(notify.clone())
+        .await
+        .expect("Failed to start D-Bus server");
+
     // Get the system's preferred languages.
     let requested_languages = i18n_embed::DesktopLanguageRequester::requested_languages();
 
-    debug!("Loaded languages: {:?}", requested_languages);
+    info!("Loaded languages: {:?}", requested_languages);
     // Enable localizations to be applied.
     i18n::init(&requested_languages);
 
-    debug!(
+    info!(
         "Loading config for app id {} version {}",
         app::AppModel::APP_ID,
         Config::VERSION
@@ -48,6 +69,7 @@ fn main() -> cosmic::iced::Result {
     let flags = Flags {
         config_handler,
         config,
+        notify,
     };
 
     info!("Starting app with config: {:?}", flags.config);

@@ -33,7 +33,7 @@ pub fn settings_view<'a>(filter_mode_model: &'a SingleSelectModel) -> Element<'a
         .into();
 
     container(view)
-        .height(Length::Fixed(90f32))
+        .height(Length::Fixed(85f32))
         .width(Length::Fixed(400f32))
         .into()
 }

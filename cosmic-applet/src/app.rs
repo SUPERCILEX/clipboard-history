@@ -2,9 +2,10 @@
 
 use cosmic::cosmic_config::CosmicConfigEntry;
 use cosmic::iced::futures::executor::block_on;
-use cosmic::iced::keyboard::{Key, Modifiers, on_key_release};
+use cosmic::iced::keyboard::key::Named;
+use cosmic::iced::keyboard::{Key, Modifiers, on_key_press};
 use cosmic::iced::stream::channel;
-use cosmic::iced::{Limits, Subscription, futures, window};
+use cosmic::iced::{Limits, Subscription, window};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::widget::segmented_button::{Entity, SingleSelectModel};
 use cosmic::widget::{MouseArea, Space};
@@ -17,8 +18,9 @@ use std::any::TypeId;
 use std::ops::Deref;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use tokio::sync::Notify;
 use tokio::task::spawn_blocking;
-use tracing::{debug, warn};
+use tracing::{info, warn};
 
 use crate::config::{Config, FilterMode};
 use crate::views::popup::popup_view;
@@ -35,6 +37,7 @@ pub struct AppModel {
     pending_search: Option<CancellationToken>,
     favorites: Vec<UiEntry>,
     entries: Vec<UiEntry>,
+    notify: Arc<Notify>,
     command_sender: Sender<Command>,
     // we need mutex because Receiver is not Sync
     command_receiver: Arc<Mutex<Receiver<Command>>>,
@@ -52,6 +55,7 @@ enum PopupKind {
 }
 
 pub struct Flags {
+    pub notify: Arc<Notify>,
     pub config: Config,
     pub config_handler: cosmic_config::Config,
 }
@@ -71,12 +75,13 @@ pub enum AppMessage {
     Reload,
     SelectFilterMode(Entity),
     ConfigUpdate(Config),
-    KeyPressed(Key, Modifiers),
+    KeyPressed(Key),
+    Test,
 }
 
 impl AppModel {
     fn toggle_popup(&mut self, kind: PopupKind) -> Task<Action<AppMessage>> {
-        debug!("Toggling popup: {:?}", kind);
+        info!("Toggling popup: {:?}", kind);
         match &self.popup {
             Some(popup) => {
                 if popup.kind == PopupKind::Search {
@@ -91,7 +96,7 @@ impl AppModel {
 
     fn close_popup(&mut self) -> Task<Action<AppMessage>> {
         if let Some(Popup { id, .. }) = self.popup.take() {
-            debug!("Closing popup: {:?}", id);
+            info!("Closing popup: {:?}", id);
             destroy_popup(id)
         } else {
             Task::none()
@@ -121,7 +126,7 @@ impl AppModel {
             .min_height(200.0)
             .max_height(500.0);
 
-        debug!("Opening popup: {:?}", id);
+        info!("Opening popup: {:?}", id);
 
         get_popup(settings)
     }
@@ -160,6 +165,7 @@ impl cosmic::Application for AppModel {
             pending_search: None,
             favorites: vec![],
             entries: vec![],
+            notify: flags.notify,
             command_sender,
             command_receiver: Arc::new(Mutex::new(command_receiver)),
         };
@@ -184,7 +190,7 @@ impl cosmic::Application for AppModel {
             .on_press(AppMessage::TogglePopup);
 
         MouseArea::new(icon)
-            .on_right_release(AppMessage::ToggleSettings)
+            .on_right_press(AppMessage::ToggleSettings)
             .into()
     }
 
@@ -214,10 +220,10 @@ impl cosmic::Application for AppModel {
             AppMessage::Search(search) => {
                 self.search = search;
                 if let Some(old_token) = self.pending_search.take() {
-                    debug!("Cancelling previous search");
+                    info!("Cancelling previous search");
                     old_token.cancel();
                 }
-                debug!("Starting new search: {}", self.search);
+                info!("Starting new search: {}", self.search);
                 let _ = self.command_sender.send(Command::Search {
                     query: self.search.clone().into_boxed_str(),
                     kind: self.config.filter_mode.into(),
@@ -225,7 +231,7 @@ impl cosmic::Application for AppModel {
             }
             AppMessage::SearchPending(token) => {
                 if let Some(old_token) = self.pending_search.replace(token) {
-                    debug!("Cancelling previous search");
+                    info!("Cancelling previous search");
                     old_token.cancel();
                 }
             }
@@ -235,7 +241,7 @@ impl cosmic::Application for AppModel {
                     let (favorites, others): (Vec<_>, Vec<_>) = entries
                         .into_iter()
                         .partition(|e| e.entry.ring() == RingKind::Favorites);
-                    debug!(
+                    info!(
                         "Received {} items ({} favorites, {} others)",
                         favorites.len() + others.len(),
                         favorites.len(),
@@ -246,12 +252,12 @@ impl cosmic::Application for AppModel {
                 }
             }
             AppMessage::Paste(id) => {
-                debug!("Pasting item with id: {}", id);
+                info!("Pasting item with id: {}", id);
                 let _ = self.command_sender.send(Command::Paste(id));
                 return self.close_popup();
             }
             AppMessage::ChangeFavorite(id, is_favorite) => {
-                debug!(
+                info!(
                     "Changing favorite status of item with id: {} to {}",
                     id, !is_favorite
                 );
@@ -262,7 +268,7 @@ impl cosmic::Application for AppModel {
                 }
             }
             AppMessage::Reload => {
-                debug!("Reloading items");
+                info!("Reloading items");
                 if self.search.is_empty() {
                     let _ = self.command_sender.send(Command::LoadFirstPage);
                 } else {
@@ -273,11 +279,11 @@ impl cosmic::Application for AppModel {
                 }
             }
             AppMessage::Delete(id) => {
-                debug!("Deleting item with id: {}", id);
+                info!("Deleting item with id: {}", id);
                 let _ = self.command_sender.send(Command::Delete(id));
             }
             AppMessage::Deleted(id) => {
-                debug!("Item with id: {} deleted", id);
+                info!("Item with id: {} deleted", id);
                 self.favorites.retain(|entry| entry.entry.id() != id);
                 self.entries.retain(|entry| entry.entry.id() != id);
             }
@@ -287,16 +293,21 @@ impl cosmic::Application for AppModel {
                     warn!("Invalid filter mode selected");
                     return Task::none();
                 };
-                debug!("Changing filter mode to: {:?}", mode);
+                info!("Changing filter mode to: {:?}", mode);
                 self.filter_mode_model.activate(e);
                 let _ = self.config.set_filter_mode(&self.config_handler, mode);
             }
             AppMessage::ConfigUpdate(config) => {
-                debug!("Config updated: {:?}", config);
+                info!("Config updated: {:?}", config);
                 self.config = config;
             }
-            AppMessage::KeyPressed(key, modifiers) => {
-                debug!("Key pressed: {:?} with modifiers: {:?}", key, modifiers);
+            AppMessage::KeyPressed(key) => {
+                if let Key::Named(Named::Escape) = key {
+                    return self.close_popup();
+                }
+            }
+            AppMessage::Test => {
+                info!("Test message received");
             }
         }
         Task::none()
@@ -315,6 +326,7 @@ impl cosmic::Application for AppModel {
             channel(10, move |mut output| async move {
                 spawn_blocking(move || {
                     let command_receiver = command_receiver.lock().unwrap();
+                    info!("Starting ringboard client");
                     controller::<anyhow::Error>(command_receiver.deref(), |m| {
                         match m {
                             Message::Error(e) => eprintln!("Error: {e}"),
@@ -349,8 +361,20 @@ impl cosmic::Application for AppModel {
                 })
                 .await
                 .unwrap();
+                info!("Ringboard client stopped");
+            }),
+        );
 
-                futures::future::pending().await
+        struct WackupSubscription;
+
+        let notify = self.notify.clone();
+        let wackup = Subscription::run_with_id(
+            TypeId::of::<WackupSubscription>(),
+            channel(1, move |mut output| async move {
+                loop {
+                    notify.notified().await;
+                    let _ = output.send(AppMessage::TogglePopup).await;
+                }
             }),
         );
 
@@ -362,12 +386,17 @@ impl cosmic::Application for AppModel {
         )
         .map(|update| AppMessage::ConfigUpdate(update.config));
 
-        let keyboard_listener = on_key_release(key_press);
+        let keyboard_listener = on_key_press(key_press);
 
-        Subscription::batch(vec![ringboard_client, config_handler, keyboard_listener])
+        Subscription::batch(vec![
+            ringboard_client,
+            wackup,
+            config_handler,
+            keyboard_listener,
+        ])
     }
 }
 
-fn key_press(key: Key, modifiers: Modifiers) -> Option<AppMessage> {
-    Some(AppMessage::KeyPressed(key, modifiers))
+fn key_press(key: Key, _modifiers: Modifiers) -> Option<AppMessage> {
+    Some(AppMessage::KeyPressed(key))
 }
