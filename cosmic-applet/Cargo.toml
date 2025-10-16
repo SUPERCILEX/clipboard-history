@@ -42,5 +42,4 @@ features = [
     # Add Wayland support to winit
     "wayland",
     "applet",
-    "serde-keycode",
 ]

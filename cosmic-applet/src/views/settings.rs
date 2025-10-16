@@ -1,8 +1,9 @@
 use cosmic::{
     Element,
     iced::{Alignment, Length},
-    theme::Button,
-    widget::{button, column, container, row, text::heading},
+    widget::{
+        column, container, segmented_button::SingleSelectModel, segmented_control, text::heading,
+    },
 };
 
 use crate::{
@@ -11,14 +12,11 @@ use crate::{
     fl,
 };
 
-pub fn settings_view<'a>(config: &'a Config) -> Element<'a, AppMessage> {
+pub fn settings_view<'a>(filter_mode_model: &'a SingleSelectModel) -> Element<'a, AppMessage> {
     let search_mode_heading = heading(fl!("filter-mode-heading"));
 
-    let search_mode_select = row()
-        .push(search_mode_btn(FilterMode::Plain, config.filter_mode))
-        .push(search_mode_btn(FilterMode::Regex, config.filter_mode))
-        .push(search_mode_btn(FilterMode::Mime, config.filter_mode))
-        .spacing(10);
+    let search_mode_select = segmented_control::horizontal(&filter_mode_model)
+        .on_activate(|e| AppMessage::SelectFilterMode(e));
 
     let search_mode = column()
         .push(search_mode_heading)
@@ -36,25 +34,33 @@ pub fn settings_view<'a>(config: &'a Config) -> Element<'a, AppMessage> {
 
     container(view)
         .height(Length::Fixed(90f32))
-        .width(Length::Fixed(320f32))
+        .width(Length::Fixed(400f32))
         .into()
 }
 
-fn search_mode_btn<'a>(mode: FilterMode, selected: FilterMode) -> Element<'a, AppMessage> {
-    let is_selected = mode == selected;
-    let label = match mode {
-        FilterMode::Plain => fl!("filter-mode-plain"),
-        FilterMode::Regex => fl!("filter-mode-regex"),
-        FilterMode::Mime => fl!("filter-mode-mime"),
-    };
+pub fn filter_mode_model(config: &Config) -> SingleSelectModel {
+    let mut filter_mode_model = SingleSelectModel::default();
+    let plain = filter_mode_model
+        .insert()
+        .text(fl!("filter-mode-plain"))
+        .data(FilterMode::Plain)
+        .id();
+    let regex = filter_mode_model
+        .insert()
+        .text(fl!("filter-mode-regex"))
+        .data(FilterMode::Regex)
+        .id();
+    let mime = filter_mode_model
+        .insert()
+        .text(fl!("filter-mode-mime"))
+        .data(FilterMode::Mime)
+        .id();
 
-    let mut btn = button::text(label).on_press(AppMessage::SelectFilterMode(mode));
-
-    if is_selected {
-        btn = btn.class(Button::Suggested);
-    } else {
-        btn = btn.class(Button::Standard);
+    match config.filter_mode {
+        FilterMode::Plain => filter_mode_model.activate(plain),
+        FilterMode::Regex => filter_mode_model.activate(regex),
+        FilterMode::Mime => filter_mode_model.activate(mime),
     }
 
-    btn.into()
+    filter_mode_model
 }

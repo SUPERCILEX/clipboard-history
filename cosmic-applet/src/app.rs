@@ -6,6 +6,7 @@ use cosmic::iced::keyboard::{Key, Modifiers, on_key_release};
 use cosmic::iced::stream::channel;
 use cosmic::iced::{Limits, Subscription, futures, window};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
+use cosmic::widget::segmented_button::{Entity, SingleSelectModel};
 use cosmic::widget::{MouseArea, Space};
 use cosmic::{Action, cosmic_config, prelude::*};
 use futures_util::SinkExt;
@@ -17,11 +18,11 @@ use std::ops::Deref;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use tokio::task::spawn_blocking;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::config::{Config, FilterMode};
 use crate::views::popup::popup_view;
-use crate::views::settings::settings_view;
+use crate::views::settings::{filter_mode_model, settings_view};
 
 pub struct AppModel {
     /// Application state which is managed by the COSMIC runtime.
@@ -30,6 +31,7 @@ pub struct AppModel {
     config_handler: cosmic_config::Config,
     popup: Option<Popup>,
     search: String,
+    filter_mode_model: SingleSelectModel,
     pending_search: Option<CancellationToken>,
     favorites: Vec<UiEntry>,
     entries: Vec<UiEntry>,
@@ -67,7 +69,7 @@ pub enum AppMessage {
     Delete(u64),
     Deleted(u64),
     Reload,
-    SelectFilterMode(FilterMode),
+    SelectFilterMode(Entity),
     ConfigUpdate(Config),
     KeyPressed(Key, Modifiers),
 }
@@ -145,6 +147,8 @@ impl cosmic::Application for AppModel {
     fn init(core: cosmic::Core, flags: Self::Flags) -> (Self, Task<cosmic::Action<Self::Message>>) {
         let (command_sender, command_receiver) = mpsc::channel();
 
+        let filter_mode_model = filter_mode_model(&flags.config);
+
         // Construct the app model with the runtime's core.
         let app = AppModel {
             core,
@@ -152,6 +156,7 @@ impl cosmic::Application for AppModel {
             config_handler: flags.config_handler,
             popup: None,
             search: String::new(),
+            filter_mode_model,
             pending_search: None,
             favorites: vec![],
             entries: vec![],
@@ -195,7 +200,7 @@ impl cosmic::Application for AppModel {
                 &self.search,
                 self.core.system_theme(),
             ),
-            PopupKind::Settings => settings_view(&self.config),
+            PopupKind::Settings => settings_view(&self.filter_mode_model),
         };
 
         self.core.applet.popup_container(view).into()
@@ -276,8 +281,14 @@ impl cosmic::Application for AppModel {
                 self.favorites.retain(|entry| entry.entry.id() != id);
                 self.entries.retain(|entry| entry.entry.id() != id);
             }
-            AppMessage::SelectFilterMode(mode) => {
+            AppMessage::SelectFilterMode(e) => {
+                let mode = self.filter_mode_model.data::<FilterMode>(e);
+                let Some(&mode) = mode else {
+                    warn!("Invalid filter mode selected");
+                    return Task::none();
+                };
                 debug!("Changing filter mode to: {:?}", mode);
+                self.filter_mode_model.activate(e);
                 let _ = self.config.set_filter_mode(&self.config_handler, mode);
             }
             AppMessage::ConfigUpdate(config) => {
