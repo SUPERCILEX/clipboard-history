@@ -9,9 +9,6 @@ keywords = ["ringboard", "clipboard", "tools", "cosmic"]
 categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
-[build-dependencies]
-vergen = { version = "8", features = ["git", "gitcl"] }
-
 [dependencies]
 constcat = "0.6.1"
 futures-util = "0.3.31"

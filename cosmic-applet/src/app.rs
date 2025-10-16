@@ -23,6 +23,7 @@ use tokio::task::spawn_blocking;
 use tracing::{info, warn};
 
 use crate::config::{Config, FilterMode};
+use crate::icon_app;
 use crate::views::popup::popup_view;
 use crate::views::settings::{filter_mode_model, settings_view};
 
@@ -189,7 +190,7 @@ impl cosmic::Application for AppModel {
         let icon = self
             .core
             .applet
-            .icon_button(constcat::concat!(AppModel::APP_ID, "-symbolic"))
+            .icon_button_from_handle(icon_app!("clipboard"))
             .on_press(AppMessage::TogglePopup);
 
         MouseArea::new(icon)
