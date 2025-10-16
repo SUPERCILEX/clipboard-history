@@ -38,6 +38,7 @@ pub struct AppModel {
     favorites: Vec<UiEntry>,
     entries: Vec<UiEntry>,
     notify: Arc<Notify>,
+    fatal_error: Option<String>,
     command_sender: Sender<Command>,
     // we need mutex because Receiver is not Sync
     command_receiver: Arc<Mutex<Receiver<Command>>>,
@@ -76,6 +77,7 @@ pub enum AppMessage {
     SelectFilterMode(Entity),
     ConfigUpdate(Config),
     KeyPressed(Key),
+    FatalError(String),
     Test,
 }
 
@@ -166,6 +168,7 @@ impl cosmic::Application for AppModel {
             favorites: vec![],
             entries: vec![],
             notify: flags.notify,
+            fatal_error: None,
             command_sender,
             command_receiver: Arc::new(Mutex::new(command_receiver)),
         };
@@ -205,6 +208,7 @@ impl cosmic::Application for AppModel {
                 &self.favorites,
                 &self.search,
                 self.core.system_theme(),
+                self.fatal_error.as_deref(),
             ),
             PopupKind::Settings => settings_view(&self.filter_mode_model),
         };
@@ -306,6 +310,9 @@ impl cosmic::Application for AppModel {
                     return self.close_popup();
                 }
             }
+            AppMessage::FatalError(e) => {
+                self.fatal_error = Some(e);
+            }
             AppMessage::Test => {
                 info!("Test message received");
             }
@@ -330,11 +337,16 @@ impl cosmic::Application for AppModel {
                     controller::<anyhow::Error>(command_receiver.deref(), |m| {
                         match m {
                             Message::Error(e) => eprintln!("Error: {e}"),
-                            Message::FatalDbOpen(e) => eprintln!("FatalDbOpen: {e}"),
                             Message::EntryDetails { id, result } => {
                                 println!("EntryDetails: {id}, {result:?}")
                             }
                             Message::LoadedImage { id, .. } => println!("LoadedImage: {id}"),
+                            Message::FatalDbOpen(e) => {
+                                let _ = block_on(output.send(AppMessage::FatalError(format!(
+                                    "Failed to open database: {}",
+                                    e
+                                ))));
+                            }
                             Message::FavoriteChange(_) => {
                                 block_on(output.send(AppMessage::Reload))?; // because the id of the element changes when favoriting/unfavoriting we can't just update the entry in place
                             }

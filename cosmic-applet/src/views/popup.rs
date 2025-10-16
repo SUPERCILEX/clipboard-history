@@ -12,6 +12,7 @@ pub fn popup_view<'a>(
     favorites: &'a [UiEntry],
     search: &'a str,
     theme: &'a Theme,
+    fatal_error: Option<&'a str>,
 ) -> Element<'a, AppMessage> {
     let search = container(
         row()
@@ -29,11 +30,11 @@ pub fn popup_view<'a>(
 
     let list_view = container({
         let mut column = column();
-        if !favorites.is_empty() {
+        if !favorites.is_empty() && fatal_error.is_none() {
             let fav_section = list_section(favorites, fl!("favorites-heading"), true, theme);
             column = column.push(fav_section);
         }
-        if !entries.is_empty() {
+        if !entries.is_empty() && fatal_error.is_none() {
             if !favorites.is_empty() {
                 column = column.push(horizontal_space().height(5));
             }
@@ -41,7 +42,9 @@ pub fn popup_view<'a>(
             column = column.push(others_section);
         }
 
-        if favorites.is_empty() && entries.is_empty() {
+        if let Some(err) = fatal_error {
+            column = column.push(heading(err));
+        } else if favorites.is_empty() && entries.is_empty() {
             column = column.push(heading("No items found"));
         }
 
