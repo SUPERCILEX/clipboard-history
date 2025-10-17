@@ -35,7 +35,13 @@ pub fn ringboard_client_sub(
                 info!("Starting ringboard client");
                 controller::<anyhow::Error>(command_receiver.deref(), |m| {
                     match m {
-                        Message::Error(e) => eprintln!("Error: {e}"),
+                        Message::Error(e) => {
+                            let _ = block_on(output.send(AppMessage::Error(format!(
+                                "{}: {}",
+                                fl!("error"),
+                                e
+                            ))));
+                        }
                         Message::LoadedImage { id, image } => {
                             let _ = block_on(output.send(AppMessage::ImageLoaded(id, image)));
                         }

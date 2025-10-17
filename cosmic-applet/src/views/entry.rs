@@ -5,12 +5,17 @@ use cosmic::{
     theme::Button,
     widget::{
         MouseArea,
-        button::{self, Catalog},
+        button::{self, Catalog, image},
+        container,
+        image::Handle,
         text,
     },
 };
 
-use crate::app::{AppMessage, Entry, EntryData};
+use crate::{
+    app::{AppMessage, Entry, EntryData},
+    fl,
+};
 
 pub fn entry_view<'a>(
     entry: &'a Entry,
@@ -18,7 +23,12 @@ pub fn entry_view<'a>(
     theme: &'a cosmic::Theme,
 ) -> Element<'a, AppMessage> {
     let content: Element<'_, AppMessage> = match &entry.data {
-        EntryData::Text { text: str, .. } => text(str).into(),
+        EntryData::Text { text: str, .. } | EntryData::Mime(str) | EntryData::Error(str) => {
+            text(str).into()
+        }
+        EntryData::Loading | EntryData::Image { image: None, .. } => {
+            text(fl!("detail-loading")).into()
+        }
         EntryData::HighlightedText {
             text: str,
             start,
@@ -34,9 +44,22 @@ pub fn entry_view<'a>(
 
             text.into()
         }
-        _ => {
-            println!("Entry without highlighted text cache: {:?}", entry.id);
-            text("< loading... >").into()
+        EntryData::Image {
+            image: Some(image_data),
+            ..
+        } => {
+            if let Some(data) = image_data.as_rgba8() {
+                container(image(Handle::from_rgba(
+                    image_data.width(),
+                    image_data.height(),
+                    data.to_vec(),
+                )))
+                .align_left(Length::Fill)
+                .max_height(200)
+                .into()
+            } else {
+                text(fl!("invalid-image")).into()
+            }
         }
     };
 

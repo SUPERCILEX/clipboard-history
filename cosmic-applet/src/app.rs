@@ -108,6 +108,7 @@ pub enum AppMessage {
     ConfigUpdate(Config),
     KeyPressed(Key),
     FatalError(String),
+    Error(String),
 }
 
 impl AppModel {
@@ -419,6 +420,14 @@ impl cosmic::Application for AppModel {
             AppMessage::FatalError(e) => {
                 info!("Fatal error occurred: {}", e);
                 self.fatal_error = Some(e);
+            }
+            AppMessage::Error(error) => {
+                warn!("Error occurred: {}", error);
+                if let Some(popup) = &mut self.popup
+                    && let Some(details) = &mut popup.details
+                {
+                    *details = Err(error);
+                }
             }
         }
         Task::none()
