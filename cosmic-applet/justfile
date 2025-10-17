@@ -1,4 +1,4 @@
-name := 'cosmic-applet'
+name := 'clipboard-history-cosmic-applet'
 appid := 'com.github.ringboard.cosmic-applet'
 
 rootdir := ''
@@ -17,10 +17,10 @@ appdata := appid + '.metainfo.xml'
 appdata-src := 'resources' / appdata
 appdata-dst := clean(rootdir / prefix) / 'share' / 'appdata' / appdata
 
-icons-src := 'resources' / 'icons' / 'hicolor'
+icons-src := 'resources' / 'icons'
 icons-dst := clean(rootdir / prefix) / 'share' / 'icons' / 'hicolor'
 
-icon-svg-src := icons-src / 'scalable' / 'apps' / 'icon.svg'
+icon-svg-src := icons-src / 'clipboard.svg'
 icon-svg-dst := icons-dst / 'scalable' / 'apps' / appid + '.svg'
 
 # Default recipe which runs `just build-release`
@@ -93,4 +93,3 @@ vendor:
 vendor-extract:
     rm -rf vendor
     tar pxf vendor.tar
-

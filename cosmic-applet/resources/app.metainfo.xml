@@ -6,14 +6,14 @@
   <name>Cosmic Applet</name>
   <summary>This applet is a Ringboard client that provides direkt integration with the Cosmic Desktop</summary>
   <icon type="remote" width="64" height="64" scale="1">
-    https://github.com/SUPERCILEX/clipboard-history/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
+    https://github.com/SUPERCILEX/clipboard-history/raw/main/cosmic-applet/resources/clipboard.svg
   </icon>
   <url type="vcs-browser">https://github.com/SUPERCILEX/clipboard-history</url>
   <launchable type="desktop-id">com.github.ringboard.cosmic-applet.desktop</launchable>
   <provides>
     <id>com.github.ringboard.cosmic-applet</id>
     <binaries>
-      <binary>cosmic-applet</binary>
+      <binary>clipboard-history-cosmic-applet</binary>
     </binaries>
   </provides>
   <requires>
@@ -32,4 +32,3 @@
   </keywords>
   <content_rating type="oars-1.1" />
 </component>
-
