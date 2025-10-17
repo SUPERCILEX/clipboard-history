@@ -1276,6 +1276,7 @@ dependencies = [
  "i18n-embed 0.15.4",
  "i18n-embed-fl 0.9.4",
  "libcosmic",
+ "notify",
  "open",
  "rust-embed",
  "serde",
@@ -1283,7 +1284,6 @@ dependencies = [
  "tracing",
  "tracing-journald",
  "tracing-subscriber",
- "zbus 5.12.0",
 ]
 
 [[package]]

@@ -21,8 +21,8 @@ anyhow = "1.0.100"
 serde = { version = "1.0.228", features = ["derive"] }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 tracing = "0.1.41"
-zbus = { version = "5.12.0", default-features = false, features = ["tokio", "async-io"] }
 tracing-journald = "0.3.1"
+notify = "8.2.0"
 
 [dependencies.i18n-embed]
 version = "0.15"
@@ -36,8 +36,6 @@ features = [
     "a11y",
     # Uses cosmic-settings-daemon to watch for config file changes
     "dbus-config",
-    # On app startup, focuses an existing instance if the app is already open
-    "single-instance",
     # Add Wayland support to winit
     "wayland",
     "applet",

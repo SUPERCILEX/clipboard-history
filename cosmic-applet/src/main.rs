@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::Arc;
+use std::env::args;
 
 use cosmic::{
     Application,
     cosmic_config::{self, CosmicConfigEntry},
 };
-use tokio::sync::Notify;
 use tracing::info;
 
 use crate::{app::Flags, config::Config, logging::init_logging};
@@ -14,8 +13,8 @@ use crate::{app::Flags, config::Config, logging::init_logging};
 mod app;
 mod client;
 mod config;
-mod dbus;
 mod i18n;
+mod ipc;
 mod logging;
 mod util;
 mod views;
@@ -24,16 +23,11 @@ mod views;
 async fn main() -> cosmic::iced::Result {
     init_logging();
 
-    let running = dbus::client().await.expect("Failed to contact D-Bus");
-    if running {
-        info!("Another instance is already running, exiting.");
+    let args: Vec<String> = args().collect();
+    if args.len() > 1 && args[1] == "toggle" {
+        ipc::toggle();
         return Ok(());
     }
-
-    let notify = Arc::new(Notify::new());
-    dbus::server(notify.clone())
-        .await
-        .expect("Failed to start D-Bus server");
 
     // Get the system's preferred languages.
     let requested_languages = i18n_embed::DesktopLanguageRequester::requested_languages();
@@ -67,7 +61,6 @@ async fn main() -> cosmic::iced::Result {
     let flags = Flags {
         config_handler,
         config,
-        notify,
     };
 
     info!("Starting app with config: {:?}", flags.config);

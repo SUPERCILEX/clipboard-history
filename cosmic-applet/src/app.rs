@@ -12,12 +12,11 @@ use ringboard_sdk::search::CancellationToken;
 use ringboard_sdk::ui_actor::Command;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use tokio::sync::Notify;
 use tracing::{info, warn};
 
 use crate::client::ringboard_client_sub;
 use crate::config::{Config, FilterMode, config_sub};
-use crate::dbus::wackup_sub;
+use crate::ipc::wackup_sub;
 use crate::icon_app;
 use crate::views::details::details_view;
 use crate::views::popup::popup_view;
@@ -35,7 +34,6 @@ pub struct AppModel {
     pending_search: Option<CancellationToken>,
     favorites: Vec<Entry>,
     entries: Vec<Entry>,
-    notify: Arc<Notify>,
     fatal_error: Option<String>,
     command_sender: Sender<Command>,
     // we need mutex because Receiver is not Sync
@@ -83,7 +81,6 @@ enum PopupKind {
 }
 
 pub struct Flags {
-    pub notify: Arc<Notify>,
     pub config: Config,
     pub config_handler: cosmic_config::Config,
 }
@@ -210,7 +207,6 @@ impl cosmic::Application for AppModel {
             pending_search: None,
             favorites: vec![],
             entries: vec![],
-            notify: flags.notify,
             fatal_error: None,
             command_sender,
             command_receiver: Arc::new(Mutex::new(command_receiver)),
@@ -444,8 +440,7 @@ impl cosmic::Application for AppModel {
         let command_receiver = self.command_receiver.clone();
         let ringboard_client = ringboard_client_sub(command_receiver, self.command_sender.clone());
 
-        let notify = self.notify.clone();
-        let wackup = wackup_sub(notify);
+        let wackup = wackup_sub();
 
         let config_handler = config_sub();
 
