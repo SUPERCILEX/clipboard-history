@@ -6,7 +6,7 @@ use cosmic::iced::{Limits, Subscription, window};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
 use cosmic::iced_winit::graphics::image::image_rs::DynamicImage;
 use cosmic::widget::segmented_button::{Entity, SingleSelectModel};
-use cosmic::widget::{MouseArea, Space};
+use cosmic::widget::{Id, MouseArea, Space, text_input};
 use cosmic::{Action, cosmic_config, prelude::*};
 use ringboard_sdk::search::CancellationToken;
 use ringboard_sdk::ui_actor::Command;
@@ -30,6 +30,7 @@ pub struct AppModel {
     config_handler: cosmic_config::Config,
     popup: Option<Popup>,
     search: String,
+    search_id: Id,
     filter_mode_model: SingleSelectModel,
     pending_search: Option<CancellationToken>,
     favorites: Vec<Entry>,
@@ -164,7 +165,7 @@ impl AppModel {
 
         info!("Opening popup: {:?}", id);
 
-        get_popup(settings)
+        get_popup(settings).chain(text_input::focus(self.search_id.clone()))
     }
 
     fn find_entry(&mut self, id: u64) -> Option<&mut Entry> {
@@ -204,6 +205,7 @@ impl cosmic::Application for AppModel {
             config_handler: flags.config_handler,
             popup: None,
             search: String::new(),
+            search_id: Id::unique(),
             filter_mode_model,
             pending_search: None,
             favorites: vec![],
@@ -250,6 +252,7 @@ impl cosmic::Application for AppModel {
                     &self.entries,
                     &self.favorites,
                     &self.search,
+                    self.search_id.clone(),
                     self.core.system_theme(),
                     self.fatal_error.as_deref(),
                 ),

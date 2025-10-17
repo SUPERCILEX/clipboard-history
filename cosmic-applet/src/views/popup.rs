@@ -1,7 +1,9 @@
 use cosmic::{
     Apply, Element, Theme,
     iced::{Alignment, Length, padding},
-    widget::{column, container, horizontal_space, row, scrollable, search_input, text::heading},
+    widget::{
+        Id, column, container, horizontal_space, row, scrollable, search_input, text::heading,
+    },
 };
 
 use crate::{
@@ -14,6 +16,7 @@ pub fn popup_view<'a>(
     entries: &'a [Entry],
     favorites: &'a [Entry],
     search: &'a str,
+    search_id: Id,
     theme: &'a Theme,
     fatal_error: Option<&'a str>,
 ) -> Element<'a, AppMessage> {
@@ -21,7 +24,7 @@ pub fn popup_view<'a>(
         row()
             .push(
                 search_input(fl!("search-placeholder"), search)
-                    .always_active()
+                    .id(search_id)
                     .on_input(AppMessage::Search)
                     .on_paste(AppMessage::Search)
                     .on_clear(AppMessage::Search("".into()))
