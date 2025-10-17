@@ -44,3 +44,8 @@ Developers should install [rustup][rustup] and configure their editor to use [ru
 [rust-analyzer]: https://rust-analyzer.github.io/
 [mold]: https://github.com/rui314/mold
 [sccache]: https://github.com/mozilla/sccache
+
+## Known Issues
+
+- You need to press "Esc" twice when the search is focused to close the applet. This is due to the first "Esc" being captured by the search input and not propagated as key event.
+- You can not select text in the details view. This is a limitation of the libcosmic text widget.
