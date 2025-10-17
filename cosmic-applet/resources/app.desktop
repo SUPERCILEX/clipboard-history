@@ -4,7 +4,7 @@ Comment=This applet is a Ringboard client that provides direkt integration with 
 
 Type=Application
 Icon=com.github.ringboard.cosmic-applet
-Exec=clipboard-history-cosmic-applet %F
+Exec=ringboard-cosmic-applet %F
 Terminal=false
 StartupNotify=true
 NoDisplay=true
