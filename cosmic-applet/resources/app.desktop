@@ -1,11 +1,13 @@
 [Desktop Entry]
 Name=Ringboard Applet
 Comment=This applet is a Ringboard client that provides direkt integration with the Cosmic Desktop
+
 Type=Application
 Icon=com.github.ringboard.cosmic-applet
 Exec=clipboard-history-cosmic-applet %F
 Terminal=false
 StartupNotify=true
+NoDisplay=true
 Categories=COSMIC
 Keywords=COSMIC
 X-CosmicApplet=true

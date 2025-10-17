@@ -73,6 +73,7 @@ pub async fn client() -> Result<bool> {
     let proxy = OpenToggleProxy::new(&connection).await?;
 
     let serivce_unknown: OwnedErrorName = SERVICE_UNKNOWN.into();
+    info!("Calling D-Bus toggle method");
     let res = match proxy.toggle().await {
         Ok(r) => r,
         Err(zbus::Error::MethodError(e, _, _)) if e == serivce_unknown => return Ok(false),

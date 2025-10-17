@@ -4,12 +4,12 @@ use cosmic::iced::keyboard::key::Named;
 use cosmic::iced::keyboard::{Key, Modifiers, on_key_press};
 use cosmic::iced::{Limits, Subscription, window};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
+use cosmic::iced_winit::graphics::image::image_rs::DynamicImage;
 use cosmic::widget::segmented_button::{Entity, SingleSelectModel};
 use cosmic::widget::{MouseArea, Space};
 use cosmic::{Action, cosmic_config, prelude::*};
-use ringboard_sdk::core::protocol::RingKind;
 use ringboard_sdk::search::CancellationToken;
-use ringboard_sdk::ui_actor::{Command, UiEntry};
+use ringboard_sdk::ui_actor::Command;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
@@ -32,8 +32,8 @@ pub struct AppModel {
     search: String,
     filter_mode_model: SingleSelectModel,
     pending_search: Option<CancellationToken>,
-    favorites: Vec<UiEntry>,
-    entries: Vec<UiEntry>,
+    favorites: Vec<Entry>,
+    entries: Vec<Entry>,
     notify: Arc<Notify>,
     fatal_error: Option<String>,
     command_sender: Sender<Command>,
@@ -44,22 +44,35 @@ pub struct AppModel {
 struct Popup {
     id: window::Id,
     kind: PopupKind,
-    details: Option<Result<Details, String>>,
+    details: Option<Result<Entry, String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Details {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Entry {
     pub id: u64,
     pub favorite: bool,
-    pub entry: DetailData,
+    pub data: EntryData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DetailData {
+#[derive(Debug, Clone, PartialEq)]
+pub enum EntryData {
     Loading,
-    Text(String, String),
-    Image(Box<[u8]>, String),
-    Other(String),
+    Text {
+        text: String,
+        mime: String,
+    },
+    HighlightedText {
+        text: String,
+        mime: String,
+        start: usize,
+        end: usize,
+    },
+    Image {
+        image: Option<DynamicImage>,
+        mime: String,
+    },
+    Mime(String),
+    Error(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,11 +94,12 @@ pub enum AppMessage {
     ClosePopup,
     Search(String),
     SearchPending(CancellationToken),
-    Items(Arc<Mutex<Vec<UiEntry>>>), // arc mutex is required because UiEntry is not cloneable and AppMessage needs to be cloneable
+    Items(Vec<Entry>),
     Paste(u64),
     ChangeFavorite(u64, bool),
     ViewDetails(u64, bool),
-    DetailsLoaded(Result<Details, String>), // arc mutex is required because DetailedEntry is not cloneable and AppMessage needs to be cloneable
+    DetailsLoaded(Result<Entry, String>),
+    ImageLoaded(u64, DynamicImage),
     CloseDetails,
     Delete(u64),
     Deleted(u64),
@@ -150,6 +164,13 @@ impl AppModel {
         info!("Opening popup: {:?}", id);
 
         get_popup(settings)
+    }
+
+    fn find_entry(&mut self, id: u64) -> Option<&mut Entry> {
+        self.entries
+            .iter_mut()
+            .chain(self.favorites.iter_mut())
+            .find(|e| e.id == id)
     }
 }
 
@@ -262,20 +283,16 @@ impl cosmic::Application for AppModel {
                 }
             }
             AppMessage::Items(items) => {
-                if let Ok(mut items) = items.lock() {
-                    let entries: Vec<UiEntry> = std::mem::replace(&mut items, vec![]);
-                    let (favorites, others): (Vec<_>, Vec<_>) = entries
-                        .into_iter()
-                        .partition(|e| e.entry.ring() == RingKind::Favorites);
-                    info!(
-                        "Received {} items ({} favorites, {} others)",
-                        favorites.len() + others.len(),
-                        favorites.len(),
-                        others.len()
-                    );
-                    self.favorites = favorites;
-                    self.entries = others;
-                }
+                let (favorites, others): (Vec<_>, Vec<_>) =
+                    items.into_iter().partition(|e| e.favorite);
+                info!(
+                    "Received {} items ({} favorites, {} others)",
+                    favorites.len() + others.len(),
+                    favorites.len(),
+                    others.len()
+                );
+                self.favorites = favorites;
+                self.entries = others;
             }
             AppMessage::Paste(id) => {
                 info!("Pasting item with id: {}", id);
@@ -296,17 +313,36 @@ impl cosmic::Application for AppModel {
             }
             AppMessage::ViewDetails(id, favorite) => {
                 info!("Viewing details of item with id: {}", id);
-                let _ = self.command_sender.send(Command::GetDetails {
-                    id,
-                    with_text: true,
-                });
-                if let Some(popup) = self.popup.as_mut() {
-                    popup.details = Some(Ok(Details {
-                        id,
-                        favorite,
-                        entry: DetailData::Loading,
-                    }));
-                }
+                if let Some(entry) = self.find_entry(id).cloned()
+                    && let Some(popup) = self.popup.as_mut()
+                {
+                    let data = match entry.data {
+                        EntryData::Image { image: None, .. } => {
+                            let _ = self.command_sender.send(Command::LoadImage(id));
+                            EntryData::Loading
+                        }
+                        EntryData::Image {
+                            image: Some(image),
+                            mime,
+                        } => EntryData::Image {
+                            image: Some(image),
+                            mime,
+                        },
+                        EntryData::Text { .. }
+                        | EntryData::HighlightedText { .. }
+                        | EntryData::Loading
+                        | EntryData::Error(_) => {
+                            let _ = self.command_sender.send(Command::GetDetails {
+                                id,
+                                with_text: true,
+                            });
+                            EntryData::Loading
+                        }
+                        EntryData::Mime(mime) => EntryData::Mime(mime),
+                    };
+
+                    popup.details = Some(Ok(Entry { id, favorite, data }));
+                };
             }
             AppMessage::DetailsLoaded(mut result) => {
                 info!("Details loaded");
@@ -318,6 +354,17 @@ impl cosmic::Application for AppModel {
                         }
                         // only update the details if we are still viewing the details
                         popup.details = Some(result);
+                    }
+                }
+            }
+            AppMessage::ImageLoaded(id, image) => {
+                if let Some(entry) = self.find_entry(id) {
+                    info!("Image loaded for item with id: {}", id);
+                    if let EntryData::Image { mime, .. } = &entry.data {
+                        entry.data = EntryData::Image {
+                            image: Some(image),
+                            mime: mime.clone(),
+                        };
                     }
                 }
             }
@@ -347,8 +394,8 @@ impl cosmic::Application for AppModel {
             }
             AppMessage::Deleted(id) => {
                 info!("Item with id: {} deleted", id);
-                self.favorites.retain(|entry| entry.entry.id() != id);
-                self.entries.retain(|entry| entry.entry.id() != id);
+                self.favorites.retain(|entry| entry.id != id);
+                self.entries.retain(|entry| entry.id != id);
             }
             AppMessage::SelectFilterMode(e) => {
                 let mode = self.filter_mode_model.data::<FilterMode>(e);
@@ -383,7 +430,7 @@ impl cosmic::Application for AppModel {
 
     fn subscription(&self) -> Subscription<Self::Message> {
         let command_receiver = self.command_receiver.clone();
-        let ringboard_client = ringboard_client_sub(command_receiver);
+        let ringboard_client = ringboard_client_sub(command_receiver, self.command_sender.clone());
 
         let notify = self.notify.clone();
         let wackup = wackup_sub(notify);

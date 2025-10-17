@@ -3,13 +3,16 @@ use cosmic::{
     iced::{Alignment, Length, padding},
     widget::{column, container, horizontal_space, row, scrollable, search_input, text::heading},
 };
-use ringboard_sdk::ui_actor::UiEntry;
 
-use crate::{app::AppMessage, fl, views::entry::entry_view};
+use crate::{
+    app::{AppMessage, Entry},
+    fl,
+    views::entry::entry_view,
+};
 
 pub fn popup_view<'a>(
-    entries: &'a [UiEntry],
-    favorites: &'a [UiEntry],
+    entries: &'a [Entry],
+    favorites: &'a [Entry],
     search: &'a str,
     theme: &'a Theme,
     fatal_error: Option<&'a str>,
@@ -66,7 +69,7 @@ pub fn popup_view<'a>(
 }
 
 fn list_section<'a>(
-    ui_entries: &'a [UiEntry],
+    ui_entries: &'a [Entry],
     name: String,
     favoirte: bool,
     theme: &'a Theme,

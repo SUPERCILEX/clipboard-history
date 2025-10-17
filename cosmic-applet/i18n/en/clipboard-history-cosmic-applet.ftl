@@ -10,4 +10,6 @@ error = An error occurred
 details = Details
 mime-type = Mime Type
 invalid-mime = Content cannot be displayed
+invalid-image = Image cannot be displayed
 detail-loading = Loading...
+

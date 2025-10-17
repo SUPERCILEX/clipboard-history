@@ -4,18 +4,20 @@ use cosmic::{
     iced_widget::text,
     theme::Button,
     widget::{
-        button::{self, Catalog},
-        column, container, row,
+        button::{self, Catalog, image},
+        column, container,
+        image::Handle,
+        row,
         text::heading,
     },
 };
 
 use crate::{
-    app::{AppMessage, DetailData, Details},
+    app::{AppMessage, Entry, EntryData},
     fl, icon,
 };
 
-pub fn details_view<'a>(details: Result<&'a Details, &'a String>) -> Element<'a, AppMessage> {
+pub fn details_view<'a>(details: Result<&'a Entry, &'a String>) -> Element<'a, AppMessage> {
     let mut header = row()
         .push(
             button::icon(icon!("back"))
@@ -35,10 +37,11 @@ pub fn details_view<'a>(details: Result<&'a Details, &'a String>) -> Element<'a,
     match details {
         Ok(details) => {
             // Mime Type
-            match &details.entry {
-                DetailData::Text(_, mime)
-                | DetailData::Other(mime)
-                | DetailData::Image(_, mime) => {
+            match &details.data {
+                EntryData::Text { mime, .. }
+                | EntryData::HighlightedText { mime, .. }
+                | EntryData::Mime(mime)
+                | EntryData::Image { mime, .. } => {
                     let row = row()
                         .push(heading(format!("{}:", fl!("mime-type"))))
                         .push(container(text(mime.clone())).padding(Padding::ZERO.top(1)))
@@ -50,13 +53,31 @@ pub fn details_view<'a>(details: Result<&'a Details, &'a String>) -> Element<'a,
             }
 
             // Content
-            let content: Element<AppMessage> = match &details.entry {
-                DetailData::Text(str, _) => text(str).into(),
-                DetailData::Other(_) => text(fl!("invalid-mime")).into(),
-                DetailData::Image(data, _) => {
-                    text(format!("Image with {} bytes", data.len())).into()
+            let content: Element<AppMessage> = match &details.data {
+                EntryData::Text { text: str, .. }
+                | EntryData::HighlightedText { text: str, .. } => text(str).into(),
+                EntryData::Mime(_) => text(fl!("invalid-mime")).into(),
+                EntryData::Loading | EntryData::Image { image: None, .. } => {
+                    text(fl!("detail-loading")).into()
                 }
-                DetailData::Loading => text(fl!("detail-loading")).into(),
+                EntryData::Image {
+                    image: Some(image_data),
+                    ..
+                } => {
+                    if let Some(data) = image_data.as_rgba8() {
+                        container(image(Handle::from_rgba(
+                            image_data.width(),
+                            image_data.height(),
+                            data.to_vec(),
+                        )))
+                        .align_top(Length::Fill)
+                        .align_left(Length::Fill)
+                        .into()
+                    } else {
+                        text(fl!("invalid-image")).into()
+                    }
+                }
+                EntryData::Error(error) => text(format!("{}: {}", fl!("error"), error)).into(),
             };
 
             column = column.push(

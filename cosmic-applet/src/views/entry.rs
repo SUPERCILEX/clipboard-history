@@ -9,25 +9,25 @@ use cosmic::{
         text,
     },
 };
-use ringboard_sdk::ui_actor::{UiEntry, UiEntryCache};
 
-use crate::app::AppMessage;
+use crate::app::{AppMessage, Entry, EntryData};
 
 pub fn entry_view<'a>(
-    entry: &'a UiEntry,
+    entry: &'a Entry,
     favorite: bool,
     theme: &'a cosmic::Theme,
 ) -> Element<'a, AppMessage> {
-    let content: Element<'_, AppMessage> = match &entry.cache {
-        UiEntryCache::Text { one_liner } => text(one_liner.to_string()).into(),
-        UiEntryCache::HighlightedText {
-            one_liner,
+    let content: Element<'_, AppMessage> = match &entry.data {
+        EntryData::Text { text: str, .. } => text(str).into(),
+        EntryData::HighlightedText {
+            text: str,
             start,
             end,
+            ..
         } => {
-            let pre = &one_liner[..*start];
-            let highlighted = &one_liner[*start..*end];
-            let post = &one_liner[*end..];
+            let pre = &str[..*start];
+            let highlighted = &str[*start..*end];
+            let post = &str[*end..];
 
             let color = theme.cosmic().accent_color();
             let text = rich_text![pre, span(highlighted).color(color), post];
@@ -35,19 +35,19 @@ pub fn entry_view<'a>(
             text.into()
         }
         _ => {
-            println!("Entry without highlighted text cache: {:?}", entry.entry);
+            println!("Entry without highlighted text cache: {:?}", entry.id);
             text("< loading... >").into()
         }
     };
 
     let btn = button::custom(content)
-        .on_press(AppMessage::Paste(entry.entry.id()))
+        .on_press(AppMessage::Paste(entry.id))
         .padding([8, 16])
         .width(Length::Fill)
         .class(entry_class());
 
     MouseArea::new(btn)
-        .on_right_press(AppMessage::ViewDetails(entry.entry.id(), favorite))
+        .on_right_press(AppMessage::ViewDetails(entry.id, favorite))
         .into()
 }
 
