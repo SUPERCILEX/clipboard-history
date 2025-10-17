@@ -8,24 +8,21 @@ use cosmic::{
 };
 use tokio::sync::Notify;
 use tracing::info;
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::{app::Flags, config::Config};
+use crate::{app::Flags, config::Config, logging::init_logging};
 
 mod app;
 mod client;
 mod config;
 mod dbus;
 mod i18n;
+mod logging;
 mod util;
 mod views;
 
 #[tokio::main]
 async fn main() -> cosmic::iced::Result {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(EnvFilter::from_default_env())
-        .init();
+    init_logging();
 
     let running = dbus::client().await.expect("Failed to contact D-Bus");
     if running {
