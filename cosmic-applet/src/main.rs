@@ -6,7 +6,7 @@ use cosmic::{
     Application,
     cosmic_config::{self, CosmicConfigEntry},
 };
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{app::Flags, config::Config, logging::init_logging};
 
@@ -20,13 +20,13 @@ mod util;
 mod views;
 
 #[tokio::main]
-async fn main() -> cosmic::iced::Result {
+async fn main() {
     init_logging();
 
     let args: Vec<String> = args().collect();
     if args.len() > 1 && args[1] == "toggle" {
         ipc::toggle();
-        return Ok(());
+        return;
     }
 
     // Get the system's preferred languages.
@@ -65,5 +65,8 @@ async fn main() -> cosmic::iced::Result {
 
     info!("Starting app with config: {:?}", flags.config);
     // Starts the application's event loop with `()` as the application's flags.
-    cosmic::applet::run::<app::AppModel>(flags)
+    if let Err(e) = cosmic::applet::run::<app::AppModel>(flags) {
+        error!("Application error: {}", e);
+        panic!("Application error: {}", e);
+    }
 }

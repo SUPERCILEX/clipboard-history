@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use cosmic::iced::event::wayland::LayerEvent;
+use cosmic::iced::event::{PlatformSpecific, listen_raw, wayland};
 use cosmic::iced::keyboard::key::Named;
 use cosmic::iced::keyboard::{Key, Modifiers, on_key_press};
 use cosmic::iced::{Limits, Subscription, window};
@@ -517,11 +519,19 @@ impl cosmic::Application for AppModel {
 
         let keyboard_listener = on_key_press(key_press);
 
+        let raw_events = listen_raw(|e, _, _| match e {
+            cosmic::iced::Event::PlatformSpecific(PlatformSpecific::Wayland(
+                wayland::Event::Layer(LayerEvent::Unfocused, ..),
+            )) => Some(AppMessage::ClosePopup),
+            _ => None,
+        });
+
         Subscription::batch(vec![
             ringboard_client,
             wackup,
             config_handler,
             keyboard_listener,
+            raw_events,
         ])
     }
 }
