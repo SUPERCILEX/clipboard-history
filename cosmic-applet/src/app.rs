@@ -3,11 +3,16 @@
 use cosmic::iced::keyboard::key::Named;
 use cosmic::iced::keyboard::{Key, Modifiers, on_key_press};
 use cosmic::iced::{Limits, Subscription, window};
+use cosmic::iced_runtime::platform_specific::wayland::layer_surface::{
+    IcedMargin, SctkLayerSurfaceSettings,
+};
+use cosmic::iced_winit::commands::layer_surface::{destroy_layer_surface, get_layer_surface};
 use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
+use cosmic::iced_winit::commands::subsurface::KeyboardInteractivity;
 use cosmic::iced_winit::graphics::image::image_rs::DynamicImage;
 use cosmic::widget::segmented_button::{Entity, SingleSelectModel};
 use cosmic::widget::{Id, MouseArea, Space, text_input};
-use cosmic::{Action, cosmic_config, prelude::*};
+use cosmic::{Action, Application, cosmic_config, prelude::*};
 use ringboard_sdk::search::CancellationToken;
 use ringboard_sdk::ui_actor::Command;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -15,12 +20,14 @@ use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
 use crate::client::ringboard_client_sub;
-use crate::config::{Config, FilterMode, config_sub};
-use crate::ipc::wackup_sub;
+use crate::config::{Config, FilterMode, Position, config_sub};
 use crate::icon_app;
+use crate::ipc::wackup_sub;
 use crate::views::details::details_view;
 use crate::views::popup::popup_view;
-use crate::views::settings::{filter_mode_model, settings_view};
+use crate::views::settings::{
+    filter_mode_model, horizontal_position_model, settings_view, vertical_position_model,
+};
 
 pub struct AppModel {
     /// Application state which is managed by the COSMIC runtime.
@@ -31,6 +38,8 @@ pub struct AppModel {
     search: String,
     search_id: Id,
     filter_mode_model: SingleSelectModel,
+    horizontal_pos_model: SingleSelectModel,
+    vertical_pos_model: SingleSelectModel,
     pending_search: Option<CancellationToken>,
     favorites: Vec<Entry>,
     entries: Vec<Entry>,
@@ -74,7 +83,7 @@ pub enum EntryData {
     Error(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 enum PopupKind {
     Search,
     Settings,
@@ -103,6 +112,8 @@ pub enum AppMessage {
     Deleted(u64),
     Reload,
     SelectFilterMode(Entity),
+    SelectHorizontalPosition(Entity),
+    SelectVerticalPosition(Entity),
     ConfigUpdate(Config),
     KeyPressed(Key),
     FatalError(String),
@@ -125,9 +136,12 @@ impl AppModel {
     }
 
     fn close_popup(&mut self) -> Task<Action<AppMessage>> {
-        if let Some(Popup { id, .. }) = self.popup.take() {
+        if let Some(Popup { id, kind, .. }) = self.popup.take() {
             info!("Closing popup: {:?}", id);
-            destroy_popup(id)
+            match kind {
+                PopupKind::Search => destroy_layer_surface(id),
+                PopupKind::Settings => destroy_popup(id),
+            }
         } else {
             Task::none()
         }
@@ -140,29 +154,56 @@ impl AppModel {
             kind,
             details: None,
         });
-        // directly focusing the text input does not work for some reason, so we can't select the text in the input
-        // to be replaced when starting to type so we just clear the input when opening the popup
-        self.search = String::new();
-        // reload the first page when opening the popup again
-        let _ = self.command_sender.send(Command::LoadFirstPage);
-
-        let mut settings = self.core.applet.get_popup_settings(
-            self.core.main_window_id().unwrap(),
-            id,
-            None,
-            None,
-            None,
-        );
-
-        settings.positioner.size_limits = Limits::NONE
-            .min_width(300.0)
-            .max_width(400.0)
-            .min_height(200.0)
-            .max_height(500.0);
 
         info!("Opening popup: {:?}", id);
 
-        get_popup(settings).chain(text_input::focus(self.search_id.clone()))
+        match kind {
+            PopupKind::Search => {
+                // directly focusing the text input does not work for some reason, so we can't select the text in the input
+                // to be replaced when starting to type so we just clear the input when opening the popup
+                self.search = String::new();
+                // reload the first page when opening the popup again
+                let _ = self.command_sender.send(Command::LoadFirstPage);
+
+                get_layer_surface(SctkLayerSurfaceSettings {
+                    id,
+                    keyboard_interactivity: KeyboardInteractivity::Exclusive,
+                    anchor: self.config.anchor(),
+                    namespace: AppModel::APP_ID.into(),
+                    size: None,
+                    size_limits: Limits::NONE
+                        .min_width(300.0)
+                        .max_width(400.0)
+                        .min_height(200.0)
+                        .max_height(500.0),
+                    margin: IcedMargin {
+                        top: 10,
+                        right: 10,
+                        bottom: 10,
+                        left: 10,
+                    },
+                    ..Default::default()
+                })
+                .chain(text_input::focus(self.search_id.clone()))
+            }
+            PopupKind::Settings => {
+                let mut settings = self.core.applet.get_popup_settings(
+                    self.core.main_window_id().unwrap(),
+                    id,
+                    None,
+                    None,
+                    None,
+                );
+
+                settings.positioner.size_limits = Limits::NONE
+                    .min_width(300.0)
+                    .max_width(400.0)
+                    .min_height(200.0)
+                    .max_height(500.0);
+
+                get_popup(settings)
+            }
+        }
     }
 
     fn find_entry(&mut self, id: u64) -> Option<&mut Entry> {
@@ -194,6 +235,8 @@ impl cosmic::Application for AppModel {
         let (command_sender, command_receiver) = mpsc::channel();
 
         let filter_mode_model = filter_mode_model(&flags.config);
+        let horizontal_pos_model = horizontal_position_model(&flags.config);
+        let vertical_pos_model = vertical_position_model(&flags.config);
 
         // Construct the app model with the runtime's core.
         let app = AppModel {
@@ -204,6 +247,8 @@ impl cosmic::Application for AppModel {
             search: String::new(),
             search_id: Id::unique(),
             filter_mode_model,
+            horizontal_pos_model,
+            vertical_pos_model,
             pending_search: None,
             favorites: vec![],
             entries: vec![],
@@ -253,7 +298,11 @@ impl cosmic::Application for AppModel {
                     self.fatal_error.as_deref(),
                 ),
             },
-            PopupKind::Settings => settings_view(&self.filter_mode_model),
+            PopupKind::Settings => settings_view(
+                &self.filter_mode_model,
+                &self.horizontal_pos_model,
+                &self.vertical_pos_model,
+            ),
         };
 
         self.core.applet.popup_container(view).into()
@@ -406,6 +455,28 @@ impl cosmic::Application for AppModel {
                 info!("Changing filter mode to: {:?}", mode);
                 self.filter_mode_model.activate(e);
                 let _ = self.config.set_filter_mode(&self.config_handler, mode);
+            }
+            AppMessage::SelectHorizontalPosition(e) => {
+                let pos = self.horizontal_pos_model.data::<Position>(e);
+                let Some(&pos) = pos else {
+                    warn!("Invalid horizontal position selected");
+                    return Task::none();
+                };
+                info!("Changing horizontal position to: {:?}", pos);
+                self.horizontal_pos_model.activate(e);
+                let _ = self
+                    .config
+                    .set_horizontal_position(&self.config_handler, pos);
+            }
+            AppMessage::SelectVerticalPosition(e) => {
+                let pos = self.vertical_pos_model.data::<Position>(e);
+                let Some(&pos) = pos else {
+                    warn!("Invalid vertical position selected");
+                    return Task::none();
+                };
+                info!("Changing vertical position to: {:?}", pos);
+                self.vertical_pos_model.activate(e);
+                let _ = self.config.set_vertical_position(&self.config_handler, pos);
             }
             AppMessage::ConfigUpdate(config) => {
                 info!("Config updated: {:?}", config);

@@ -12,4 +12,10 @@ mime-type = Mime Type
 invalid-mime = Content cannot be displayed
 invalid-image = Image cannot be displayed
 detail-loading = Loading...
-
+position-left = Left
+position-center = Center
+position-right = Right
+position-top = Top
+position-bottom = Bottom
+horizontal-position-heading = Horizontal Position
+vertical-position-heading = Vertical Position

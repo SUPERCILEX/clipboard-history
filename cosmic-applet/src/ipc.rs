@@ -2,7 +2,7 @@ use std::{any::TypeId, path::PathBuf, time::SystemTime};
 
 use cosmic::iced::{Subscription, stream::channel};
 use futures_util::SinkExt;
-use notify::Watcher;
+use notify::{Watcher, event::AccessKind};
 use tokio::sync::mpsc;
 use tracing::info;
 
@@ -41,7 +41,11 @@ pub fn wackup_sub() -> Subscription<AppMessage> {
             info!("Starting wackup file watcher on {:?}", path);
             let mut watcher =
                 notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-                    if res.is_ok() {
+                    if let Ok(notify::Event {
+                        kind: notify::EventKind::Access(AccessKind::Open(_)),
+                        ..
+                    }) = res
+                    {
                         let _ = tx.blocking_send(());
                     }
                 })
