@@ -49,3 +49,4 @@ Developers should install [rustup][rustup] and configure their editor to use [ru
 
 - You need to press "Esc" twice when the search is focused to close the applet. This is due to the first "Esc" being captured by the search input and not propagated as key event.
 - You can not select text in the details view. This is a limitation of the libcosmic text widget.
+- Seach bar is not focused automatically when opening the applet. As a workaround you can use "Tab" to focus the search bar after opening the applet.
