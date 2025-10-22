@@ -1,34 +1,51 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use cosmic::iced::event::wayland::LayerEvent;
-use cosmic::iced::event::{PlatformSpecific, listen_raw, wayland};
-use cosmic::iced::keyboard::key::Named;
-use cosmic::iced::keyboard::{Key, Modifiers, on_key_press};
-use cosmic::iced::{Limits, Subscription, window};
-use cosmic::iced_runtime::platform_specific::wayland::layer_surface::{
-    IcedMargin, SctkLayerSurfaceSettings,
+use std::sync::{
+    Arc, Mutex,
+    mpsc::{self, Receiver, Sender},
 };
-use cosmic::iced_winit::commands::layer_surface::{destroy_layer_surface, get_layer_surface};
-use cosmic::iced_winit::commands::popup::{destroy_popup, get_popup};
-use cosmic::iced_winit::commands::subsurface::KeyboardInteractivity;
-use cosmic::iced_winit::graphics::image::image_rs::DynamicImage;
-use cosmic::widget::segmented_button::{Entity, SingleSelectModel};
-use cosmic::widget::{Id, MouseArea, Space, text_input};
-use cosmic::{Action, Application, cosmic_config, prelude::*};
-use ringboard_sdk::search::CancellationToken;
-use ringboard_sdk::ui_actor::Command;
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+
+use cosmic::{
+    Action, Application, cosmic_config,
+    iced::{
+        Limits, Subscription,
+        event::{PlatformSpecific, listen_raw, wayland, wayland::LayerEvent},
+        keyboard::{Key, Modifiers, key::Named, on_key_press},
+        window,
+    },
+    iced_runtime::platform_specific::wayland::layer_surface::{
+        IcedMargin, SctkLayerSurfaceSettings,
+    },
+    iced_winit::{
+        commands::{
+            layer_surface::{destroy_layer_surface, get_layer_surface},
+            popup::{destroy_popup, get_popup},
+            subsurface::KeyboardInteractivity,
+        },
+        graphics::image::image_rs::DynamicImage,
+    },
+    prelude::*,
+    widget::{
+        Id, MouseArea, Space,
+        segmented_button::{Entity, SingleSelectModel},
+        text_input,
+    },
+};
+use ringboard_sdk::{search::CancellationToken, ui_actor::Command};
 use tracing::{info, warn};
 
-use crate::client::ringboard_client_sub;
-use crate::config::{Config, FilterMode, Position, config_sub};
-use crate::icon_app;
-use crate::ipc::wackup_sub;
-use crate::views::details::details_view;
-use crate::views::popup::popup_view;
-use crate::views::settings::{
-    filter_mode_model, horizontal_position_model, settings_view, vertical_position_model,
+use crate::{
+    client::ringboard_client_sub,
+    config::{Config, FilterMode, Position, config_sub},
+    icon_app,
+    ipc::wackup_sub,
+    views::{
+        details::details_view,
+        popup::popup_view,
+        settings::{
+            filter_mode_model, horizontal_position_model, settings_view, vertical_position_model,
+        },
+    },
 };
 
 pub struct AppModel {
@@ -161,8 +178,9 @@ impl AppModel {
 
         match kind {
             PopupKind::Search => {
-                // directly focusing the text input does not work for some reason, so we can't select the text in the input
-                // to be replaced when starting to type so we just clear the input when opening the popup
+                // directly focusing the text input does not work for some reason, so we can't
+                // select the text in the input to be replaced when starting to
+                // type so we just clear the input when opening the popup
                 self.search = String::new();
                 // reload the first page when opening the popup again
                 let _ = self.command_sender.send(Command::LoadFirstPage);
@@ -223,7 +241,7 @@ impl cosmic::Application for AppModel {
 
     type Message = AppMessage;
 
-    const APP_ID: &'static str = "com.github.ringboard.cosmic-applet";
+    const APP_ID: &'static str = "dev.alexsaveau.ringboard.cosmic-applet";
 
     fn core(&self) -> &cosmic::Core {
         &self.core
@@ -400,7 +418,8 @@ impl cosmic::Application for AppModel {
                 if let Some(popup) = self.popup.as_mut() {
                     if let Some(Ok(details)) = &popup.details {
                         if let Ok(result) = &mut result {
-                            // we need to preserve the favorite status because it's not part of the details send by the server
+                            // we need to preserve the favorite status because it's not part of the
+                            // details send by the server
                             result.favorite = details.favorite;
                         }
                         // only update the details if we are still viewing the details

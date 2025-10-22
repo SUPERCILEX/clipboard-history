@@ -3,7 +3,7 @@ name = "clipboard-history-cosmic-applet"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Ringboard Cosmic Desktop applet client application."
+description = "Ringboard Cosmic Desktop applet."
 repository.workspace = true
 keywords = ["ringboard", "clipboard", "tools", "cosmic"]
 categories = ["command-line-utilities", "development-tools", "filesystem"]
@@ -25,3 +25,7 @@ tokio = { version = "1.48.0", features = ["full"] }
 tracing = "0.1.41"
 tracing-journald = "0.3.1"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+
+[[bin]]
+name = "ringboard-cosmic-applet"
+path = "src/main.rs"
