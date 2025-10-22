@@ -3,40 +3,25 @@ name = "clipboard-history-cosmic-applet"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "This applet is a Ringboard client that provides direkt integration with the Cosmic Desktop"
+description = "Ringboard Cosmic Desktop applet client application."
 repository.workspace = true
 keywords = ["ringboard", "clipboard", "tools", "cosmic"]
 categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
+# We can't publish this crate until libcosmic becomes available on crates.io
+publish = false
 
 [dependencies]
-constcat = "0.6.1"
-futures-util = "0.3.31"
-i18n-embed-fl = "0.9.2"
-open = "5.3.0"
-rust-embed = "8.5.0"
-tokio = { version = "1.41.0", features = ["full"] }
-ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
 anyhow = "1.0.100"
+futures-util = "0.3.31"
+i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }
+i18n-embed-fl = "0.10.0"
+libcosmic = { git = "https://github.com/pop-os/libcosmic.git", features = ["applet"] }
+notify = "8.2.0"
+ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
+rust-embed = "8.8.0"
 serde = { version = "1.0.228", features = ["derive"] }
-tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tokio = { version = "1.48.0", features = ["full"] }
 tracing = "0.1.41"
 tracing-journald = "0.3.1"
-notify = "8.2.0"
-
-[dependencies.i18n-embed]
-version = "0.15"
-features = ["fluent-system", "desktop-requester"]
-
-[dependencies.libcosmic]
-git = "https://github.com/pop-os/libcosmic.git"
-# See https://github.com/pop-os/libcosmic/blob/master/Cargo.toml for available features.
-features = [
-    # Accessibility support
-    "a11y",
-    # Uses cosmic-settings-daemon to watch for config file changes
-    "dbus-config",
-    # Add Wayland support to winit
-    "wayland",
-    "applet",
-]
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
