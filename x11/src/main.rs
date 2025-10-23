@@ -31,11 +31,11 @@ use ringboard_sdk::{
         ring::Mmap,
     },
     is_text_mime,
-};
-use ringboard_watcher_utils::{
-    best_target::BestMimeTypeFinder,
-    deduplication::{CopyData, CopyDeduplication},
-    utils::read_paste_command,
+    watcher_utils::{
+        best_target::BestMimeTypeFinder,
+        deduplication::{CopyData, CopyDeduplication},
+        utils::read_paste_command,
+    },
 };
 use rustix::{
     event::epoll,

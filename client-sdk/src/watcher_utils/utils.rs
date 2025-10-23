@@ -4,13 +4,14 @@ use std::{
     os::fd::{AsFd, OwnedFd},
 };
 
-use ringboard_sdk::{
+use rustix::net::{
+    RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, ReturnFlags, recvmsg,
+};
+
+use crate::{
     ClientError,
     api::{PASTE_SERVER_PROTOCOL_VERSION, PasteCommand},
     core::IoErr,
-};
-use rustix::net::{
-    RecvAncillaryBuffer, RecvAncillaryMessage::ScmRights, RecvFlags, ReturnFlags, recvmsg,
 };
 
 pub fn read_paste_command(
