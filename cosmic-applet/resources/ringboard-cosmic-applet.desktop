@@ -1,0 +1,16 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Terminal=false
+Type=Application
+Name=Ringboard Applet
+GenericName=Clipboard Manager
+Comment=A fast, efficient, and composable clipboard manager for Linux.
+Exec=ringboard-cosmic-applet %F
+Icon=dev.alexsaveau.ringboard.cosmic-applet
+StartupNotify=true
+NoDisplay=true
+Categories=COSMIC
+Keywords=COSMIC
+X-CosmicApplet=true
+X-CosmicHoverPopup=Auto
