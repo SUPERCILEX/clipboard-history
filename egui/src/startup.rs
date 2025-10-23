@@ -2,18 +2,23 @@ use std::{
     ffi::CString,
     fmt::Debug,
     fs,
+    fs::File,
     mem::MaybeUninit,
     os::{fd::AsFd, unix::ffi::OsStringExt},
     path::PathBuf,
+    process::ExitCode,
     sync::atomic::{AtomicBool, Ordering},
 };
 
 use ringboard_sdk::core::{
-    Error as CoreError, IoErr, SendKillAndTakeover, acquire_lock_file, dirs::push_sockets_prefix,
+    Error as CoreError, IoErr, LockFilePid, SendKillAndTakeover, acquire_lock_file,
+    dirs::push_sockets_prefix, read_lock_file_pid,
 };
 use rustix::{
-    fs::{CWD, inotify, inotify::ReadFlags},
+    fs::{AtFlags, CWD, Mode, OFlags, inotify, inotify::ReadFlags, openat, unlinkat},
+    io::Errno,
     path::Arg,
+    process::test_kill_process,
 };
 
 pub fn sleep_file_name() -> CString {
@@ -21,6 +26,29 @@ pub fn sleep_file_name() -> CString {
     push_sockets_prefix(&mut path);
     path.set_extension("egui-sleep");
     CString::new(path.into_os_string().into_vec()).unwrap()
+}
+
+pub fn maybe_open_existing_instance_and_exit() -> Result<(), CoreError> {
+    let path = sleep_file_name();
+    let sleep_file = match openat(CWD, &path, OFlags::RDONLY, Mode::empty()) {
+        Err(Errno::NOENT) => return Ok(()),
+        r => File::from(r.map_io_err(|| format!("Failed to open sleep file: {path:?}"))?),
+    };
+    let existing_instance = match read_lock_file_pid(&path, &sleep_file)? {
+        LockFilePid::Valid(pid) => pid,
+        LockFilePid::Deleted | LockFilePid::UserReset => return Ok(()),
+    };
+    match test_kill_process(existing_instance) {
+        Err(Errno::SRCH) => return Ok(()),
+        Err(Errno::PERM) => (),
+        r => {
+            r.map_io_err(|| format!("Failed to check PID for existence: {existing_instance:?}"))?;
+        }
+    }
+
+    unlinkat(CWD, &path, AtFlags::empty())
+        .map_io_err(|| format!("Failed to remove sleep file: {path:?}"))?;
+    ExitCode::SUCCESS.exit_process()
 }
 
 pub fn maintain_single_instance(

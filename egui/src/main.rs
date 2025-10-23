@@ -1,9 +1,11 @@
+#![feature(exitcode_exit_method)]
 #![allow(clippy::significant_drop_tightening)]
 
 use std::{
     collections::HashSet,
     env,
     error::Error,
+    ffi::OsStr,
     hash::BuildHasherDefault,
     str,
     sync::{
@@ -41,7 +43,7 @@ use rustix::fs::unlink;
 
 use crate::{
     loader::RingboardLoader,
-    startup::{maintain_single_instance, sleep_file_name},
+    startup::{maintain_single_instance, maybe_open_existing_instance_and_exit, sleep_file_name},
 };
 
 mod startup;
@@ -52,6 +54,12 @@ static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
     tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
 
 fn main() -> Result<(), eframe::Error> {
+    if env::args_os().nth(1).as_deref() == Some(OsStr::new("toggle")) {
+        let _ = maybe_open_existing_instance_and_exit().inspect_err(|e| {
+            eprintln!("Failed to check for existing instance: {e}\nDetails: {e:#?}");
+        });
+    }
+
     let stop = Arc::new(AtomicBool::new(false));
     let result = eframe::run_native(
         concat!("Ringboard v", env!("CARGO_PKG_VERSION")),
@@ -122,8 +130,9 @@ fn main() -> Result<(), eframe::Error> {
     stop.store(true, Ordering::Relaxed);
     {
         let sleep_file = sleep_file_name();
-        let _ = unlink(&sleep_file)
-            .inspect_err(|e| eprintln!("Failed to delete sleep file: {sleep_file:?}\nError: {e}"));
+        let _ = unlink(&sleep_file).inspect_err(|e| {
+            eprintln!("Failed to delete sleep file: {sleep_file:?}\nError: {e}\nDetails: {e:#?}");
+        });
     }
 
     result
@@ -877,7 +886,7 @@ fn row_ui(
                 }
             }
             Some(Err(e)) => {
-                ui.label(format!("Failed to get entry details:\n{e}"));
+                ui.label(format!("Failed to get entry details:\n{e}Details: {e:#?}"));
             }
         }
     });

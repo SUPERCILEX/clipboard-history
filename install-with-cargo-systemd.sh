@@ -12,7 +12,7 @@ cargo +nightly install clipboard-history
 cargo +nightly install clipboard-history-egui --no-default-features --features $XDG_SESSION_TYPE
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/egui/ringboard-egui.desktop --create-dirs -O --output-dir ~/.local/share/applications/
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/logo.jpeg -o ringboard.jpeg --create-dirs -O --output-dir ~/.local/share/icons/hicolor/1024x1024/
-sed -i "s|Exec=ringboard-egui|Exec=$(echo /bin/sh -c \"ps -p \`cat /tmp/.ringboard/$USERNAME.egui-sleep 2\> /dev/null\` \> /dev/null 2\>\\\&1 \\\&\\\& exec rm -f /tmp/.ringboard/$USERNAME.egui-sleep \\\|\\\| exec $(which ringboard-egui)\")|g" ~/.local/share/applications/ringboard-egui.desktop
+sed -i "s|Exec=ringboard-egui|Exec=$(echo $(which ringboard-egui) toggle)|g" ~/.local/share/applications/ringboard-egui.desktop
 sed -i "s|Icon=ringboard|Icon=$HOME/.local/share/icons/hicolor/1024x1024/ringboard.jpeg|g" ~/.local/share/applications/ringboard-egui.desktop
 
 # Stop existing watchers in case user is switching between X11 and Wayland
