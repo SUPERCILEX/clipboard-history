@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use ringboard_sdk::core::{is_plaintext_mime, protocol::MimeType};
+use crate::core::{is_plaintext_mime, protocol::MimeType};
 
 #[derive(Copy, Clone, Debug)]
 struct SeenMime<Id> {

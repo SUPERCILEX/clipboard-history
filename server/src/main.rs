@@ -30,7 +30,7 @@ enum CliError {
     #[error("server already running at {pid:?}")]
     ServerAlreadyRunning { pid: Pid, lock_file: PathBuf },
     #[error("multiple errors occurred")]
-    Multiple(Vec<CliError>),
+    Multiple(Vec<Self>),
     #[error("internal error")]
     Internal { context: Cow<'static, str> },
 }

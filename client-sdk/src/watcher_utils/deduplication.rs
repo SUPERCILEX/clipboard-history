@@ -6,7 +6,10 @@ use std::{
 };
 
 use log::{error, info, warn};
-use ringboard_sdk::{
+use rustc_hash::FxHasher;
+use rustix::fs::{AtFlags, StatxFlags, statx};
+
+use crate::{
     DatabaseReader, EntryReader, Kind, RingReader,
     core::{
         Error as CoreError, IoErr,
@@ -16,8 +19,6 @@ use ringboard_sdk::{
         ring::Mmap,
     },
 };
-use rustc_hash::FxHasher;
-use rustix::fs::{AtFlags, StatxFlags, statx};
 
 pub struct CopyDeduplication {
     main: ArrayMap<2048>,

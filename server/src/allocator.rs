@@ -300,7 +300,7 @@ impl Allocator {
             getxattr(
                 c"direct",
                 c"user.mime_type",
-                &mut [const { MaybeUninit::uninit() }; 0]
+                &mut ([] as [MaybeUninit<u8>; 0])
             ),
             Err(Errno::NOTSUP)
         );

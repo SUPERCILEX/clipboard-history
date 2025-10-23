@@ -59,7 +59,7 @@ pub const NUM_BUCKETS: usize = 11;
 // The max composite ID is 2^40 (8 bit ring ID and 32 bit entry ID)
 pub const DIRECT_FILE_NAME_LEN: usize = "1099511627776".len();
 
-enum LockFilePid {
+pub enum LockFilePid {
     Valid(Pid),
     Deleted,
     UserReset,
@@ -68,7 +68,7 @@ enum LockFilePid {
 // 2^32 is 10 chars
 const LOCK_FILE_BUF_SIZE: usize = 10;
 
-fn read_lock_file_pid(lock_file: impl Copy + Debug, file: &File) -> Result<LockFilePid> {
+pub fn read_lock_file_pid(lock_file: impl Copy + Debug, file: &File) -> Result<LockFilePid> {
     let mut pid = [MaybeUninit::uninit(); LOCK_FILE_BUF_SIZE];
     let mut pid = BorrowedBuf::from(pid.as_mut_slice());
     read_at_to_end(file, pid.unfilled(), 0)

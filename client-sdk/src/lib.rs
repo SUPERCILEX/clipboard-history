@@ -21,6 +21,8 @@ mod ring_reader;
 pub mod search;
 #[cfg(feature = "ui")]
 pub mod ui_actor;
+#[cfg(feature = "watcher-utils")]
+pub mod watcher_utils;
 
 #[derive(Error, Debug)]
 pub enum ClientError {

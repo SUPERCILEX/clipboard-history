@@ -650,6 +650,32 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::Error where T: ?c
 pub fn clipboard_history_core::Error::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::Error
 pub fn clipboard_history_core::Error::from(t: T) -> T
+pub enum clipboard_history_core::LockFilePid
+pub clipboard_history_core::LockFilePid::Deleted
+pub clipboard_history_core::LockFilePid::UserReset
+pub clipboard_history_core::LockFilePid::Valid(rustix::pid::Pid)
+impl core::marker::Freeze for clipboard_history_core::LockFilePid
+impl core::marker::Send for clipboard_history_core::LockFilePid
+impl core::marker::Sync for clipboard_history_core::LockFilePid
+impl core::marker::Unpin for clipboard_history_core::LockFilePid
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::LockFilePid
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::LockFilePid
+impl<T, U> core::convert::Into<U> for clipboard_history_core::LockFilePid where U: core::convert::From<T>
+pub fn clipboard_history_core::LockFilePid::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::LockFilePid where U: core::convert::Into<T>
+pub type clipboard_history_core::LockFilePid::Error = core::convert::Infallible
+pub fn clipboard_history_core::LockFilePid::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_core::LockFilePid where U: core::convert::TryFrom<T>
+pub type clipboard_history_core::LockFilePid::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_core::LockFilePid::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_core::LockFilePid where T: 'static + ?core::marker::Sized
+pub fn clipboard_history_core::LockFilePid::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_core::LockFilePid where T: ?core::marker::Sized
+pub fn clipboard_history_core::LockFilePid::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::LockFilePid where T: ?core::marker::Sized
+pub fn clipboard_history_core::LockFilePid::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_core::LockFilePid
+pub fn clipboard_history_core::LockFilePid::from(t: T) -> T
 pub struct clipboard_history_core::BucketAndIndex(_)
 impl clipboard_history_core::BucketAndIndex
 pub fn clipboard_history_core::BucketAndIndex::bucket(&self) -> u8
@@ -920,5 +946,6 @@ pub fn clipboard_history_core::link_tmp_file<Fd: std::os::fd::owned::AsFd, DirFd
 pub fn clipboard_history_core::open_buckets<F: core::ops::function::FnMut(&str) -> clipboard_history_core::Result<std::os::fd::owned::OwnedFd>>(open: F) -> clipboard_history_core::Result<([std::os::fd::owned::OwnedFd; 11], [u64; 11])>
 pub fn clipboard_history_core::proc_self_fd_buf<'a, Fd: std::os::fd::owned::AsFd>(buf: &'a mut [core::mem::maybe_uninit::MaybeUninit<u8>; 26], fd: &Fd) -> &'a core::ffi::c_str::CStr
 pub fn clipboard_history_core::read_at_to_end<Fd: std::os::fd::owned::AsFd>(file: Fd, buf: core::io::borrowed_buf::BorrowedCursor<'_>, offset: u64) -> rustix::io::errno::Result<()>
+pub fn clipboard_history_core::read_lock_file_pid(lock_file: impl core::marker::Copy + core::fmt::Debug, file: &std::fs::File) -> clipboard_history_core::Result<clipboard_history_core::LockFilePid>
 pub fn clipboard_history_core::size_to_bucket(bytes: u16) -> u8
 pub type clipboard_history_core::Result<T> = core::result::Result<T, clipboard_history_core::Error>

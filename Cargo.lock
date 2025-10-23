@@ -1218,6 +1218,7 @@ dependencies = [
  "crossbeam-channel",
  "error-stack",
  "image",
+ "log",
  "memchr",
  "regex",
  "rustc-hash 2.1.1",
@@ -1310,23 +1311,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "clipboard-history-watcher-utils"
-version = "0.12.2"
-dependencies = [
- "clipboard-history-client-sdk",
- "log",
- "rustc-hash 2.1.1",
- "rustix 1.0.8",
- "supercilex-tests",
-]
-
-[[package]]
 name = "clipboard-history-wayland"
 version = "0.12.2"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
- "clipboard-history-watcher-utils",
  "env_logger",
  "error-stack",
  "log",
@@ -1346,7 +1335,6 @@ version = "0.12.2"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
- "clipboard-history-watcher-utils",
  "env_logger",
  "error-stack",
  "log",
