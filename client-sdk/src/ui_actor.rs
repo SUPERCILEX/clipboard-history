@@ -33,7 +33,7 @@ use crate::{
         size_to_bucket,
     },
     search,
-    search::{CancellationToken, CaselessQuery, EntryLocation, Query, QueryResult},
+    search::{CancellationTokenSource, CaselessQuery, EntryLocation, Query, QueryResult},
 };
 
 #[derive(Error, Debug)]
@@ -78,11 +78,18 @@ mod error_stack_compat {
 #[derive(Debug)]
 pub enum Command {
     LoadFirstPage,
-    GetDetails { id: u64, with_text: bool },
+    GetDetails {
+        id: u64,
+        with_text: bool,
+    },
     Favorite(u64),
     Unfavorite(u64),
     Delete(u64),
-    Search { query: Box<str>, kind: SearchKind },
+    Search {
+        query: Box<str>,
+        kind: SearchKind,
+        token: CancellationTokenSource,
+    },
     LoadImage(u64),
     Paste(u64),
 }
@@ -107,7 +114,6 @@ pub enum Message {
         id: u64,
         result: Result<DetailedEntry, CoreError>,
     },
-    PendingSearch(CancellationToken),
     SearchResults(Box<[UiEntry]>),
     FavoriteChange(u64),
     Deleted(u64),
@@ -327,7 +333,7 @@ fn handle_command<E>(
             RemoveResponse { error: None } => Ok(Some(Message::Deleted(id))),
             RemoveResponse { error: Some(e) } => Err(e.into()),
         },
-        Command::Search { query, kind } => {
+        Command::Search { query, kind, token } => {
             shitty_refresh(database);
 
             let query = match kind {
@@ -345,7 +351,7 @@ fn handle_command<E>(
                 SearchKind::Mime => Query::Mimes(Regex::new(&query)?),
             };
             Ok(Some(Message::SearchResults(
-                do_search(query, reader_, database, send, cache).into(),
+                do_search(query, reader_, database, &token, send, cache).into(),
             )))
         }
         Command::LoadImage(id) => {
@@ -541,17 +547,19 @@ fn do_search<E>(
     query: Query,
     reader_: &mut Option<EntryReader>,
     database: &mut DatabaseReader,
+    token: &CancellationTokenSource,
     mut send: impl FnMut(Message) -> Result<(), E>,
     (cached_write_heads, reverse_index_cache, search_result_buf): &mut SearchCache,
 ) -> Vec<UiEntry> {
     const MAX_SEARCH_ENTRIES: usize = 256;
 
+    if token.is_cancelled() {
+        return Vec::new();
+    }
+
     let reader = Arc::new(reader_.take().unwrap());
 
-    let (result_stream, threads) = search(query, reader.clone());
-    let _ = send(Message::PendingSearch(
-        result_stream.cancellation_token().clone(),
-    ));
+    let (result_stream, threads) = search(query, reader.clone(), token.clone());
 
     if *cached_write_heads
         != Some((
@@ -628,8 +636,12 @@ fn do_search<E>(
 
     for thread in threads {
         let Err(_) = thread.join() else { continue };
+
+        token.done();
         let _ = send(Message::Error(CommandError::Search));
     }
+    token.done();
+
     let reader = reader_.insert(Arc::into_inner(reader).unwrap());
 
     let mut results = results.into_vec();

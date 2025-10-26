@@ -34,7 +34,7 @@ use ratatui::{
 use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 use ringboard_sdk::{
     core::{Error as CoreError, IoErr, protocol::RingKind},
-    search::CancellationToken,
+    search::{CancellationTokenSink, cancellation_token},
     ui_actor::{
         Command, CommandError, DetailedEntry, Message, SearchKind, UiEntry, UiEntryCache,
         controller,
@@ -103,8 +103,7 @@ struct UiState {
         focused: true,
         kind: SearchKind::Plain,
     }),
-    pending_search_token: Option<CancellationToken>,
-    queued_searches: u32,
+    pending_search_token: Option<CancellationTokenSink>,
 
     show_help: bool,
 
@@ -314,7 +313,6 @@ fn handle_message(
         details_requested,
         detailed_entry,
         pending_search_token,
-        queued_searches,
         last_error,
         outstanding_request,
         ..
@@ -325,7 +323,7 @@ fn handle_message(
         Message::FatalDbOpen(e) => return Err(e)?,
         Message::Error(e) => {
             *last_error = Some(e);
-            *queued_searches = queued_searches.saturating_sub(1);
+            pending_search_token.take_if(|token| token.is_done());
         }
         Message::LoadedFirstPage {
             entries: new_entries,
@@ -348,14 +346,12 @@ fn handle_message(
             }
         }
         Message::SearchResults(results) => {
-            *queued_searches = queued_searches.saturating_sub(1);
-            if pending_search_token.take().is_some() {
-                *search_results = results;
-                if search_state.selected().is_none() {
-                    search_state.select_first();
-                }
-                maybe_focus_pending_changed_entry(entries, ui, pending_favorite_change);
+            pending_search_token.take_if(|token| token.is_done());
+            *search_results = results;
+            if search_state.selected().is_none() {
+                search_state.select_first();
             }
+            maybe_focus_pending_changed_entry(entries, ui, pending_favorite_change);
         }
         Message::FavoriteChange(id) => {
             *pending_favorite_change = Some(id);
@@ -370,12 +366,6 @@ fn handle_message(
             {
                 ui.detail_image_state = Some(ImageState::Loaded(picker.new_resize_protocol(image)));
             }
-        }
-        Message::PendingSearch(token) => {
-            if *queued_searches > 1 {
-                token.cancel();
-            }
-            *pending_search_token = Some(token);
         }
         Message::Pasted => return Ok(true),
     }
@@ -412,14 +402,13 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
             return;
         }
 
-        if let Some(token) = &ui.pending_search_token {
-            token.cancel();
-        }
+        let (source, sink) = cancellation_token();
         let _ = requests.send(Command::Search {
             query: ui.query.lines().first().unwrap().as_str().into(),
             kind,
+            token: source,
         });
-        ui.queued_searches += 1;
+        ui.pending_search_token = Some(sink);
     };
     let refresh = |ui: &mut UiState| {
         let _ = requests.send(Command::LoadFirstPage);
@@ -708,7 +697,7 @@ impl AppWrapper<'_> {
                     } else {
                         Style::default()
                     })
-                    .title(if ui.queued_searches > 0 {
+                    .title(if ui.pending_search_token.is_some() {
                         "Searching…"
                     } else {
                         match kind {

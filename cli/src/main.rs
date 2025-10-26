@@ -57,7 +57,7 @@ use ringboard_sdk::{
         size_to_bucket,
     },
     duplicate_detection::DuplicateDetector,
-    search::{CaselessQuery, EntryLocation, Query, QueryResult},
+    search::{CaselessQuery, EntryLocation, Query, QueryResult, cancellation_token},
 };
 use rustc_hash::FxHasher;
 use rustix::{
@@ -612,6 +612,7 @@ fn search(
 
     let (mut database, reader) = open_db()?;
     let reader = Arc::new(reader);
+    let (source_token, _sink_token) = cancellation_token();
     let (result_stream, threads) = {
         // TODO https://github.com/rust-lang/rust-clippy/issues/13227
         #[allow(clippy::redundant_locals)]
@@ -625,6 +626,7 @@ fn search(
                 Query::Plain(query.as_bytes())
             },
             reader.clone(),
+            source_token,
         )
     };
     let mut results = BTreeMap::<BucketAndIndex, (u16, u16)>::new();

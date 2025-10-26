@@ -538,50 +538,96 @@ pub unsafe fn clipboard_history_client_sdk::search::Query<'a>::deref_mut<'a>(ptr
 pub unsafe fn clipboard_history_client_sdk::search::Query<'a>::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::search::Query<'a>::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::Query<'a>
-pub struct clipboard_history_client_sdk::search::CancellationToken
-impl clipboard_history_client_sdk::search::CancellationToken
-pub fn clipboard_history_client_sdk::search::CancellationToken::cancel(&self)
-pub fn clipboard_history_client_sdk::search::CancellationToken::is_cancelled(&self) -> bool
-impl core::clone::Clone for clipboard_history_client_sdk::search::CancellationToken
-pub fn clipboard_history_client_sdk::search::CancellationToken::clone(&self) -> clipboard_history_client_sdk::search::CancellationToken
-impl core::fmt::Debug for clipboard_history_client_sdk::search::CancellationToken
-pub fn clipboard_history_client_sdk::search::CancellationToken::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl core::marker::Freeze for clipboard_history_client_sdk::search::CancellationToken
-impl core::marker::Send for clipboard_history_client_sdk::search::CancellationToken
-impl core::marker::Sync for clipboard_history_client_sdk::search::CancellationToken
-impl core::marker::Unpin for clipboard_history_client_sdk::search::CancellationToken
-impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::search::CancellationToken
-impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::search::CancellationToken
-impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::search::CancellationToken where U: core::convert::From<T>
-pub fn clipboard_history_client_sdk::search::CancellationToken::into(self) -> U
-impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::search::CancellationToken where U: core::convert::Into<T>
-pub type clipboard_history_client_sdk::search::CancellationToken::Error = core::convert::Infallible
-pub fn clipboard_history_client_sdk::search::CancellationToken::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
-impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::search::CancellationToken where U: core::convert::TryFrom<T>
-pub type clipboard_history_client_sdk::search::CancellationToken::Error = <U as core::convert::TryFrom<T>>::Error
-pub fn clipboard_history_client_sdk::search::CancellationToken::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
-impl<T> alloc::borrow::ToOwned for clipboard_history_client_sdk::search::CancellationToken where T: core::clone::Clone
-pub type clipboard_history_client_sdk::search::CancellationToken::Owned = T
-pub fn clipboard_history_client_sdk::search::CancellationToken::clone_into(&self, target: &mut T)
-pub fn clipboard_history_client_sdk::search::CancellationToken::to_owned(&self) -> T
-impl<T> core::any::Any for clipboard_history_client_sdk::search::CancellationToken where T: 'static + ?core::marker::Sized
-pub fn clipboard_history_client_sdk::search::CancellationToken::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::CancellationToken where T: ?core::marker::Sized
-pub fn clipboard_history_client_sdk::search::CancellationToken::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::CancellationToken where T: ?core::marker::Sized
-pub fn clipboard_history_client_sdk::search::CancellationToken::borrow_mut(&mut self) -> &mut T
-impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::CancellationToken where T: core::clone::Clone
-pub unsafe fn clipboard_history_client_sdk::search::CancellationToken::clone_to_uninit(&self, dest: *mut u8)
-impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::CancellationToken
-pub fn clipboard_history_client_sdk::search::CancellationToken::from(t: T) -> T
-impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::search::CancellationToken
-pub type clipboard_history_client_sdk::search::CancellationToken::Init = T
-pub const clipboard_history_client_sdk::search::CancellationToken::ALIGN: usize
-pub unsafe fn clipboard_history_client_sdk::search::CancellationToken::deref<'a>(ptr: usize) -> &'a T
-pub unsafe fn clipboard_history_client_sdk::search::CancellationToken::deref_mut<'a>(ptr: usize) -> &'a mut T
-pub unsafe fn clipboard_history_client_sdk::search::CancellationToken::drop(ptr: usize)
-pub unsafe fn clipboard_history_client_sdk::search::CancellationToken::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
-impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::CancellationToken
+pub struct clipboard_history_client_sdk::search::CancellationTokenSink
+impl clipboard_history_client_sdk::search::CancellationTokenSink
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::cancel(&self)
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::is_done(&self) -> bool
+impl core::clone::Clone for clipboard_history_client_sdk::search::CancellationTokenSink
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::clone(&self) -> Self
+impl core::fmt::Debug for clipboard_history_client_sdk::search::CancellationTokenSink
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for clipboard_history_client_sdk::search::CancellationTokenSink
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::drop(&mut self)
+impl core::marker::Freeze for clipboard_history_client_sdk::search::CancellationTokenSink
+impl core::marker::Send for clipboard_history_client_sdk::search::CancellationTokenSink
+impl core::marker::Sync for clipboard_history_client_sdk::search::CancellationTokenSink
+impl core::marker::Unpin for clipboard_history_client_sdk::search::CancellationTokenSink
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::search::CancellationTokenSink
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::search::CancellationTokenSink
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::search::CancellationTokenSink where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::search::CancellationTokenSink where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::search::CancellationTokenSink::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::search::CancellationTokenSink where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::search::CancellationTokenSink::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_client_sdk::search::CancellationTokenSink where T: core::clone::Clone
+pub type clipboard_history_client_sdk::search::CancellationTokenSink::Owned = T
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::clone_into(&self, target: &mut T)
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_client_sdk::search::CancellationTokenSink where T: 'static + ?core::marker::Sized
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::CancellationTokenSink where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::CancellationTokenSink where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::CancellationTokenSink where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSink::clone_to_uninit(&self, dest: *mut u8)
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::CancellationTokenSink
+pub fn clipboard_history_client_sdk::search::CancellationTokenSink::from(t: T) -> T
+impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::search::CancellationTokenSink
+pub type clipboard_history_client_sdk::search::CancellationTokenSink::Init = T
+pub const clipboard_history_client_sdk::search::CancellationTokenSink::ALIGN: usize
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSink::deref<'a>(ptr: usize) -> &'a T
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSink::deref_mut<'a>(ptr: usize) -> &'a mut T
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSink::drop(ptr: usize)
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSink::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
+impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::CancellationTokenSink
+pub struct clipboard_history_client_sdk::search::CancellationTokenSource
+impl clipboard_history_client_sdk::search::CancellationTokenSource
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::done(&self)
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::is_cancelled(&self) -> bool
+impl core::clone::Clone for clipboard_history_client_sdk::search::CancellationTokenSource
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::clone(&self) -> clipboard_history_client_sdk::search::CancellationTokenSource
+impl core::fmt::Debug for clipboard_history_client_sdk::search::CancellationTokenSource
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for clipboard_history_client_sdk::search::CancellationTokenSource
+impl core::marker::Send for clipboard_history_client_sdk::search::CancellationTokenSource
+impl core::marker::Sync for clipboard_history_client_sdk::search::CancellationTokenSource
+impl core::marker::Unpin for clipboard_history_client_sdk::search::CancellationTokenSource
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::search::CancellationTokenSource
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::search::CancellationTokenSource
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::search::CancellationTokenSource where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::search::CancellationTokenSource where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::search::CancellationTokenSource::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::search::CancellationTokenSource where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::search::CancellationTokenSource::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for clipboard_history_client_sdk::search::CancellationTokenSource where T: core::clone::Clone
+pub type clipboard_history_client_sdk::search::CancellationTokenSource::Owned = T
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::clone_into(&self, target: &mut T)
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::to_owned(&self) -> T
+impl<T> core::any::Any for clipboard_history_client_sdk::search::CancellationTokenSource where T: 'static + ?core::marker::Sized
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::search::CancellationTokenSource where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::search::CancellationTokenSource where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for clipboard_history_client_sdk::search::CancellationTokenSource where T: core::clone::Clone
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSource::clone_to_uninit(&self, dest: *mut u8)
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::search::CancellationTokenSource
+pub fn clipboard_history_client_sdk::search::CancellationTokenSource::from(t: T) -> T
+impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::search::CancellationTokenSource
+pub type clipboard_history_client_sdk::search::CancellationTokenSource::Init = T
+pub const clipboard_history_client_sdk::search::CancellationTokenSource::ALIGN: usize
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSource::deref<'a>(ptr: usize) -> &'a T
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSource::deref_mut<'a>(ptr: usize) -> &'a mut T
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSource::drop(ptr: usize)
+pub unsafe fn clipboard_history_client_sdk::search::CancellationTokenSource::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
+impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::CancellationTokenSource
 pub struct clipboard_history_client_sdk::search::CaselessQuery
 impl clipboard_history_client_sdk::search::CaselessQuery
 pub fn clipboard_history_client_sdk::search::CaselessQuery::new<Q: core::convert::Into<alloc::vec::Vec<u8>>>(query: Q) -> Self
@@ -627,13 +673,9 @@ pub unsafe fn clipboard_history_client_sdk::search::CaselessQuery::drop(ptr: usi
 pub unsafe fn clipboard_history_client_sdk::search::CaselessQuery::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::CaselessQuery
 pub struct clipboard_history_client_sdk::search::QueryIter<const N: usize>
-impl<const N: usize> clipboard_history_client_sdk::search::QueryIter<N>
-pub const fn clipboard_history_client_sdk::search::QueryIter<N>::cancellation_token(&self) -> &clipboard_history_client_sdk::search::CancellationToken
 impl<const N: usize> core::iter::traits::iterator::Iterator for clipboard_history_client_sdk::search::QueryIter<N>
 pub type clipboard_history_client_sdk::search::QueryIter<N>::Item = core::result::Result<clipboard_history_client_sdk::search::QueryResult, clipboard_history_core::Error>
 pub fn clipboard_history_client_sdk::search::QueryIter<N>::next(&mut self) -> core::option::Option<Self::Item>
-impl<const N: usize> core::ops::drop::Drop for clipboard_history_client_sdk::search::QueryIter<N>
-pub fn clipboard_history_client_sdk::search::QueryIter<N>::drop(&mut self)
 impl<const N: usize> core::marker::Freeze for clipboard_history_client_sdk::search::QueryIter<N>
 impl<const N: usize> core::marker::Send for clipboard_history_client_sdk::search::QueryIter<N>
 impl<const N: usize> core::marker::Sync for clipboard_history_client_sdk::search::QueryIter<N>
@@ -714,7 +756,8 @@ pub unsafe fn clipboard_history_client_sdk::search::QueryResult::deref_mut<'a>(p
 pub unsafe fn clipboard_history_client_sdk::search::QueryResult::drop(ptr: usize)
 pub unsafe fn clipboard_history_client_sdk::search::QueryResult::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::QueryResult
-pub fn clipboard_history_client_sdk::search::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
+pub fn clipboard_history_client_sdk::search::cancellation_token() -> (clipboard_history_client_sdk::search::CancellationTokenSource, clipboard_history_client_sdk::search::CancellationTokenSink)
+pub fn clipboard_history_client_sdk::search::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>, token: clipboard_history_client_sdk::search::CancellationTokenSource) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
 pub mod clipboard_history_client_sdk::ui_actor
 pub enum clipboard_history_client_sdk::ui_actor::Command
 pub clipboard_history_client_sdk::ui_actor::Command::Delete(u64)
@@ -728,6 +771,7 @@ pub clipboard_history_client_sdk::ui_actor::Command::Paste(u64)
 pub clipboard_history_client_sdk::ui_actor::Command::Search
 pub clipboard_history_client_sdk::ui_actor::Command::Search::kind: clipboard_history_client_sdk::ui_actor::SearchKind
 pub clipboard_history_client_sdk::ui_actor::Command::Search::query: alloc::boxed::Box<str>
+pub clipboard_history_client_sdk::ui_actor::Command::Search::token: clipboard_history_client_sdk::search::CancellationTokenSource
 pub clipboard_history_client_sdk::ui_actor::Command::Unfavorite(u64)
 impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::Command
 pub fn clipboard_history_client_sdk::ui_actor::Command::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -834,7 +878,6 @@ pub clipboard_history_client_sdk::ui_actor::Message::LoadedImage
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedImage::id: u64
 pub clipboard_history_client_sdk::ui_actor::Message::LoadedImage::image: image::dynimage::DynamicImage
 pub clipboard_history_client_sdk::ui_actor::Message::Pasted
-pub clipboard_history_client_sdk::ui_actor::Message::PendingSearch(clipboard_history_client_sdk::search::CancellationToken)
 pub clipboard_history_client_sdk::ui_actor::Message::SearchResults(alloc::boxed::Box<[clipboard_history_client_sdk::ui_actor::UiEntry]>)
 impl core::fmt::Debug for clipboard_history_client_sdk::ui_actor::Message
 pub fn clipboard_history_client_sdk::ui_actor::Message::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1501,4 +1544,4 @@ pub unsafe fn clipboard_history_client_sdk::RingReader<'a>::init(init: <T as cro
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::RingReader<'a>
 impl<T> itertools::Itertools for clipboard_history_client_sdk::RingReader<'a> where T: core::iter::traits::iterator::Iterator + ?core::marker::Sized
 pub fn clipboard_history_client_sdk::is_text_mime(mime: &str) -> bool
-pub fn clipboard_history_client_sdk::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
+pub fn clipboard_history_client_sdk::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>, token: clipboard_history_client_sdk::search::CancellationTokenSource) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)

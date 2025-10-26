@@ -8,7 +8,7 @@ use std::{
     str::FromStr,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering::Relaxed},
     },
     thread,
     thread::JoinHandle,
@@ -136,25 +136,74 @@ pub enum EntryLocation {
     File { entry_id: u64 },
 }
 
-#[derive(Clone, Debug)]
-pub struct CancellationToken {
-    stop: Arc<AtomicBool>,
+#[must_use]
+pub fn cancellation_token() -> (CancellationTokenSource, CancellationTokenSink) {
+    let inner = Arc::new(CancellationToken {
+        stop: AtomicBool::new(false),
+        sinks: AtomicU8::new(1),
+    });
+    (
+        CancellationTokenSource {
+            inner: inner.clone(),
+        },
+        CancellationTokenSink { inner },
+    )
 }
 
-impl CancellationToken {
-    fn new() -> Self {
-        Self {
-            stop: Arc::new(AtomicBool::new(false)),
-        }
+#[derive(Debug)]
+struct CancellationToken {
+    stop: AtomicBool,
+    sinks: AtomicU8,
+}
+
+#[derive(Clone, Debug)]
+pub struct CancellationTokenSource {
+    inner: Arc<CancellationToken>,
+}
+
+impl CancellationTokenSource {
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.stop.load(Relaxed)
     }
 
+    pub fn done(&self) {
+        self.inner.stop.store(true, Relaxed);
+    }
+}
+
+#[derive(Debug)]
+pub struct CancellationTokenSink {
+    inner: Arc<CancellationToken>,
+}
+
+impl CancellationTokenSink {
     pub fn cancel(&self) {
-        self.stop.store(true, Ordering::Relaxed);
+        self.inner.stop.store(true, Relaxed);
     }
 
     #[must_use]
-    pub fn is_cancelled(&self) -> bool {
-        self.stop.load(Ordering::Relaxed)
+    pub fn is_done(&self) -> bool {
+        self.inner.stop.load(Relaxed)
+    }
+}
+
+impl Clone for CancellationTokenSink {
+    fn clone(&self) -> Self {
+        let Self { inner } = self;
+        inner.sinks.fetch_add(1, Relaxed);
+        Self {
+            inner: inner.clone(),
+        }
+    }
+}
+
+impl Drop for CancellationTokenSink {
+    fn drop(&mut self) {
+        let Self { inner } = self;
+        if inner.sinks.fetch_sub(1, Relaxed) <= 1 {
+            self.cancel();
+        }
     }
 }
 
@@ -163,25 +212,13 @@ type Out = Result<QueryResult, CoreError>;
 pub struct QueryIter<const N: usize> {
     receiver: crossbeam_channel::Receiver<ArrayVec<Out, N>>,
     buf: ArrayVec<Out, N>,
-    token: CancellationToken,
-}
-
-impl<const N: usize> QueryIter<N> {
-    #[must_use]
-    pub const fn cancellation_token(&self) -> &CancellationToken {
-        &self.token
-    }
 }
 
 impl<const N: usize> Iterator for QueryIter<N> {
     type Item = Out;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Self {
-            receiver,
-            buf,
-            token: _,
-        } = self;
+        let Self { receiver, buf } = self;
         loop {
             if let Some(v) = buf.pop() {
                 return Some(v);
@@ -194,21 +231,20 @@ impl<const N: usize> Iterator for QueryIter<N> {
     }
 }
 
-impl<const N: usize> Drop for QueryIter<N> {
-    fn drop(&mut self) {
-        self.token.cancel();
-    }
-}
-
 pub fn search(
     query: Query,
     reader: Arc<EntryReader>,
+    token: CancellationTokenSource,
 ) -> (
     QueryIter<16>,
     impl Iterator<Item = JoinHandle<()>> + Send + Sync + 'static,
 ) {
     let (results, threads) = match query {
-        Query::Plain(p) => search_impl(PlainQuery(Arc::new(Finder::new(p).into_owned())), reader),
+        Query::Plain(p) => search_impl(
+            PlainQuery(Arc::new(Finder::new(p).into_owned())),
+            reader,
+            token,
+        ),
         Query::PlainIgnoreCase(CaselessQuery { mut query, trim }) => {
             query.make_ascii_lowercase();
             let query = if trim { query.trim_ascii() } else { &query };
@@ -218,10 +254,11 @@ pub fn search(
                     cache: Vec::new(),
                 },
                 reader,
+                token,
             )
         }
-        Query::Regex(r) => search_impl(RegexQuery(r), reader),
-        Query::Mimes(r) => mime_search_impl(RegexQuery(r), reader),
+        Query::Regex(r) => search_impl(RegexQuery(r), reader, token),
+        Query::Mimes(r) => mime_search_impl(RegexQuery(r), reader, token),
     };
     (results, threads.into_iter())
 }
@@ -262,9 +299,9 @@ impl<const N: usize, T> Drop for BufferedSender<N, T> {
 fn search_impl<const N: usize>(
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
+    token: CancellationTokenSource,
 ) -> (QueryIter<N>, arrayvec::IntoIter<JoinHandle<()>, 13>) {
     let (sender, receiver) = crossbeam_channel::bounded(1);
-    let token = CancellationToken::new();
     let mut threads = ArrayVec::<_, 13>::new_const();
 
     let mut extra_direct_threads = 1;
@@ -355,7 +392,6 @@ fn search_impl<const N: usize>(
         }
     }));
     threads.push(thread::spawn({
-        let token = token.clone();
         move || {
             let mut sender = BufferedSender::new(sender);
             direct_alloc_search_stream(&token, &mut query, direct_file_receiver, |r| {
@@ -368,14 +404,13 @@ fn search_impl<const N: usize>(
         QueryIter {
             receiver,
             buf: ArrayVec::new_const(),
-            token,
         },
         threads.into_iter(),
     )
 }
 
 fn direct_alloc_search_stream<U>(
-    token: &CancellationToken,
+    token: &CancellationTokenSource,
     query: &mut impl QueryImpl,
     inputs: impl IntoIterator<Item = (Mmap, [u8; DIRECT_FILE_NAME_LEN])>,
     mut send: impl FnMut(Out) -> Result<(), U>,
@@ -412,7 +447,7 @@ fn direct_alloc_search_stream<U>(
 
 fn stream_through_direct_allocations<const N: usize>(
     reader: &EntryReader,
-    token: &CancellationToken,
+    token: &CancellationTokenSource,
     sender: &mut BufferedSender<N, Out>,
     mut f: impl FnMut(&mut BufferedSender<N, Out>, &CStr, OwnedFd, &str) -> Result<(), CoreError>,
 ) {
@@ -492,13 +527,12 @@ fn entry_id_from_direct_file_name(file_name: &[u8]) -> Result<u64, CoreError> {
 fn mime_search_impl<const N: usize>(
     mut query: impl QueryImpl + Clone + Send + 'static,
     reader: Arc<EntryReader>,
+    token: CancellationTokenSource,
 ) -> (QueryIter<N>, arrayvec::IntoIter<JoinHandle<()>, 13>) {
     let (sender, receiver) = crossbeam_channel::bounded(0);
-    let token = CancellationToken::new();
     let mut threads = ArrayVec::<_, 13>::new_const();
 
     threads.push(thread::spawn({
-        let token = token.clone();
         move || {
             let mut sender = BufferedSender::new(sender);
             stream_through_direct_allocations(
@@ -528,7 +562,6 @@ fn mime_search_impl<const N: usize>(
         QueryIter {
             receiver,
             buf: ArrayVec::new_const(),
-            token,
         },
         threads.into_iter(),
     )

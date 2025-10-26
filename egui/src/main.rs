@@ -32,7 +32,7 @@ use itoa::Integer;
 use ringboard_sdk::{
     ClientError,
     core::{Error as CoreError, protocol::RingKind},
-    search::CancellationToken,
+    search::{CancellationTokenSink, cancellation_token},
     ui_actor::{
         Command, CommandError, DetailedEntry, Message, SearchKind, UiEntry, UiEntryCache,
         controller,
@@ -170,8 +170,7 @@ struct UiState {
     query: String,
     search_highlighted_id: Option<u64>,
     search_kind: SearchKind,
-    pending_search_token: Option<CancellationToken>,
-    queued_searches: u32,
+    pending_search_token: Option<CancellationTokenSink>,
 
     was_focused: bool,
     skip_first_focus: bool,
@@ -278,7 +277,6 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
         search_highlighted_id,
         search_kind: _,
         pending_search_token,
-        queued_searches,
         was_focused: _,
         skip_first_focus: _,
         uri_buf,
@@ -297,7 +295,7 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
         Message::FatalDbOpen(e) => *fatal_error = Some(e.into()),
         Message::Error(e) => {
             *last_error = Some(e);
-            *queued_searches = queued_searches.saturating_sub(1);
+            pending_search_token.take_if(|token| token.is_done());
         }
         Message::LoadedFirstPage {
             entries,
@@ -315,22 +313,14 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
             }
         }
         Message::SearchResults(entries) => {
+            pending_search_token.take_if(|token| token.is_done());
             remove_old_images(entries.iter().chain(&*loaded_entries));
-            *queued_searches = queued_searches.saturating_sub(1);
-            if pending_search_token.take().is_some() {
-                *search_highlighted_id = entries.first().map(|e| e.entry.id());
-                *search_results = entries;
-            }
+            *search_highlighted_id = entries.first().map(|e| e.entry.id());
+            *search_results = entries;
         }
         Message::FavoriteChange(id) => *active_highlighted_id!(ui) = Some(id),
         Message::Deleted(_) => {}
         Message::LoadedImage { .. } => unreachable!(),
-        Message::PendingSearch(token) => {
-            if *queued_searches > 1 {
-                token.cancel();
-            }
-            *pending_search_token = Some(token);
-        }
         Message::Pasted => ctx.send_viewport_cmd(ViewportCommand::Close),
     }
 }
@@ -396,7 +386,6 @@ fn search_ui(
                 ref mut search_kind,
                 ref mut search_highlighted_id,
                 ref mut pending_search_token,
-                ref mut queued_searches,
                 ref was_focused,
                 ref mut uri_buf,
                 ref mut last_error,
@@ -484,14 +473,13 @@ fn search_ui(
     }
 
     *last_error = None;
-    if let Some(token) = pending_search_token {
-        token.cancel();
-    }
+    let (source, sink) = cancellation_token();
     let _ = requests.send(Command::Search {
         query: query.clone().into(),
         kind: *search_kind,
+        token: source,
     });
-    *queued_searches += 1;
+    *pending_search_token = Some(sink);
 }
 
 fn show_error(ui: &mut Ui, e: &dyn Error) {
@@ -511,14 +499,13 @@ fn main_ui(
         state.last_error.take();
         let _ = requests.send(Command::LoadFirstPage);
         if !state.query.is_empty() {
-            if let Some(token) = &state.pending_search_token {
-                token.cancel();
-            }
+            let (source, sink) = cancellation_token();
             let _ = requests.send(Command::Search {
                 query: state.query.clone().into(),
                 kind: state.search_kind,
+                token: source,
             });
-            state.queued_searches += 1;
+            state.pending_search_token = Some(sink);
         }
     };
 
@@ -572,7 +559,7 @@ fn main_ui(
     if active_entries!(entries, state).is_empty() {
         ui.centered_and_justified(|ui| {
             ui.label(
-                RichText::new(if state.queued_searches > 0 {
+                RichText::new(if state.pending_search_token.is_some() {
                     "Loading…"
                 } else {
                     "Nothing to see here"
