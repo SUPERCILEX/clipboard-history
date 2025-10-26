@@ -7,6 +7,7 @@ use std::{
     error::Error,
     ffi::OsStr,
     hash::BuildHasherDefault,
+    io::BufReader,
     str,
     sync::{
         Arc,
@@ -28,10 +29,11 @@ use eframe::{
         text::{LayoutJob, LayoutSection},
     },
 };
+use image::ImageReader;
 use itoa::Integer;
 use ringboard_sdk::{
     ClientError,
-    core::{Error as CoreError, protocol::RingKind},
+    core::{Error as CoreError, IoErr, protocol::RingKind},
     search::{CancellationTokenSink, cancellation_token},
     ui_actor::{
         Command, CommandError, DetailedEntry, Message, SearchKind, UiEntry, UiEntryCache,
@@ -39,7 +41,10 @@ use ringboard_sdk::{
     },
 };
 use rustc_hash::FxHasher;
-use rustix::fs::unlink;
+use rustix::{
+    fs::unlink,
+    process::{getpriority_process, setpriority_process},
+};
 
 use crate::{
     loader::RingboardLoader,
@@ -87,7 +92,34 @@ fn main() -> Result<(), eframe::Error> {
 
                     controller(&command_receiver, |m| {
                         let r = if let Message::LoadedImage { id, image } = m {
-                            ringboard_loader.add(id, image);
+                            let ringboard_loader = ringboard_loader.clone();
+                            let response_sender = response_sender.clone();
+                            thread::spawn(move || {
+                                let run = || {
+                                    let priority = getpriority_process(None).map_io_err(|| {
+                                        "Failed to get image loading thread priority"
+                                    })?;
+                                    let priority = priority + 1;
+                                    setpriority_process(None, priority).map_io_err(|| {
+                                        format!(
+                                            "Failed to lower image loading thread priority to \
+                                             {priority}."
+                                        )
+                                    })?;
+                                    Ok(ImageReader::new(BufReader::new(image))
+                                        .with_guessed_format()
+                                        .map_io_err(|| {
+                                            format!("Failed to guess image format for entry {id}.")
+                                        })?
+                                        .decode()?)
+                                };
+                                match run() {
+                                    Ok(image) => ringboard_loader.add(id, image),
+                                    Err(e) => {
+                                        let _ = response_sender.send(Message::Error(e));
+                                    }
+                                }
+                            });
                             Ok(())
                         } else {
                             response_sender.send(m)
@@ -961,18 +993,20 @@ mod loader {
         }
 
         pub fn add(&self, id: u64, image: DynamicImage) {
-            let size = [image.width() as _, image.height() as _];
-            let image_buffer = image.into_rgba8();
-            let pixels = image_buffer.into_flat_samples();
+            let key = RingAndIndex::from_id(id).unwrap();
+            let value = {
+                let size = [image.width() as _, image.height() as _];
+                let image_buffer = image.into_rgba8();
+                let pixels = image_buffer.into_flat_samples();
+                CachedImage::Computed(
+                    ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()).into(),
+                )
+            };
+
             let Ok(mut cache) = self.cache.lock() else {
                 return;
             };
-            cache.insert(
-                RingAndIndex::from_id(id).unwrap(),
-                CachedImage::Computed(
-                    ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()).into(),
-                ),
-            );
+            cache.insert(key, value);
         }
     }
 

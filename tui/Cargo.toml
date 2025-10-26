@@ -11,6 +11,7 @@ license.workspace = true
 
 [dependencies]
 error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
+image = "0.25.6"
 ratatui = "0.29.0"
 ratatui-image = { version = "8.0.1", features = ["crossterm"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "ui"] }

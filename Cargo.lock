@@ -737,6 +737,7 @@ version = "0.12.2"
 dependencies = [
  "clipboard-history-client-sdk",
  "error-stack",
+ "image",
  "ratatui",
  "ratatui-image",
  "rustix 1.0.8",

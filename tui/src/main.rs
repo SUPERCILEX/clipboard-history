@@ -4,7 +4,7 @@ use std::{
     fmt::Write,
     fs::File,
     io,
-    io::BufWriter,
+    io::{BufReader, BufWriter},
     mem::ManuallyDrop,
     os::fd::FromRawFd,
     sync::{
@@ -14,6 +14,7 @@ use std::{
     thread,
 };
 
+use image::{DynamicImage, ImageReader};
 use ratatui::{
     Terminal,
     backend::{Backend, CrosstermBackend},
@@ -40,7 +41,10 @@ use ringboard_sdk::{
         controller,
     },
 };
-use rustix::stdio::raw_stdout;
+use rustix::{
+    process::{getpriority_process, setpriority_process},
+    stdio::raw_stdout,
+};
 use thiserror::Error;
 use tui_textarea::{CursorMove, Input, Key, TextArea};
 
@@ -52,6 +56,7 @@ static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
 enum Action {
     Controller(Message),
     User(io::Result<Event>),
+    ImageLoaded { id: u64, image: DynamicImage },
 }
 
 impl From<Message> for Action {
@@ -221,7 +226,39 @@ impl App {
 
         thread::spawn({
             let sender = response_sender.clone();
-            move || controller(&command_receiver, |m| sender.send(m.into()))
+            move || {
+                controller(&command_receiver, |m| {
+                    if let Message::LoadedImage { id, image } = m {
+                        let sender = sender.clone();
+                        thread::spawn(move || {
+                            let run = || {
+                                let priority = getpriority_process(None)
+                                    .map_io_err(|| "Failed to get image loading thread priority")?;
+                                let priority = priority + 1;
+                                setpriority_process(None, priority).map_io_err(|| {
+                                    format!(
+                                        "Failed to lower image loading thread priority to \
+                                         {priority}."
+                                    )
+                                })?;
+                                Ok(ImageReader::new(BufReader::new(image))
+                                    .with_guessed_format()
+                                    .map_io_err(|| {
+                                        format!("Failed to guess image format for entry {id}.")
+                                    })?
+                                    .decode()?)
+                            };
+                            let _ = match run() {
+                                Ok(image) => sender.send(Action::ImageLoaded { id, image }),
+                                Err(e) => sender.send(Message::Error(e).into()),
+                            };
+                        });
+                        Ok(())
+                    } else {
+                        sender.send(m.into())
+                    }
+                });
+            }
         });
         thread::spawn(move || {
             loop {
@@ -256,7 +293,16 @@ impl App {
         for action in responses {
             if match action {
                 Action::Controller(message) => {
-                    handle_message(message, state, &mut local_state, picker, &requests)?
+                    handle_message(message, state, &mut local_state, &requests)?
+                }
+                Action::ImageLoaded { id, image } => {
+                    if let Some(ImageState::Requested(requested_id)) = state.ui.detail_image_state
+                        && requested_id == id
+                    {
+                        state.ui.detail_image_state =
+                            Some(ImageState::Loaded(picker.new_resize_protocol(image)));
+                    }
+                    false
                 }
                 Action::User(event) => handle_event(
                     event.map_io_err(|| "Failed to read terminal.")?,
@@ -300,7 +346,6 @@ fn handle_message(
     message: Message,
     State { entries, ui }: &mut State,
     pending_favorite_change: &mut Option<u64>,
-    picker: &Picker,
     requests: &Sender<Command>,
 ) -> Result<bool, CoreError> {
     let UiEntries {
@@ -360,13 +405,7 @@ fn handle_message(
         Message::Deleted(id) => {
             outstanding_request.take_if(|&mut req_id| req_id == id);
         }
-        Message::LoadedImage { id, image } => {
-            if let Some(ImageState::Requested(requested_id)) = ui.detail_image_state
-                && requested_id == id
-            {
-                ui.detail_image_state = Some(ImageState::Loaded(picker.new_resize_protocol(image)));
-            }
-        }
+        Message::LoadedImage { .. } => unreachable!(),
         Message::Pasted => return Ok(true),
     }
     if ui.details_requested.is_some() {

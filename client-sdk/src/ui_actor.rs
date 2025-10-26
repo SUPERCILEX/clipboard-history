@@ -2,8 +2,8 @@ use std::{
     array,
     cmp::{Ordering, min},
     collections::{BinaryHeap, HashMap},
+    fs::File,
     hash::BuildHasherDefault,
-    io::BufReader,
     iter::once,
     mem,
     os::fd::{AsFd, OwnedFd},
@@ -12,7 +12,7 @@ use std::{
     sync::Arc,
 };
 
-use image::{DynamicImage, ImageError, ImageReader};
+use image::ImageError;
 use regex::bytes::Regex;
 use ringboard_core::dirs::paste_socket_file;
 use rustc_hash::FxHasher;
@@ -119,7 +119,7 @@ pub enum Message {
     Deleted(u64),
     LoadedImage {
         id: u64,
-        image: DynamicImage,
+        image: File,
     },
     Pasted,
 }
@@ -358,10 +358,7 @@ fn handle_command<E>(
             let entry = unsafe { database.get(id)? };
             Ok(Some(Message::LoadedImage {
                 id,
-                image: ImageReader::new(BufReader::new(&*entry.to_file(reader)?))
-                    .with_guessed_format()
-                    .map_io_err(|| format!("Failed to guess image format for entry {id}."))?
-                    .decode()?,
+                image: entry.to_file(reader)?.into_inner(),
             }))
         }
         Command::Paste(id) => {
