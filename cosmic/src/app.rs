@@ -135,8 +135,6 @@ pub enum AppMessage {
 }
 
 impl<const APPLET: bool> Model<APPLET> {
-    const APP_ID: &str = "dev.alexsaveau.ringboard.cosmic";
-
     fn toggle_popup(&mut self, kind: PopupKind) -> Task<Action<AppMessage>> {
         info!("Toggling popup: {:?}", kind);
         match &self.popup {
@@ -236,7 +234,7 @@ impl<const APPLET: bool> Application for Model<APPLET> {
     type Flags = Flags;
     type Message = AppMessage;
 
-    const APP_ID: &str = Self::APP_ID;
+    const APP_ID: &str = "dev.alexsaveau.ringboard.cosmic";
 
     fn core(&self) -> &cosmic::Core {
         &self.core
