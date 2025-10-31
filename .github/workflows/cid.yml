@@ -155,3 +155,10 @@ jobs:
           file: target/${{ matrix.target }}/release/ringboard-tui
           asset_name: ${{ matrix.target }}-ringboard-tui
           tag: ${{ github.ref }}
+      - name: Upload binary
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/ringboard-cosmic
+          asset_name: ${{ matrix.target }}-ringboard-cosmic
+          tag: ${{ github.ref }}
