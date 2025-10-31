@@ -11,7 +11,7 @@ use cosmic::{
 
 use crate::{
     app::AppMessage,
-    config::{Config, FilterMode, Position},
+    config::{Config, Position, SerializableSearchKind},
     fl,
 };
 
@@ -75,23 +75,23 @@ pub fn filter_mode_model(config: &Config) -> SingleSelectModel {
     let plain = filter_mode_model
         .insert()
         .text(fl!("filter-mode-plain"))
-        .data(FilterMode::Plain)
+        .data(SerializableSearchKind::Plain)
         .id();
     let regex = filter_mode_model
         .insert()
         .text(fl!("filter-mode-regex"))
-        .data(FilterMode::Regex)
+        .data(SerializableSearchKind::Regex)
         .id();
     let mime = filter_mode_model
         .insert()
         .text(fl!("filter-mode-mime"))
-        .data(FilterMode::Mime)
+        .data(SerializableSearchKind::Mime)
         .id();
 
-    match config.filter_mode {
-        FilterMode::Plain => filter_mode_model.activate(plain),
-        FilterMode::Regex => filter_mode_model.activate(regex),
-        FilterMode::Mime => filter_mode_model.activate(mime),
+    match config.search_kind {
+        SerializableSearchKind::Plain => filter_mode_model.activate(plain),
+        SerializableSearchKind::Regex => filter_mode_model.activate(regex),
+        SerializableSearchKind::Mime => filter_mode_model.activate(mime),
     }
 
     filter_mode_model

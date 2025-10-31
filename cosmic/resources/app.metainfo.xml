@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-    <id>dev.alexsaveau.ringboard.cosmic-applet</id>
+    <id>dev.alexsaveau.ringboard.cosmic</id>
     <metadata_license>CC0-1.0</metadata_license>
     <project_license>Apache-2.0</project_license>
-    <name>Ringboard Applet</name>
-    <summary>Ringboard Cosmic Desktop applet</summary>
+    <name>Ringboard</name>
+    <summary>Ringboard Cosmic Desktop client application</summary>
     <icon type="remote" width="64" height="64" scale="1">
-        https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/refs/heads/master/cosmic-applet/resources/clipboard.svg
+        https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/refs/heads/master/cosmic/resources/clipboard.svg
     </icon>
     <url type="vcs-browser">https://github.com/SUPERCILEX/clipboard-history</url>
-    <launchable type="desktop-id">dev.alexsaveau.ringboard.cosmic-applet.desktop</launchable>
+    <launchable type="desktop-id">dev.alexsaveau.ringboard.cosmic.desktop</launchable>
     <provides>
-        <id>dev.alexsaveau.ringboard.cosmic-applet</id>
+        <id>dev.alexsaveau.ringboard.cosmic</id>
         <binaries>
-            <binary>ringboard-cosmic-applet</binary>
+            <binary>ringboard-cosmic</binary>
         </binaries>
     </provides>
     <requires>

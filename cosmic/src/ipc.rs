@@ -11,7 +11,7 @@ use crate::app::AppMessage;
 struct WackupSubscription;
 
 fn signal_file_path() -> PathBuf {
-    let path = PathBuf::from("/tmp/ringboard-cosmic-applet-wackup-signal");
+    let path = PathBuf::from("/tmp/ringboard-cosmic-wackup-signal");
     if !path.exists() {
         let _ = std::fs::File::create(&path);
     }

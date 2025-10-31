@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-
 use std::sync::{
     Arc, Mutex,
     mpsc::{self, Receiver, Sender},
@@ -36,8 +34,7 @@ use tracing::{info, warn};
 
 use crate::{
     client::ringboard_client_sub,
-    config::{Config, FilterMode, Position, config_sub},
-    icon_app,
+    config::{Config, Position, SerializableSearchKind, config_sub},
     ipc::wackup_sub,
     views::{
         details::details_view,
@@ -48,11 +45,14 @@ use crate::{
     },
 };
 
-pub struct AppModel {
-    /// Application state which is managed by the COSMIC runtime.
+pub struct Flags {
+    pub config: Config,
+    pub config_manager: Option<cosmic_config::Config>,
+}
+
+pub struct Model<const APPLET: bool> {
     core: cosmic::Core,
-    config: Config,
-    config_handler: cosmic_config::Config,
+    flags: Flags,
     popup: Option<Popup>,
     search: String,
     search_id: Id,
@@ -108,11 +108,6 @@ enum PopupKind {
     Settings,
 }
 
-pub struct Flags {
-    pub config: Config,
-    pub config_handler: cosmic_config::Config,
-}
-
 #[derive(Debug, Clone)]
 pub enum AppMessage {
     TogglePopup,
@@ -139,7 +134,9 @@ pub enum AppMessage {
     Error(String),
 }
 
-impl AppModel {
+impl<const APPLET: bool> Model<APPLET> {
+    const APP_ID: &str = "dev.alexsaveau.ringboard.cosmic";
+
     fn toggle_popup(&mut self, kind: PopupKind) -> Task<Action<AppMessage>> {
         info!("Toggling popup: {:?}", kind);
         match &self.popup {
@@ -188,8 +185,8 @@ impl AppModel {
                 get_layer_surface(SctkLayerSurfaceSettings {
                     id,
                     keyboard_interactivity: KeyboardInteractivity::Exclusive,
-                    anchor: self.config.anchor(),
-                    namespace: AppModel::APP_ID.into(),
+                    anchor: self.flags.config.anchor(),
+                    namespace: Self::APP_ID.into(),
                     size: None,
                     size_limits: Limits::NONE
                         .min_width(300.0)
@@ -234,14 +231,12 @@ impl AppModel {
     }
 }
 
-impl cosmic::Application for AppModel {
+impl<const APPLET: bool> Application for Model<APPLET> {
     type Executor = cosmic::executor::Default;
-
     type Flags = Flags;
-
     type Message = AppMessage;
 
-    const APP_ID: &'static str = "dev.alexsaveau.ringboard.cosmic-applet";
+    const APP_ID: &str = Self::APP_ID;
 
     fn core(&self) -> &cosmic::Core {
         &self.core
@@ -251,7 +246,7 @@ impl cosmic::Application for AppModel {
         &mut self.core
     }
 
-    fn init(core: cosmic::Core, flags: Self::Flags) -> (Self, Task<cosmic::Action<Self::Message>>) {
+    fn init(core: cosmic::Core, flags: Self::Flags) -> (Self, Task<Action<Self::Message>>) {
         let (command_sender, command_receiver) = mpsc::channel();
 
         let filter_mode_model = filter_mode_model(&flags.config);
@@ -259,10 +254,9 @@ impl cosmic::Application for AppModel {
         let vertical_pos_model = vertical_position_model(&flags.config);
 
         // Construct the app model with the runtime's core.
-        let app = AppModel {
+        let app = Model {
             core,
-            config: flags.config,
-            config_handler: flags.config_handler,
+            flags,
             popup: None,
             search: String::new(),
             search_id: Id::unique(),
@@ -289,43 +283,30 @@ impl cosmic::Application for AppModel {
         None
     }
 
-    fn view(&self) -> Element<'_, Self::Message> {
-        let icon = self
-            .core
-            .applet
-            .icon_button_from_handle(icon_app!("clipboard"))
-            .on_press(AppMessage::TogglePopup);
+    fn subscription(&self) -> Subscription<Self::Message> {
+        let command_receiver = self.command_receiver.clone();
+        let ringboard_client = ringboard_client_sub(command_receiver, self.command_sender.clone());
 
-        MouseArea::new(icon)
-            .on_right_press(AppMessage::ToggleSettings)
-            .into()
-    }
+        let wackup = wackup_sub();
 
-    fn view_window(&self, _id: window::Id) -> Element<'_, Self::Message> {
-        let Some(popup) = &self.popup else {
-            return Space::new(0, 0).into();
-        };
+        let config_handler = config_sub::<APPLET>();
 
-        let view = match popup.kind {
-            PopupKind::Search => match &popup.details {
-                Some(details) => details_view(details.as_ref()),
-                None => popup_view(
-                    &self.entries,
-                    &self.favorites,
-                    &self.search,
-                    self.search_id.clone(),
-                    self.core.system_theme(),
-                    self.fatal_error.as_deref(),
-                ),
-            },
-            PopupKind::Settings => settings_view(
-                &self.filter_mode_model,
-                &self.horizontal_pos_model,
-                &self.vertical_pos_model,
-            ),
-        };
+        let keyboard_listener = on_key_press(key_press);
 
-        self.core.applet.popup_container(view).into()
+        let raw_events = listen_raw(|e, _, _| match e {
+            cosmic::iced::Event::PlatformSpecific(PlatformSpecific::Wayland(
+                wayland::Event::Layer(LayerEvent::Unfocused, ..),
+            )) => Some(AppMessage::ClosePopup),
+            _ => None,
+        });
+
+        Subscription::batch(vec![
+            ringboard_client,
+            wackup,
+            config_handler,
+            keyboard_listener,
+            raw_events,
+        ])
     }
 
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
@@ -342,7 +323,7 @@ impl cosmic::Application for AppModel {
                 info!("Starting new search: {}", self.search);
                 let _ = self.command_sender.send(Command::Search {
                     query: self.search.clone().into_boxed_str(),
-                    kind: self.config.filter_mode.into(),
+                    kind: self.flags.config.search_kind.into(),
                 });
             }
             AppMessage::SearchPending(token) => {
@@ -451,7 +432,7 @@ impl cosmic::Application for AppModel {
                 } else {
                     let _ = self.command_sender.send(Command::Search {
                         query: self.search.clone().into_boxed_str(),
-                        kind: self.config.filter_mode.into(),
+                        kind: self.flags.config.search_kind.into(),
                     });
                 }
             }
@@ -468,14 +449,16 @@ impl cosmic::Application for AppModel {
                 self.entries.retain(|entry| entry.id != id);
             }
             AppMessage::SelectFilterMode(e) => {
-                let mode = self.filter_mode_model.data::<FilterMode>(e);
+                let mode = self.filter_mode_model.data::<SerializableSearchKind>(e);
                 let Some(&mode) = mode else {
                     warn!("Invalid filter mode selected");
                     return Task::none();
                 };
                 info!("Changing filter mode to: {:?}", mode);
                 self.filter_mode_model.activate(e);
-                let _ = self.config.set_filter_mode(&self.config_handler, mode);
+                if let Some(manager) = &self.flags.config_manager {
+                    let _ = self.flags.config.set_search_kind(manager, mode);
+                }
             }
             AppMessage::SelectHorizontalPosition(e) => {
                 let pos = self.horizontal_pos_model.data::<Position>(e);
@@ -485,9 +468,9 @@ impl cosmic::Application for AppModel {
                 };
                 info!("Changing horizontal position to: {:?}", pos);
                 self.horizontal_pos_model.activate(e);
-                let _ = self
-                    .config
-                    .set_horizontal_position(&self.config_handler, pos);
+                if let Some(manager) = &self.flags.config_manager {
+                    let _ = self.flags.config.set_horizontal_position(manager, pos);
+                }
             }
             AppMessage::SelectVerticalPosition(e) => {
                 let pos = self.vertical_pos_model.data::<Position>(e);
@@ -497,11 +480,13 @@ impl cosmic::Application for AppModel {
                 };
                 info!("Changing vertical position to: {:?}", pos);
                 self.vertical_pos_model.activate(e);
-                let _ = self.config.set_vertical_position(&self.config_handler, pos);
+                if let Some(manager) = &self.flags.config_manager {
+                    let _ = self.flags.config.set_vertical_position(manager, pos);
+                }
             }
             AppMessage::ConfigUpdate(config) => {
                 info!("Config updated: {:?}", config);
-                self.config = config;
+                self.flags.config = config;
             }
             AppMessage::KeyPressed(key) => {
                 if let Key::Named(Named::Escape) = key {
@@ -524,34 +509,62 @@ impl cosmic::Application for AppModel {
         Task::none()
     }
 
-    fn style(&self) -> Option<cosmic::iced_runtime::Appearance> {
-        Some(cosmic::applet::style())
+    fn view(&self) -> Element<'_, Self::Message> {
+        match APPLET {
+            false => popup_view(
+                &self.entries,
+                &self.favorites,
+                &self.search,
+                self.search_id.clone(),
+                self.core.system_theme(),
+                self.fatal_error.as_deref(),
+            ),
+            true => {
+                let icon = self
+                    .core
+                    .applet
+                    .icon_button_from_handle({
+                        let bytes = include_bytes!(concat!("../resources/icons/clipboard.svg"));
+                        cosmic::widget::icon::from_svg_bytes(bytes).symbolic(true)
+                    })
+                    .on_press(AppMessage::TogglePopup);
+
+                MouseArea::new(icon)
+                    .on_right_press(AppMessage::ToggleSettings)
+                    .into()
+            }
+        }
     }
 
-    fn subscription(&self) -> Subscription<Self::Message> {
-        let command_receiver = self.command_receiver.clone();
-        let ringboard_client = ringboard_client_sub(command_receiver, self.command_sender.clone());
+    fn view_window(&self, _id: window::Id) -> Element<'_, Self::Message> {
+        let Some(popup) = &self.popup else {
+            return Space::new(0, 0).into();
+        };
 
-        let wackup = wackup_sub();
+        let view = match popup.kind {
+            PopupKind::Search => match &popup.details {
+                Some(details) => details_view(details.as_ref()),
+                None => popup_view(
+                    &self.entries,
+                    &self.favorites,
+                    &self.search,
+                    self.search_id.clone(),
+                    self.core.system_theme(),
+                    self.fatal_error.as_deref(),
+                ),
+            },
+            PopupKind::Settings => settings_view(
+                &self.filter_mode_model,
+                &self.horizontal_pos_model,
+                &self.vertical_pos_model,
+            ),
+        };
 
-        let config_handler = config_sub();
+        self.core.applet.popup_container(view).into()
+    }
 
-        let keyboard_listener = on_key_press(key_press);
-
-        let raw_events = listen_raw(|e, _, _| match e {
-            cosmic::iced::Event::PlatformSpecific(PlatformSpecific::Wayland(
-                wayland::Event::Layer(LayerEvent::Unfocused, ..),
-            )) => Some(AppMessage::ClosePopup),
-            _ => None,
-        });
-
-        Subscription::batch(vec![
-            ringboard_client,
-            wackup,
-            config_handler,
-            keyboard_listener,
-            raw_events,
-        ])
+    fn style(&self) -> Option<cosmic::iced_runtime::Appearance> {
+        Some(cosmic::applet::style())
     }
 }
 

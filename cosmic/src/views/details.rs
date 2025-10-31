@@ -14,8 +14,15 @@ use cosmic::{
 
 use crate::{
     app::{AppMessage, Entry, EntryData},
-    fl, icon,
+    fl,
 };
+
+macro_rules! icon {
+    ($name:literal) => {{
+        let bytes = include_bytes!(concat!("../../resources/icons/", $name, ".svg"));
+        cosmic::widget::icon::from_svg_bytes(bytes).symbolic(true)
+    }};
+}
 
 pub fn details_view<'a>(details: Result<&'a Entry, &'a String>) -> Element<'a, AppMessage> {
     let mut header = row()

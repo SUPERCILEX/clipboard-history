@@ -3,7 +3,7 @@ members = [
     "cli",
     "client-sdk",
     "core",
-    "cosmic-applet",
+    "cosmic",
     "egui",
     "server",
     "tui",

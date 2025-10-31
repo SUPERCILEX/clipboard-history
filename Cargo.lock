@@ -1243,7 +1243,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "clipboard-history-cosmic-applet"
+name = "clipboard-history-cosmic"
 version = "0.12.2"
 dependencies = [
  "anyhow",
@@ -1257,8 +1257,6 @@ dependencies = [
  "serde",
  "tokio",
  "tracing",
- "tracing-journald",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -1639,7 +1637,7 @@ dependencies = [
 [[package]]
 name = "cosmic-panel-config"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/cosmic-panel#b23a2df8fd9a1f9e64aa3ff006e520dda7db4288"
+source = "git+https://github.com/pop-os/cosmic-panel#f1a947605243a79c4a4a0813fa234fa21440c859"
 dependencies = [
  "anyhow",
  "cosmic-config",
@@ -4089,6 +4087,7 @@ dependencies = [
  "iced_renderer",
  "iced_runtime",
  "iced_tiny_skia",
+ "iced_wgpu",
  "iced_widget",
  "iced_winit",
  "image",
@@ -7035,17 +7034,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-journald"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc0b4143302cf1022dac868d521e36e8b27691f72c84b3311750d5188ebba657"
-dependencies = [
- "libc",
- "tracing-core",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "tracing-log"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8696,7 +8684,7 @@ dependencies = [
 [[package]]
 name = "xdg-shell-wrapper-config"
 version = "0.1.0"
-source = "git+https://github.com/pop-os/cosmic-panel#b23a2df8fd9a1f9e64aa3ff006e520dda7db4288"
+source = "git+https://github.com/pop-os/cosmic-panel#f1a947605243a79c4a4a0813fa234fa21440c859"
 dependencies = [
  "serde",
  "wayland-protocols-wlr",

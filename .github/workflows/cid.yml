@@ -159,6 +159,6 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/${{ matrix.target }}/release/ringboard-cosmic-applet
-          asset_name: ${{ matrix.target }}-ringboard-cosmic-applet
+          file: target/${{ matrix.target }}/release/ringboard-cosmic
+          asset_name: ${{ matrix.target }}-ringboard-cosmic
           tag: ${{ github.ref }}

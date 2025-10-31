@@ -1,6 +1,6 @@
-# Cosmic Applet
+# Ringboard COSMIC Desktop
 
-This applet is a Ringboard client that provides direct integration with the Cosmic Desktop.
+This application offers both a normal libcosmic Ringboard implementation along with a COSMIC Desktop applet.
 
 ## Translators
 

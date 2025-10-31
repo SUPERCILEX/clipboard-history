@@ -1,9 +1,9 @@
 [package]
-name = "clipboard-history-cosmic-applet"
+name = "clipboard-history-cosmic"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Ringboard Cosmic Desktop applet."
+description = "Ringboard COSMIC Desktop client application."
 repository.workspace = true
 keywords = ["ringboard", "clipboard", "tools", "cosmic"]
 categories = ["command-line-utilities", "development-tools", "filesystem"]
@@ -16,16 +16,14 @@ anyhow = "1.0.100"
 futures-util = "0.3.31"
 i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }
 i18n-embed-fl = "0.10.0"
-libcosmic = { git = "https://github.com/pop-os/libcosmic.git", features = ["applet"] }
+libcosmic = { git = "https://github.com/pop-os/libcosmic.git", features = ["applet", "wgpu"] }
 notify = "8.2.0"
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
 rust-embed = "8.8.0"
 serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.48.0", features = ["full"] }
 tracing = "0.1.41"
-tracing-journald = "0.3.1"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 
 [[bin]]
-name = "ringboard-cosmic-applet"
+name = "ringboard-cosmic"
 path = "src/main.rs"

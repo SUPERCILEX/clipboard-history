@@ -91,7 +91,9 @@ pub fn ringboard_client_sub(
                         Message::Deleted(id) => {
                             block_on(output.send(AppMessage::Deleted(id)))?;
                         }
-                        Message::Pasted => (), // we don't need to handle this because the popup is closed immediately after sending the paste command,
+                        Message::Pasted => (), /* we don't need to handle this because the popup
+                                                * is closed immediately after sending the paste
+                                                * command, */
                     }
                     Ok(())
                 });
