@@ -757,7 +757,7 @@ pub unsafe fn clipboard_history_client_sdk::search::QueryResult::drop(ptr: usize
 pub unsafe fn clipboard_history_client_sdk::search::QueryResult::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::search::QueryResult
 pub fn clipboard_history_client_sdk::search::cancellation_token() -> (clipboard_history_client_sdk::search::CancellationTokenSource, clipboard_history_client_sdk::search::CancellationTokenSink)
-pub fn clipboard_history_client_sdk::search::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>, token: clipboard_history_client_sdk::search::CancellationTokenSource) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
+pub fn clipboard_history_client_sdk::search::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>, token: clipboard_history_client_sdk::search::CancellationTokenSource) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::join_handle::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
 pub mod clipboard_history_client_sdk::ui_actor
 pub enum clipboard_history_client_sdk::ui_actor::Command
 pub clipboard_history_client_sdk::ui_actor::Command::Delete(u64)
@@ -1544,4 +1544,4 @@ pub unsafe fn clipboard_history_client_sdk::RingReader<'a>::init(init: <T as cro
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::RingReader<'a>
 impl<T> itertools::Itertools for clipboard_history_client_sdk::RingReader<'a> where T: core::iter::traits::iterator::Iterator + ?core::marker::Sized
 pub fn clipboard_history_client_sdk::is_text_mime(mime: &str) -> bool
-pub fn clipboard_history_client_sdk::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>, token: clipboard_history_client_sdk::search::CancellationTokenSource) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
+pub fn clipboard_history_client_sdk::search(query: clipboard_history_client_sdk::search::Query<'_>, reader: alloc::sync::Arc<clipboard_history_client_sdk::EntryReader>, token: clipboard_history_client_sdk::search::CancellationTokenSource) -> (clipboard_history_client_sdk::search::QueryIter<16>, impl core::iter::traits::iterator::Iterator<Item = std::thread::join_handle::JoinHandle<()>> + core::marker::Send + core::marker::Sync + 'static)
