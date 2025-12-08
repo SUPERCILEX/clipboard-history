@@ -73,10 +73,12 @@ use thiserror::Error;
 
 /// The Ringboard (clipboard history) CLI.
 ///
-/// Ringboard uses a client-server architecture, wherein the server has
-/// exclusive write access to the clipboard database and clients must ask the
-/// server to perform the modifications they need. This CLI is a non-interactive
-/// client and a debugging tool.
+/// Ringboard uses a client-server architecture, wherein the on-device server
+/// has exclusive write access to the clipboard database and clients must ask
+/// the server to perform the modifications they need. This CLI is a
+/// non-interactive client and a debugging tool.
+///
+/// For a technical breakdown of the project, see <https://alexsaveau.dev/blog/ringboard>.
 #[derive(Parser, Debug)]
 #[command(version, author = "Alex Saveau (@SUPERCILEX)")]
 #[command(infer_subcommands = true, infer_long_args = true)]
