@@ -127,7 +127,7 @@ enum Wrapper {
     W(String),
 }
 
-fn main() -> error_stack::Result<(), Wrapper> {
+fn main() -> Result<(), Report<Wrapper>> {
     #[cfg(not(debug_assertions))]
     error_stack::Report::install_debug_hook::<std::panic::Location>(|_, _| {});
 
@@ -147,7 +147,7 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
         CliError::Sdk(e) => e.into_report(wrapper),
         CliError::X11Connect(e) => Report::new(e).change_context(wrapper),
         CliError::X11Connection(e) => Report::new(e).change_context(wrapper),
-        CliError::X11Error(e) => Report::new(wrapper).attach_printable(format!("{e:?}")),
+        CliError::X11Error(e) => Report::new(wrapper).attach(format!("{e:?}")),
         CliError::X11IdsExhausted | CliError::X11NoXfixes => Report::new(wrapper),
         CliError::Toml(e) => Report::new(e).change_context(wrapper),
     }

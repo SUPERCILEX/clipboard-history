@@ -22,7 +22,7 @@ pub fn register_buf_ring(
 
     let ring = MmapAnon::new(bytes().ok_or(io::ErrorKind::InvalidInput)?)?;
     unsafe {
-        submitter.register_buf_ring(ring.ptr.as_ptr() as u64, ring_entries, bgid)?;
+        submitter.register_buf_ring_with_flags(ring.ptr.as_ptr() as u64, ring_entries, bgid, 0)?;
     }
     Ok(BufRing::init(ring, ring_entries, entry_size, bgid))
 }

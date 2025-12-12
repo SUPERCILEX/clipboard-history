@@ -12,13 +12,13 @@ license.workspace = true
 [dependencies]
 arrayvec = "0.7.6"
 env_logger = { version = "0.11.8", default-features = false }
-error-stack = { version = "0.5.0", default-features = false, features = ["std"] }
-log = { version = "0.4.27", features = ["release_max_level_info"] }
+error-stack = { version = "0.6.0", default-features = false, features = ["std"] }
+log = { version = "0.4.29", features = ["release_max_level_info"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "config", "watcher-utils"] }
 rustc-hash = "2.1.1"
-rustix = { version = "1.0.8", features = ["pipe", "event"] }
-thiserror = "2.0.15"
-toml = { version = "0.9.5", default-features = false, features = ["serde", "parse"] }
+rustix = { version = "1.1.2", features = ["pipe", "event"] }
+thiserror = "2.0.17"
+toml = { version = "0.9.8", default-features = false, features = ["serde", "parse"] }
 wayland-client = "0.31.11"
 wayland-protocols = { version = "0.32.9", features = ["client", "staging"] }
 wayland-protocols-misc = { version = "0.3.9", features = ["client"] }

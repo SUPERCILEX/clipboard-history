@@ -43,6 +43,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::AddResp
 pub unsafe fn clipboard_history_core::protocol::AddResponse::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::AddResponse
 pub fn clipboard_history_core::protocol::AddResponse::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::protocol::AddResponse where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(C)] pub enum clipboard_history_core::protocol::IdNotFoundError
 pub clipboard_history_core::protocol::IdNotFoundError::Entry(u32)
 pub clipboard_history_core::protocol::IdNotFoundError::Ring(u32)
@@ -64,6 +65,9 @@ impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protoco
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::IdNotFoundError
 impl<C> error_stack::context::Context for clipboard_history_core::protocol::IdNotFoundError where C: core::error::Error + core::marker::Send + core::marker::Sync + 'static
 pub fn clipboard_history_core::protocol::IdNotFoundError::provide<'a>(&'a self, request: &mut core::error::Request<'a>)
+impl<E> error_stack::report::IntoReport for clipboard_history_core::protocol::IdNotFoundError where E: core::convert::Into<error_stack::report::Report<E>>
+pub type clipboard_history_core::protocol::IdNotFoundError::Context = E
+pub fn clipboard_history_core::protocol::IdNotFoundError::into_report(self) -> error_stack::report::Report<<E as error_stack::report::IntoReport>::Context>
 impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::IdNotFoundError where U: core::convert::From<T>
 pub fn clipboard_history_core::protocol::IdNotFoundError::into(self) -> U
 impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::protocol::IdNotFoundError where U: core::convert::Into<T>
@@ -88,6 +92,8 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::IdNotFo
 pub unsafe fn clipboard_history_core::protocol::IdNotFoundError::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::IdNotFoundError
 pub fn clipboard_history_core::protocol::IdNotFoundError::from(t: T) -> T
+impl<T> error_stack::context::Attachment for clipboard_history_core::protocol::IdNotFoundError where T: error_stack::context::OpaqueAttachment + core::fmt::Display + core::fmt::Debug
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::protocol::IdNotFoundError where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(C)] pub enum clipboard_history_core::protocol::MoveToFrontResponse
 pub clipboard_history_core::protocol::MoveToFrontResponse::Error(clipboard_history_core::protocol::IdNotFoundError)
 pub clipboard_history_core::protocol::MoveToFrontResponse::Success
@@ -126,6 +132,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::MoveToF
 pub unsafe fn clipboard_history_core::protocol::MoveToFrontResponse::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::MoveToFrontResponse
 pub fn clipboard_history_core::protocol::MoveToFrontResponse::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::protocol::MoveToFrontResponse where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(C)] pub enum clipboard_history_core::protocol::Request
 pub clipboard_history_core::protocol::Request::Add
 pub clipboard_history_core::protocol::Request::Add::mime_type: clipboard_history_core::protocol::MimeType
@@ -174,6 +181,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::Request
 pub unsafe fn clipboard_history_core::protocol::Request::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::Request
 pub fn clipboard_history_core::protocol::Request::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::protocol::Request where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(u8)] pub enum clipboard_history_core::protocol::RingKind
 pub clipboard_history_core::protocol::RingKind::Favorites
 pub clipboard_history_core::protocol::RingKind::Main
@@ -222,6 +230,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::RingKin
 pub unsafe fn clipboard_history_core::protocol::RingKind::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::RingKind
 pub fn clipboard_history_core::protocol::RingKind::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::protocol::RingKind where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(C)] pub struct clipboard_history_core::protocol::GarbageCollectResponse
 pub clipboard_history_core::protocol::GarbageCollectResponse::bytes_freed: u64
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::GarbageCollectResponse
@@ -258,6 +267,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::Garbage
 pub unsafe fn clipboard_history_core::protocol::GarbageCollectResponse::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::GarbageCollectResponse
 pub fn clipboard_history_core::protocol::GarbageCollectResponse::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::protocol::GarbageCollectResponse where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(C)] pub struct clipboard_history_core::protocol::RemoveResponse
 pub clipboard_history_core::protocol::RemoveResponse::error: core::option::Option<clipboard_history_core::protocol::IdNotFoundError>
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::RemoveResponse
@@ -294,6 +304,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::RemoveR
 pub unsafe fn clipboard_history_core::protocol::RemoveResponse::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::RemoveResponse
 pub fn clipboard_history_core::protocol::RemoveResponse::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::protocol::RemoveResponse where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(C)] pub struct clipboard_history_core::protocol::Response<T>
 pub clipboard_history_core::protocol::Response::sequence_number: u64
 pub clipboard_history_core::protocol::Response::value: T
@@ -328,6 +339,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::Respons
 pub unsafe fn clipboard_history_core::protocol::Response<T>::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::Response<T>
 pub fn clipboard_history_core::protocol::Response<T>::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::protocol::Response<T> where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(C)] pub struct clipboard_history_core::protocol::SwapResponse
 pub clipboard_history_core::protocol::SwapResponse::error1: core::option::Option<clipboard_history_core::protocol::IdNotFoundError>
 pub clipboard_history_core::protocol::SwapResponse::error2: core::option::Option<clipboard_history_core::protocol::IdNotFoundError>
@@ -365,6 +377,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::protocol::SwapRes
 pub unsafe fn clipboard_history_core::protocol::SwapResponse::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::protocol::SwapResponse
 pub fn clipboard_history_core::protocol::SwapResponse::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::protocol::SwapResponse where T: core::marker::Send + core::marker::Sync + 'static
 pub const clipboard_history_core::protocol::VERSION: u8
 pub fn clipboard_history_core::protocol::composite_id(kind: clipboard_history_core::protocol::RingKind, index: u32) -> u64
 pub fn clipboard_history_core::protocol::decompose_id(id: u64) -> core::result::Result<(clipboard_history_core::protocol::RingKind, u32), clipboard_history_core::protocol::IdNotFoundError>
@@ -417,6 +430,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::ring::Entry where
 pub unsafe fn clipboard_history_core::ring::Entry::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::ring::Entry
 pub fn clipboard_history_core::ring::Entry::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::ring::Entry where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(C)] pub struct clipboard_history_core::ring::Header
 pub clipboard_history_core::ring::Header::magic: [u8; 3]
 pub clipboard_history_core::ring::Header::version: u8
@@ -445,6 +459,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::Header wher
 pub fn clipboard_history_core::ring::Header::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::ring::Header
 pub fn clipboard_history_core::ring::Header::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::ring::Header where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::ring::InitializedEntry(_)
 impl clipboard_history_core::ring::InitializedEntry
 pub fn clipboard_history_core::ring::InitializedEntry::bucket(size: u16, index: u32) -> Self
@@ -491,6 +506,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::ring::Initialized
 pub unsafe fn clipboard_history_core::ring::InitializedEntry::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::ring::InitializedEntry
 pub fn clipboard_history_core::ring::InitializedEntry::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::ring::InitializedEntry where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::ring::Mmap
 impl clipboard_history_core::ring::Mmap
 pub fn clipboard_history_core::ring::Mmap::from<Fd: std::os::fd::owned::AsFd>(fd: Fd) -> rustix::io::errno::Result<Self>
@@ -532,6 +548,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::Mmap where 
 pub fn clipboard_history_core::ring::Mmap::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::ring::Mmap
 pub fn clipboard_history_core::ring::Mmap::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::ring::Mmap where T: core::marker::Send + core::marker::Sync + 'static
 #[repr(transparent)] pub struct clipboard_history_core::ring::RawEntry(_)
 impl core::convert::From<clipboard_history_core::ring::Entry> for clipboard_history_core::ring::RawEntry
 pub fn clipboard_history_core::ring::RawEntry::from(value: clipboard_history_core::ring::Entry) -> Self
@@ -564,6 +581,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::RawEntry wh
 pub fn clipboard_history_core::ring::RawEntry::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::ring::RawEntry
 pub fn clipboard_history_core::ring::RawEntry::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::ring::RawEntry where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::ring::Ring
 impl clipboard_history_core::ring::Ring
 pub const fn clipboard_history_core::ring::Ring::capacity(&self) -> u32
@@ -601,6 +619,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::ring::Ring where 
 pub fn clipboard_history_core::ring::Ring::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::ring::Ring
 pub fn clipboard_history_core::ring::Ring::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::ring::Ring where T: core::marker::Send + core::marker::Sync + 'static
 pub const clipboard_history_core::ring::MAGIC: [u8; 3]
 pub const clipboard_history_core::ring::MAX_ENTRIES: u32
 pub const clipboard_history_core::ring::VERSION: u8
@@ -615,7 +634,7 @@ pub clipboard_history_core::Error::Io
 pub clipboard_history_core::Error::Io::context: alloc::borrow::Cow<'static, str>
 pub clipboard_history_core::Error::Io::error: std::io::error::Error
 impl clipboard_history_core::Error
-pub fn clipboard_history_core::Error::into_report<W: error_stack::context::Context>(self, wrapper: W) -> error_stack::report::Report<W>
+pub fn clipboard_history_core::Error::into_report<W: core::error::Error + core::marker::Send + core::marker::Sync + 'static>(self, wrapper: W) -> error_stack::report::Report<W>
 impl core::convert::From<clipboard_history_core::protocol::IdNotFoundError> for clipboard_history_core::Error
 pub fn clipboard_history_core::Error::from(source: clipboard_history_core::protocol::IdNotFoundError) -> Self
 impl core::error::Error for clipboard_history_core::Error
@@ -632,6 +651,9 @@ impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::Error
 impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_core::Error
 impl<C> error_stack::context::Context for clipboard_history_core::Error where C: core::error::Error + core::marker::Send + core::marker::Sync + 'static
 pub fn clipboard_history_core::Error::provide<'a>(&'a self, request: &mut core::error::Request<'a>)
+impl<E> error_stack::report::IntoReport for clipboard_history_core::Error where E: core::convert::Into<error_stack::report::Report<E>>
+pub type clipboard_history_core::Error::Context = E
+pub fn clipboard_history_core::Error::into_report(self) -> error_stack::report::Report<<E as error_stack::report::IntoReport>::Context>
 impl<T, U> core::convert::Into<U> for clipboard_history_core::Error where U: core::convert::From<T>
 pub fn clipboard_history_core::Error::into(self) -> U
 impl<T, U> core::convert::TryFrom<U> for clipboard_history_core::Error where U: core::convert::Into<T>
@@ -650,6 +672,8 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::Error where T: ?c
 pub fn clipboard_history_core::Error::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::Error
 pub fn clipboard_history_core::Error::from(t: T) -> T
+impl<T> error_stack::context::Attachment for clipboard_history_core::Error where T: error_stack::context::OpaqueAttachment + core::fmt::Display + core::fmt::Debug
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::Error where T: core::marker::Send + core::marker::Sync + 'static
 pub enum clipboard_history_core::LockFilePid
 pub clipboard_history_core::LockFilePid::Deleted
 pub clipboard_history_core::LockFilePid::UserReset
@@ -676,6 +700,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::LockFilePid where
 pub fn clipboard_history_core::LockFilePid::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::LockFilePid
 pub fn clipboard_history_core::LockFilePid::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::LockFilePid where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::BucketAndIndex(_)
 impl clipboard_history_core::BucketAndIndex
 pub fn clipboard_history_core::BucketAndIndex::bucket(&self) -> u8
@@ -724,6 +749,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::BucketAndIndex wh
 pub unsafe fn clipboard_history_core::BucketAndIndex::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::BucketAndIndex
 pub fn clipboard_history_core::BucketAndIndex::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::BucketAndIndex where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::LeaveBe
 impl core::marker::Freeze for clipboard_history_core::LeaveBe
 impl core::marker::Send for clipboard_history_core::LeaveBe
@@ -747,6 +773,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::LeaveBe where T: 
 pub fn clipboard_history_core::LeaveBe::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::LeaveBe
 pub fn clipboard_history_core::LeaveBe::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::LeaveBe where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::PathView<'a>(_)
 impl<'a> clipboard_history_core::PathView<'a>
 pub fn clipboard_history_core::PathView<'a>::new(path: &'a mut std::path::PathBuf, child: impl core::convert::AsRef<std::path::Path>) -> Self
@@ -785,6 +812,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::PathView<'a> wher
 pub fn clipboard_history_core::PathView<'a>::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::PathView<'a>
 pub fn clipboard_history_core::PathView<'a>::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::PathView<'a> where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::RingAndIndex(_)
 impl clipboard_history_core::RingAndIndex
 pub fn clipboard_history_core::RingAndIndex::from_id(composite_id: u64) -> core::result::Result<Self, clipboard_history_core::protocol::IdNotFoundError>
@@ -835,6 +863,7 @@ impl<T> core::clone::CloneToUninit for clipboard_history_core::RingAndIndex wher
 pub unsafe fn clipboard_history_core::RingAndIndex::clone_to_uninit(&self, dest: *mut u8)
 impl<T> core::convert::From<T> for clipboard_history_core::RingAndIndex
 pub fn clipboard_history_core::RingAndIndex::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::RingAndIndex where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::SendKillAndTakeover
 impl core::marker::Freeze for clipboard_history_core::SendKillAndTakeover
 impl core::marker::Send for clipboard_history_core::SendKillAndTakeover
@@ -858,6 +887,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::SendKillAndTakeov
 pub fn clipboard_history_core::SendKillAndTakeover::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::SendKillAndTakeover
 pub fn clipboard_history_core::SendKillAndTakeover::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::SendKillAndTakeover where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::SendQuitAndWait
 impl core::marker::Freeze for clipboard_history_core::SendQuitAndWait
 impl core::marker::Send for clipboard_history_core::SendQuitAndWait
@@ -881,6 +911,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::SendQuitAndWait w
 pub fn clipboard_history_core::SendQuitAndWait::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::SendQuitAndWait
 pub fn clipboard_history_core::SendQuitAndWait::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::SendQuitAndWait where T: core::marker::Send + core::marker::Sync + 'static
 pub struct clipboard_history_core::StringView<'a>(_, _)
 impl<'a> clipboard_history_core::StringView<'a>
 pub const fn clipboard_history_core::StringView<'a>::new(s: &'a mut alloc::string::String) -> Self
@@ -919,6 +950,7 @@ impl<T> core::borrow::BorrowMut<T> for clipboard_history_core::StringView<'a> wh
 pub fn clipboard_history_core::StringView<'a>::borrow_mut(&mut self) -> &mut T
 impl<T> core::convert::From<T> for clipboard_history_core::StringView<'a>
 pub fn clipboard_history_core::StringView<'a>::from(t: T) -> T
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::StringView<'a> where T: core::marker::Send + core::marker::Sync + 'static
 pub const clipboard_history_core::DIRECT_FILE_NAME_LEN: usize
 pub const clipboard_history_core::NUM_BUCKETS: usize
 pub trait clipboard_history_core::AsBytes: core::marker::Sized

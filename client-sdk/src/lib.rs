@@ -42,17 +42,21 @@ impl From<IdNotFoundError> for ClientError {
 
 #[cfg(feature = "error-stack")]
 mod error_stack_compat {
-    use error_stack::{Context, Report};
+    use error_stack::Report;
 
     use crate::ClientError;
 
     impl ClientError {
-        pub fn into_report<W: Context>(self, wrapper: W) -> Report<W> {
+        pub fn into_report<W: core::error::Error + Send + Sync + 'static>(
+            self,
+            wrapper: W,
+        ) -> Report<W> {
             match self {
                 Self::Core(e) => e.into_report(wrapper),
-                Self::InvalidResponse { context } => Report::new(wrapper).attach_printable(context),
-                Self::VersionMismatch { expected, actual } => Report::new(wrapper)
-                    .attach_printable(format!("Expected v{expected} but got v{actual}.")),
+                Self::InvalidResponse { context } => Report::new(wrapper).attach(context),
+                Self::VersionMismatch { expected, actual } => {
+                    Report::new(wrapper).attach(format!("Expected v{expected} but got v{actual}."))
+                }
             }
         }
     }

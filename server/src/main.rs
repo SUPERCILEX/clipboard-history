@@ -40,7 +40,7 @@ enum Wrapper {
     W(String),
 }
 
-fn main() -> error_stack::Result<(), Wrapper> {
+fn main() -> Result<(), Report<[Wrapper]>> {
     #[cfg(not(debug_assertions))]
     error_stack::Report::install_debug_hook::<std::panic::Location>(|_, _| {});
 
@@ -53,17 +53,17 @@ fn main() -> error_stack::Result<(), Wrapper> {
     run().map_err(into_report)
 }
 
-fn into_report(cli_err: CliError) -> Report<Wrapper> {
+fn into_report(cli_err: CliError) -> Report<[Wrapper]> {
     let wrapper = Wrapper::W(cli_err.to_string());
     match cli_err {
-        CliError::Core(e) => e.into_report(wrapper),
+        CliError::Core(e) => e.into_report(wrapper).expand(),
         CliError::ServerAlreadyRunning { pid: _, lock_file } => Report::new(wrapper)
-            .attach_printable(
+            .attach(
                 "Unable to safely start server: please shut down the existing instance. If \
                  something has gone terribly wrong, please create an empty server lock file to \
                  initiate the recovery sequence on the next startup.",
             )
-            .attach_printable(format!("Lock file: {lock_file:?}")),
+            .attach(format!("Lock file: {lock_file:?}")).expand(),
         CliError::Multiple(errs) => {
             let mut errs = VecDeque::from(errs);
             let mut report = into_report(errs.pop_front().unwrap_or_else(|| CliError::Internal {
@@ -72,11 +72,9 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
             report.extend(errs.into_iter().map(into_report));
             report
         }
-        CliError::Internal { context } => Report::new(wrapper)
-            .attach_printable(context)
-            .attach_printable(
+        CliError::Internal { context } => Report::new(wrapper).attach(context).attach(
             "Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new",
-        ),
+        ).expand(),
     }
 }
 

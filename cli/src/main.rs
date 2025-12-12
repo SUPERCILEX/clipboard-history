@@ -440,7 +440,7 @@ enum Wrapper {
     W(String),
 }
 
-fn main() -> error_stack::Result<(), Wrapper> {
+fn main() -> Result<(), Report<Wrapper>> {
     #[cfg(not(debug_assertions))]
     error_stack::Report::install_debug_hook::<std::panic::Location>(|_, _| {});
 
@@ -449,14 +449,14 @@ fn main() -> error_stack::Result<(), Wrapper> {
         match e {
             CliError::Core(e) => e.into_report(wrapper),
             CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
-                .attach_printable(context)
+                .attach(context)
                 .change_context(wrapper),
             CliError::Sdk(e) => e.into_report(wrapper),
             CliError::DatabaseNotFound(db) => Report::new(wrapper)
-                .attach_printable(
+                .attach(
                     "Make sure to run the Ringboard server or fix the XDG_DATA_HOME path.",
                 )
-                .attach_printable(format!("Expected database directory: {:?}", db.display())),
+                .attach(format!("Expected database directory: {:?}", db.display())),
             CliError::Fuc(e) => Report::new(e).change_context(wrapper),
             CliError::SerdeJson(e) => Report::new(e).change_context(wrapper),
             CliError::QuickXml(e) => Report::new(e).change_context(wrapper),
@@ -464,7 +464,7 @@ fn main() -> error_stack::Result<(), Wrapper> {
             CliError::QuickXmlAttr(e) => Report::new(e).change_context(wrapper),
             CliError::Toml(e) => Report::new(e).change_context(wrapper),
             CliError::Regex(e) => Report::new(e).change_context(wrapper),
-            CliError::InternalSearchError => Report::new(wrapper).attach_printable(
+            CliError::InternalSearchError => Report::new(wrapper).attach(
                 "Please report this bug at https://github.com/SUPERCILEX/clipboard-history/issues/new",
             ),
         }

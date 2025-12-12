@@ -1091,8 +1091,7 @@ mod fonts {
                 "../fonts/Atkinson-Hyperlegible-Regular-102.ttf"
             ))
             .tweak(FontTweak {
-                y_offset_factor: 0.1,
-                baseline_offset_factor: -0.04,
+                y_offset_factor: 0.04,
                 ..FontTweak::default()
             })
             .into(),
