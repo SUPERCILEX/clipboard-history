@@ -192,7 +192,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "clipboard-history-client-sdk"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-core",
@@ -207,7 +207,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-core"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "arrayvec",
  "dirs",
