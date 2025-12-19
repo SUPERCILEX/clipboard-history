@@ -468,7 +468,7 @@ pub fn read_at_to_end<Fd: AsFd>(
             Ok((init, _)) => {
                 let n = init.len();
                 unsafe {
-                    buf.advance(n);
+                    buf.advance_unchecked(n);
                 }
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {}

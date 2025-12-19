@@ -310,7 +310,7 @@ pub fn xattr_mime_type<Fd: AsFd, MetadataFd: AsFd, MetadataPath: Arg + Copy + De
         .0
         .len();
         unsafe {
-            mime_type.advance(len);
+            mime_type.advance_unchecked(len);
         }
     }
     let mime_type = str::from_utf8(mime_type.filled()).map_err(|e| ringboard_core::Error::Io {
