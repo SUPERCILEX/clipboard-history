@@ -1544,7 +1544,9 @@ struct ExportEntry<'a> {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", content = "data")]
 enum ExportData<'a> {
+    #[serde(borrow)]
     Human(Cow<'a, str>),
+    #[serde(borrow)]
     Bytes(#[serde(with = "Base64Standard")] Cow<'a, [u8]>),
 }
 
@@ -1558,8 +1560,8 @@ fn dump() -> Result<(), CliError> {
         seq.serialize_element(&ExportEntry {
             id: entry.id(),
             data: str::from_utf8(&loaded).map_or_else(
-                |_| ExportData::Bytes((&**loaded).into()),
-                |data| ExportData::Human(data.into()),
+                |_| ExportData::Bytes(Cow::Borrowed(&loaded)),
+                |data| ExportData::Human(Cow::Borrowed(data)),
             ),
             mime_type,
         })?;
@@ -1616,10 +1618,10 @@ fn migrate_from_ringboard_export(server: OwnedFd, dump_file: PathBuf) -> Result<
     } else {
         let dump =
             File::open(&dump_file).map_io_err(|| format!("Failed to open file: {dump_file:?}"))?;
+        let dump = Mmap::from(dump).map_io_err(|| format!("Failed to mmap file: {dump_file:?}"))?;
         drop(dump_file);
 
-        let iter =
-            serde_json::Deserializer::from_reader(BufReader::new(dump)).into_iter::<ExportEntry>();
+        let iter = serde_json::Deserializer::from_slice(&dump).into_iter::<ExportEntry>();
         for result in iter {
             process(result?)?;
         }
