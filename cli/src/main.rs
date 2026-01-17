@@ -1648,7 +1648,7 @@ fn generate(
     fn generate_random_entry_file(
         rng: &mut (impl RngCore + 'static),
         len_distr: LogNormal<f64>,
-    ) -> Result<(File, u64), CliError> {
+    ) -> Result<File, CliError> {
         let mut file = File::from(
             memfd_create(c"ringboard_gen", MemfdFlags::empty())
                 .map_io_err(|| "Failed to create data entry file.")?,
@@ -1662,7 +1662,7 @@ fn generate(
         file.seek(SeekFrom::Start(0))
             .map_io_err(|| "Failed to reset entry file offset.")?;
 
-        Ok((file, len))
+        Ok(file)
     }
 
     struct GenerateRingKind(RingKind);
@@ -1681,7 +1681,7 @@ fn generate(
     let mut pending_adds = 0;
 
     for _ in 0..num_entries {
-        let data = generate_random_entry_file(&mut rng, distr)?.0;
+        let data = generate_random_entry_file(&mut rng, distr)?;
         unsafe {
             pipeline_add_request(
                 &server,
