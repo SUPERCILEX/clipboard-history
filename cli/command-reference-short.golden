@@ -212,6 +212,7 @@ Commands:
   stats     Print statistics about the Ringboard database
   dump      Dump the database contents for analysis
   generate  Generate a pseudo-random database for testing and performance tuning purposes
+  demo      Generate the demo clipboard entries
   fuzz      Spam the server with random commands
   help      Print this message or the help of the given subcommand(s)
 
@@ -247,6 +248,15 @@ Options:
   -m, --mean-size <MEAN_SIZE>  The mean entry size [default: 512]
   -c, --cv-size <CV_SIZE>      The coefficient of variation of the entry size [default: 10]
   -h, --help                   Print help (use `--help` for more detail)
+
+---
+
+Generate the demo clipboard entries
+
+Usage: clipboard-history debug demo
+
+Options:
+  -h, --help  Print help (use `--help` for more detail)
 
 ---
 

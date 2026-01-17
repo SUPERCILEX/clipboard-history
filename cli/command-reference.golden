@@ -308,6 +308,7 @@ Commands:
   stats     Print statistics about the Ringboard database
   dump      Dump the database contents for analysis
   generate  Generate a pseudo-random database for testing and performance tuning purposes
+  demo      Generate the demo clipboard entries
   fuzz      Spam the server with random commands
   help      Print this message or the help of the given subcommand(s)
 
@@ -371,6 +372,16 @@ Options:
           
           [default: 10]
 
+  -h, --help
+          Print help (use `-h` for a summary)
+
+---
+
+Generate the demo clipboard entries
+
+Usage: clipboard-history debug demo
+
+Options:
   -h, --help
           Print help (use `-h` for a summary)
 

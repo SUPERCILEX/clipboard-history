@@ -242,6 +242,9 @@ enum Dev {
     /// purposes.
     Generate(Generate),
 
+    /// Generate the demo clipboard entries
+    Demo,
+
     /// Spam the server with random commands.
     Fuzz(Fuzz),
 }
@@ -508,6 +511,7 @@ fn run() -> Result<(), CliError> {
         Cmd::Debug(Dev::Stats) => stats(),
         Cmd::Debug(Dev::Dump) => dump(),
         Cmd::Debug(Dev::Generate(data)) => generate(connect_to_server(&server_addr)?, data),
+        Cmd::Debug(Dev::Demo) => generate_demo_entries(connect_to_server(&server_addr)?),
         Cmd::Debug(Dev::Fuzz(data)) => fuzz(&server_addr, data),
     }
 }
@@ -1695,6 +1699,52 @@ fn generate(
     }
 
     unsafe { drain_add_requests(server, None, &mut pending_adds) }
+}
+
+fn generate_demo_entries(server: OwnedFd) -> Result<(), CliError> {
+    fn convert_to_file(data: &[u8]) -> Result<File, CliError> {
+        let mut file = File::from(
+            memfd_create(c"ringboard_gen", MemfdFlags::empty())
+                .map_io_err(|| "Failed to create data entry file.")?,
+        );
+
+        file.write_all(data)
+            .map_io_err(|| "Failed to write bytes to entry file.")?;
+        file.seek(SeekFrom::Start(0))
+            .map_io_err(|| "Failed to reset entry file offset.")?;
+
+        Ok(file)
+    }
+
+    let mut pending_adds = 0;
+    let em = MimeType::new_const();
+    for (data, mime_type) in [
+        (b"Welcome to Ringboard!" as &[u8], &em),
+        (b"Ringboard is a fast, efficient, and composable clipboard manager for Linux.", &em),
+        (b"It supports both Wayland and X11 along with multiple clients to manage your clipboard history.", &em),
+        (b"Clients include a standard GUI, an interactive TUI, and a CLI for all your scripting needs.", &em),
+        ("Ringboard can copy arbitrary bytes—that includes images!".as_bytes(), &em),
+        (b"Plaintext and RegEx search are available for fast entry retrieval.", &em),
+        (b"Enjoy this image from our AI overlords:", &em),
+        (include_bytes!("../logo.jpeg") as &[u8], &MimeType::from("image/jpeg").unwrap()),
+        (b"Finally, it's worth mentioning that Ringboard is extremely efficient, performant, and scalable.", &em),
+    ].iter().rev() {
+        let data = convert_to_file(data)?;
+        unsafe {
+            pipeline_add_request(
+                &server,
+                data,
+                RingKind::Main,
+                mime_type,
+                None,
+                &mut pending_adds,
+            )?;
+        }
+    }
+    unsafe { drain_add_requests(server, None, &mut pending_adds) }?;
+
+    println!("Done.");
+    Ok(())
 }
 
 fn fuzz(
