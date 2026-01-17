@@ -734,7 +734,7 @@ fn add(
             } else {
                 RingKind::Main
             },
-            mime_type
+            &mime_type
                 .or_else(|| {
                     mime_guess::from_path(data_file)
                         .first_raw()
@@ -993,7 +993,7 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
                         &server,
                         data,
                         RingKind::Main,
-                        MimeType::new_const(),
+                        &MimeType::new_const(),
                         Some(&mut translation),
                         &mut pending_adds,
                     )?;
@@ -1126,7 +1126,7 @@ fn migrate_from_clipboard_indicator(
                 } else {
                     RingKind::Main
                 },
-                mimetype,
+                &mimetype,
                 None,
                 &mut pending_adds,
             )?;
@@ -1266,7 +1266,14 @@ fn migrate_from_gpaste(server: OwnedFd, database: Option<PathBuf>) -> Result<(),
         };
 
         unsafe {
-            pipeline_add_request(&server, data, RingKind::Main, mime, None, &mut pending_adds)?;
+            pipeline_add_request(
+                &server,
+                data,
+                RingKind::Main,
+                &mime,
+                None,
+                &mut pending_adds,
+            )?;
         }
     }
 
@@ -1605,7 +1612,7 @@ fn migrate_from_ringboard_export(server: OwnedFd, dump_file: PathBuf) -> Result<
         })?;
 
         let (to, _) = decompose_id(id).unwrap_or_default();
-        unsafe { pipeline_add_request(&server, data, to, mime_type, None, &mut pending_adds) }
+        unsafe { pipeline_add_request(&server, data, to, &mime_type, None, &mut pending_adds) }
     };
 
     if dump_file == Path::new("-") {
@@ -1680,7 +1687,7 @@ fn generate(
                 &server,
                 data,
                 rng.random::<GenerateRingKind>().0,
-                MimeType::new_const(),
+                &MimeType::new_const(),
                 None,
                 &mut pending_adds,
             )?;
@@ -2022,7 +2029,7 @@ fn fuzz(
                             data: NoDebug(data),
                         });
                         pipeline_request!(|flags| AddRequest::send(
-                            server, kind, mime_type, &file, flags
+                            server, kind, &mime_type, &file, flags
                         ));
                     }
                     3 => {
@@ -2252,7 +2259,7 @@ unsafe fn pipeline_add_request(
     server: impl AsFd + Copy,
     data: impl AsFd,
     to: RingKind,
-    mime_type: MimeType,
+    mime_type: &MimeType,
     translation: Option<&mut Vec<u64>>,
     pending_adds: &mut u32,
 ) -> Result<(), CliError> {

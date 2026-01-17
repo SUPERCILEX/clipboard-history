@@ -154,7 +154,7 @@ impl AddRequest {
     pub fn response<Server: AsFd, Data: AsFd>(
         server: Server,
         to: RingKind,
-        mime_type: MimeType,
+        mime_type: &MimeType,
         data: Data,
     ) -> Result<AddResponse, ClientError> {
         if FileType::from_raw_mode(
@@ -192,7 +192,7 @@ impl AddRequest {
     pub fn response_add_unchecked<Server: AsFd, Data: AsFd>(
         server: Server,
         to: RingKind,
-        mime_type: MimeType,
+        mime_type: &MimeType,
         data: Data,
     ) -> Result<AddResponse, ClientError> {
         Self::send(&server, to, mime_type, data, SendFlags::empty())?;
@@ -207,11 +207,19 @@ impl AddRequest {
     pub fn send<Server: AsFd, Data: AsFd>(
         server: Server,
         to: RingKind,
-        mime_type: MimeType,
+        mime_type: &MimeType,
         data: Data,
         flags: SendFlags,
     ) -> Result<(), ClientError> {
-        request_with_fd(&server, Request::Add { to, mime_type }, data, flags)
+        request_with_fd(
+            &server,
+            Request::Add {
+                to,
+                mime_type: *mime_type,
+            },
+            data,
+            flags,
+        )
     }
 
     response!(AddResponse);

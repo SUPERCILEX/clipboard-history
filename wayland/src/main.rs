@@ -662,7 +662,7 @@ impl PendingOffers {
         }
 
         let AddResponse::Success { id } =
-            AddRequest::response_add_unchecked(&server, RingKind::Main, *mime, data)?;
+            AddRequest::response_add_unchecked(&server, RingKind::Main, mime, data)?;
         deduplicator.remember(data_hash, id);
         info!("Transfer for peer {idx} on mime {mime:?} complete.");
         self.reset(idx);

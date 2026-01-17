@@ -934,7 +934,7 @@ fn handle_x11_event(
                         let AddResponse::Success { id } = AddRequest::response_add_unchecked(
                             &server,
                             RingKind::Main,
-                            mime_type,
+                            &mime_type,
                             file,
                         )?;
                         deduplicator.remember(data_hash, id);
@@ -1039,7 +1039,7 @@ fn handle_x11_event(
                         let AddResponse::Success { id } = AddRequest::response_add_unchecked(
                             &server,
                             RingKind::Main,
-                            mime_type,
+                            &mime_type,
                             file,
                         )?;
                         deduplicator.remember(data_hash, id);
