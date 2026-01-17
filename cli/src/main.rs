@@ -862,6 +862,8 @@ fn garbage_collect(
     server: OwnedFd,
     GarbageCollect { max_wasted_bytes }: GarbageCollect,
 ) -> Result<(), CliError> {
+    let mut bytes_freed = 0;
+
     if max_wasted_bytes == 0 {
         let (database, mut reader) = open_db()?;
         let mut duplicates = DuplicateDetector::default();
@@ -877,8 +879,12 @@ fn garbage_collect(
         };
         let mut pending_requests = 0;
         for entry in database.favorites().rev().chain(database.main().rev()) {
-            if duplicates.add_entry(&entry, &database, &mut reader)? {
+            if let Some(len) = duplicates.add_entry(&entry, &database, &mut reader)? {
                 num_duplicates += 1;
+                match entry.kind() {
+                    Kind::Bucket(_) => (),
+                    Kind::File => bytes_freed += len,
+                }
                 pipeline_request(
                     |flags| RemoveRequest::send(&server, entry.id(), flags),
                     recv,
@@ -891,8 +897,9 @@ fn garbage_collect(
         println!("Removed {num_duplicates} duplicate entries.");
     }
 
-    let GarbageCollectResponse { bytes_freed } =
+    let GarbageCollectResponse { bytes_freed: bf } =
         GarbageCollectRequest::response(server, max_wasted_bytes)?;
+    bytes_freed += bf;
     println!("{bytes_freed} bytes of garbage freed.");
     Ok(())
 }
@@ -1522,7 +1529,7 @@ fn stats() -> Result<(), CliError> {
             *ring_owned_bytes += entry_size;
             *min_entry_size = min(*min_entry_size, entry_size);
             *max_entry_size = max(*max_entry_size, entry_size);
-            if duplicate {
+            if duplicate.is_some() {
                 *num_duplicates += 1;
             }
         }

@@ -25,14 +25,19 @@ impl DuplicateDetector {
         entry: &Entry,
         database: &DatabaseReader,
         reader: &mut EntryReader,
-    ) -> Result<bool, ringboard_core::Error> {
+    ) -> Result<Option<u64>, ringboard_core::Error> {
+        let len;
         let hash = {
             let mut data_hasher = FxHasher::default();
             match entry.kind() {
-                Kind::Bucket(_) => entry.to_slice(reader)?.hash(&mut data_hasher),
+                Kind::Bucket(_) => {
+                    let entry = entry.to_slice(reader)?;
+                    len = u64::try_from(entry.len()).unwrap();
+                    entry.hash(&mut data_hasher);
+                }
                 Kind::File => {
                     let file = entry.to_file(reader)?;
-                    let len = statx(&*file, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
+                    len = statx(&*file, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
                         .map_io_err(|| format!("Failed to statx file: {file:?}"))?
                         .stx_size;
 
@@ -63,11 +68,11 @@ impl DuplicateDetector {
                         .to_slice_raw(reader)?
                         .ok_or_else(|| IdNotFoundError::Entry(entry.index()))?
                 {
-                    return Ok(true);
+                    return Ok(Some(len));
                 }
             }
         }
         entries.push(RingAndIndex::new(entry.ring(), entry.index()));
-        Ok(false)
+        Ok(None)
     }
 }

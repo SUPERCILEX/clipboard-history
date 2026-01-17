@@ -421,7 +421,7 @@ pub type clipboard_history_client_sdk::config::x11::Latest = clipboard_history_c
 pub mod clipboard_history_client_sdk::duplicate_detection
 pub struct clipboard_history_client_sdk::duplicate_detection::DuplicateDetector
 impl clipboard_history_client_sdk::duplicate_detection::DuplicateDetector
-pub fn clipboard_history_client_sdk::duplicate_detection::DuplicateDetector::add_entry(&mut self, entry: &clipboard_history_client_sdk::Entry, database: &clipboard_history_client_sdk::DatabaseReader, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<bool, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::duplicate_detection::DuplicateDetector::add_entry(&mut self, entry: &clipboard_history_client_sdk::Entry, database: &clipboard_history_client_sdk::DatabaseReader, reader: &mut clipboard_history_client_sdk::EntryReader) -> core::result::Result<core::option::Option<u64>, clipboard_history_core::Error>
 impl core::default::Default for clipboard_history_client_sdk::duplicate_detection::DuplicateDetector
 pub fn clipboard_history_client_sdk::duplicate_detection::DuplicateDetector::default() -> clipboard_history_client_sdk::duplicate_detection::DuplicateDetector
 impl core::marker::Freeze for clipboard_history_client_sdk::duplicate_detection::DuplicateDetector
