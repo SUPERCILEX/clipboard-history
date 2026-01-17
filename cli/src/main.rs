@@ -233,8 +233,8 @@ enum Dev {
     ///
     /// Note that `$ ringboard import json` expects a JSON stream (wherein each
     /// object appears on its own line instead of being in a list). To import an
-    /// export, you can convert the JSON array to a stream with `$ ... | jq -c
-    /// .[]`.
+    /// export, you can convert the JSON array to a stream with
+    /// `$ ... | jq -c .[]`.
     #[command(alias = "export")]
     Dump,
 
