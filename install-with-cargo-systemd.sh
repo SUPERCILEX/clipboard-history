@@ -42,7 +42,14 @@ echo
 echo "Consider reading the egui docs:"
 echo "https://github.com/SUPERCILEX/clipboard-history/blob/master/egui/README.md"
 
+if [ "$XDG_SESSION_TYPE" = "x11" ]; then
+  echo
+  echo "If you use a password manager and wish to exclude passwords from the clipboard, read the docs:"
+  echo "https://github.com/SUPERCILEX/clipboard-history/blob/master/x11/README.md#password-manager-integration"
+fi
+
 if [ "$XDG_CURRENT_DESKTOP" = "COSMIC" ]; then
+  echo
   echo "COSMIC_DATA_CONTROL_ENABLED must be set, which requires sudo."
   echo "Please reboot after letting the following command run:"
   echo "$ sudo sh -c 'echo \"export COSMIC_DATA_CONTROL_ENABLED=1\" > /etc/profile.d/clipboard.sh; chmod 644 /etc/profile.d/clipboard.sh'"

@@ -9,13 +9,26 @@ clipboard selections to send to the Ringboard server.
 Additionally, it offers a paste server capable of becoming the X11 selection owner for clients to
 call.
 
+## Password manager integration
+
+If you use a password manager that supports the `x-kde-passwordManagerHint` and wish to avoid
+passwords being added to your clipboard, you'll need to disable Ringboard fast path optimizations
+which results in a slight efficiency loss. Run
+
+```shell
+$ ringboard config x11 --fast-path false
+```
+
+to exclude passwords from the clipboard.
+
 ## Implementation notes
 
 - Primary selections are not supported.
 - Blank and empty clipboard contents selections are not supported.
 - A plain text fast path is implemented wherein an attempt will first be made to retrieve
   `UTF8_STRING` data before falling back to a `TARGETS` query.
-- Target prioritization is implemented in [`best_target.rs`](../client-sdk/src/watcher_utils/best_target.rs).
+- Target prioritization is implemented in
+  [`best_target.rs`](../client-sdk/src/watcher_utils/best_target.rs).
 - Best effort duplicate entry avoidance is provided with content hashing up to 4096 bytes and length
   hashing thereafter.
 
