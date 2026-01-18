@@ -22,7 +22,6 @@ toml = { version = "0.9.11", default-features = false, features = ["serde", "par
 wayland-client = "0.31.12"
 wayland-protocols = { version = "0.32.10", features = ["client", "staging"] }
 wayland-protocols-misc = { version = "0.3.10", features = ["client"] }
-wayland-protocols-wlr = { version = "0.3.10", features = ["client"] }
 
 [features]
 default = ["human-logs"]

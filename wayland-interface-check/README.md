@@ -5,7 +5,7 @@
 This simple binary answers the question, "Is this Wayland interface available?" For example,
 
 ```sh
-$ wayland-interface-check zwlr_data_control_manager_v1
+$ wayland-interface-check ext_data_control_manager_v1
 $ echo $?
 0
 ```

@@ -56,19 +56,21 @@ use wayland_client::{
         wl_seat::WlSeat,
     },
 };
-use wayland_protocols::ext::foreign_toplevel_list::v1::client::{
-    ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1, ext_foreign_toplevel_list_v1,
-    ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1,
+use wayland_protocols::ext::{
+    data_control::v1::client::{
+        ext_data_control_device_v1::{self, ExtDataControlDeviceV1},
+        ext_data_control_manager_v1::ExtDataControlManagerV1,
+        ext_data_control_offer_v1::{self, ExtDataControlOfferV1},
+        ext_data_control_source_v1::{self, ExtDataControlSourceV1},
+    },
+    foreign_toplevel_list::v1::client::{
+        ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1, ext_foreign_toplevel_list_v1,
+        ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1,
+    },
 };
 use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
     zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
     zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
-};
-use wayland_protocols_wlr::data_control::v1::client::{
-    zwlr_data_control_device_v1::{self, ZwlrDataControlDeviceV1},
-    zwlr_data_control_manager_v1::ZwlrDataControlManagerV1,
-    zwlr_data_control_offer_v1::{self, ZwlrDataControlOfferV1},
-    zwlr_data_control_source_v1::{self, ZwlrDataControlSourceV1},
 };
 
 #[derive(Error, Debug)]
@@ -198,7 +200,7 @@ fn run() -> Result<(), CliError> {
     if app.inner.manager.is_none() {
         return Err(CliError::BadWaylandGlobal {
             message: "compositor does not implement necessary interface",
-            interface: "zwlr_data_control_manager_v1",
+            interface: "ext_data_control_manager_v1",
         });
     }
     if app.inner.virtual_keyboard_manager.is_none() {
@@ -278,25 +280,25 @@ impl Destroyable for WlSeat {
     }
 }
 
-impl Destroyable for ZwlrDataControlManagerV1 {
+impl Destroyable for ExtDataControlManagerV1 {
     fn destroy(&self) {
         self.destroy();
     }
 }
 
-impl Destroyable for ZwlrDataControlDeviceV1 {
+impl Destroyable for ExtDataControlDeviceV1 {
     fn destroy(&self) {
         self.destroy();
     }
 }
 
-impl Destroyable for ZwlrDataControlOfferV1 {
+impl Destroyable for ExtDataControlOfferV1 {
     fn destroy(&self) {
         self.destroy();
     }
 }
 
-impl Destroyable for ZwlrDataControlSourceV1 {
+impl Destroyable for ExtDataControlSourceV1 {
     fn destroy(&self) {
         self.destroy();
     }
@@ -350,7 +352,7 @@ impl<T: Destroyable> Drop for AutoDestroy<T> {
 
 type SeatStore = (
     AutoDestroy<WlSeat>,
-    AutoDestroy<ZwlrDataControlDeviceV1>,
+    AutoDestroy<ExtDataControlDeviceV1>,
     AutoDestroy<WlKeyboard>,
     Option<AutoDestroy<ZwpVirtualKeyboardV1>>,
 );
@@ -367,7 +369,7 @@ impl Seats {
         &mut self,
         seat: u32,
         seat_obj: WlSeat,
-        device: ZwlrDataControlDeviceV1,
+        device: ExtDataControlDeviceV1,
         keyboard: WlKeyboard,
     ) {
         let Self {
@@ -455,7 +457,7 @@ const IN_TRANSFER_BUFFERS: usize = 4;
 
 #[derive(Default, Debug)]
 struct PendingOffers {
-    offers: [Option<AutoDestroy<ZwlrDataControlOfferV1>>; IN_TRANSFER_BUFFERS],
+    offers: [Option<AutoDestroy<ExtDataControlOfferV1>>; IN_TRANSFER_BUFFERS],
     mimes: [BestMimeTypeFinder<String>; IN_TRANSFER_BUFFERS],
     transfers: [Option<Transfer>; IN_TRANSFER_BUFFERS],
     next: u8,
@@ -471,7 +473,7 @@ struct Transfer {
 }
 
 impl PendingOffers {
-    fn init(&mut self, offer: ZwlrDataControlOfferV1) {
+    fn init(&mut self, offer: ExtDataControlOfferV1) {
         const _: () = assert!(IN_TRANSFER_BUFFERS.is_power_of_two());
 
         let Self {
@@ -493,7 +495,7 @@ impl PendingOffers {
         *next = next.wrapping_add(1);
     }
 
-    fn add_mime(&mut self, offer: &ZwlrDataControlOfferV1, mime: String) {
+    fn add_mime(&mut self, offer: &ExtDataControlOfferV1, mime: String) {
         let Ok(mime_type) = MimeType::from(&mime) else {
             warn!("Mime {mime:?} too long, ignoring.");
             return;
@@ -513,7 +515,7 @@ impl PendingOffers {
         &mut self,
         tmp_file_unsupported: &mut bool,
         epoll: impl AsFd,
-        offer: &ZwlrDataControlOfferV1,
+        offer: &ExtDataControlOfferV1,
     ) -> Result<(), CliError> {
         let Some(idx) = self.find(offer) else {
             error!(
@@ -670,7 +672,7 @@ impl PendingOffers {
         Ok(())
     }
 
-    fn consume(&mut self, offer: &ZwlrDataControlOfferV1) {
+    fn consume(&mut self, offer: &ExtDataControlOfferV1) {
         let Some(idx) = self.find(offer) else {
             error!(
                 "Failed to consume offer that does not exist: {:?}",
@@ -694,7 +696,7 @@ impl PendingOffers {
         transfers[idx].take();
     }
 
-    fn find(&self, offer: &ZwlrDataControlOfferV1) -> Option<usize> {
+    fn find(&self, offer: &ExtDataControlOfferV1) -> Option<usize> {
         self.offers
             .iter()
             .position(|id| id.as_ref().map(|id| id.id()) == Some(offer.id()))
@@ -703,7 +705,7 @@ impl PendingOffers {
 
 #[derive(Default, Debug)]
 struct AppDefault {
-    manager: Option<AutoDestroy<ZwlrDataControlManagerV1>>,
+    manager: Option<AutoDestroy<ExtDataControlManagerV1>>,
     virtual_keyboard_manager: Option<ZwpVirtualKeyboardManagerV1>,
     foreign_toplevels: Option<AutoDestroy<ExtForeignToplevelListV1>>,
     seats: Seats,
@@ -805,11 +807,11 @@ impl Dispatch<WlRegistry, ()> for App {
     }
 }
 
-impl Dispatch<ZwlrDataControlManagerV1, ()> for App {
+impl Dispatch<ExtDataControlManagerV1, ()> for App {
     fn event(
         _: &mut Self,
-        _: &ZwlrDataControlManagerV1,
-        event: <ZwlrDataControlManagerV1 as Proxy>::Event,
+        _: &ExtDataControlManagerV1,
+        event: <ExtDataControlManagerV1 as Proxy>::Event,
         (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
@@ -857,17 +859,17 @@ impl Dispatch<WlSeat, u32> for App {
     }
 }
 
-impl Dispatch<ZwlrDataControlDeviceV1, u32> for App {
+impl Dispatch<ExtDataControlDeviceV1, u32> for App {
     fn event(
         this: &mut Self,
-        _: &ZwlrDataControlDeviceV1,
-        event: <ZwlrDataControlDeviceV1 as Proxy>::Event,
+        _: &ExtDataControlDeviceV1,
+        event: <ExtDataControlDeviceV1 as Proxy>::Event,
         &seat: &u32,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
         let run = || {
-            use zwlr_data_control_device_v1::Event;
+            use ext_data_control_device_v1::Event;
             match event {
                 Event::DataOffer { id } => {
                     trace!("Received data offer event: {:?}", id.id());
@@ -910,21 +912,21 @@ impl Dispatch<ZwlrDataControlDeviceV1, u32> for App {
         }
     }
 
-    event_created_child!(Self, ZwlrDataControlDeviceV1, [
-        zwlr_data_control_device_v1::EVT_DATA_OFFER_OPCODE => (ZwlrDataControlOfferV1, ()),
+    event_created_child!(Self, ExtDataControlDeviceV1, [
+        ext_data_control_device_v1::EVT_DATA_OFFER_OPCODE => (ExtDataControlOfferV1, ()),
     ]);
 }
 
-impl Dispatch<ZwlrDataControlOfferV1, ()> for App {
+impl Dispatch<ExtDataControlOfferV1, ()> for App {
     fn event(
         this: &mut Self,
-        id: &ZwlrDataControlOfferV1,
-        event: <ZwlrDataControlOfferV1 as Proxy>::Event,
+        id: &ExtDataControlOfferV1,
+        event: <ExtDataControlOfferV1 as Proxy>::Event,
         (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        use zwlr_data_control_offer_v1::Event;
+        use ext_data_control_offer_v1::Event;
         match event {
             Event::Offer { mime_type } => {
                 trace!(
@@ -943,7 +945,7 @@ struct Sources {
     mime: MimeType,
     fd: Option<MaybeRc<OwnedFd>>,
     len: usize,
-    open: [Option<AutoDestroy<ZwlrDataControlSourceV1>>; 2],
+    open: [Option<AutoDestroy<ExtDataControlSourceV1>>; 2],
 }
 
 const OUT_TRANSFER_BUFFERS: usize = 4;
@@ -1117,7 +1119,7 @@ fn handle_paste_event(
     ancillary_buf: &mut [MaybeUninit<u8>; rustix::cmsg_space!(ScmRights(1))],
 
     qh: &QueueHandle<App>,
-    manager: Option<&AutoDestroy<ZwlrDataControlManagerV1>>,
+    manager: Option<&AutoDestroy<ExtDataControlManagerV1>>,
     seats: &Seats,
     auto_paste: bool,
     pending_paste: &mut bool,
@@ -1244,16 +1246,16 @@ fn generate_supported_mimes(mime: &str) -> ArrayVec<&str, 8> {
     supported_mimes
 }
 
-impl Dispatch<ZwlrDataControlSourceV1, usize> for App {
+impl Dispatch<ExtDataControlSourceV1, usize> for App {
     fn event(
         this: &mut Self,
-        _: &ZwlrDataControlSourceV1,
-        event: <ZwlrDataControlSourceV1 as Proxy>::Event,
+        _: &ExtDataControlSourceV1,
+        event: <ExtDataControlSourceV1 as Proxy>::Event,
         &id: &usize,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        use zwlr_data_control_source_v1::Event;
+        use ext_data_control_source_v1::Event;
 
         let Sources {
             mime,
