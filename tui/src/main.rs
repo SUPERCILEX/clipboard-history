@@ -29,8 +29,8 @@ use ratatui::{
     style::{Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{
-        Block, Borders, HighlightSpacing, List, ListState, Padding, Paragraph, StatefulWidget,
-        Widget, Wrap,
+        Block, Borders, HighlightSpacing, List, ListState, Padding, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget, Wrap,
     },
 };
 use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
@@ -101,7 +101,7 @@ struct UiState {
 
     details_requested: Option<u64>,
     detailed_entry: Option<Result<DetailedEntry, CoreError>>,
-    detail_scroll: u16,
+    detail_scroll: Option<ScrollbarState>,
     detail_image_state: Option<ImageState>,
 
     query: Input,
@@ -428,7 +428,7 @@ fn maybe_get_details(entries: &UiEntries, ui: &mut UiState, requests: &Sender<Co
     {
         ui.details_requested = Some(entry.id());
         ui.detailed_entry = None;
-        ui.detail_scroll = 0;
+        ui.detail_scroll = None;
         ui.detail_image_state = None;
         let _ = requests.send(Command::GetDetails {
             id: entry.id(),
@@ -538,7 +538,9 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
                             state.select(Some(next.min(len)));
                         }
                         Char('J') => {
-                            ui.detail_scroll = ui.detail_scroll.saturating_add(1);
+                            if let Some(detail_scroll) = &mut ui.detail_scroll {
+                                detail_scroll.next();
+                            }
                         }
                         Char('k') | Up => {
                             let state = active_list_state!(entries, ui);
@@ -555,7 +557,9 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
                             }
                         }
                         Char('K') => {
-                            ui.detail_scroll = ui.detail_scroll.saturating_sub(1);
+                            if let Some(detail_scroll) = &mut ui.detail_scroll {
+                                detail_scroll.prev();
+                            }
                         }
                         Char('l') | Right => maybe_get_details(entries, ui, requests),
                         Char(' ') => {
@@ -747,15 +751,18 @@ impl AppWrapper<'_> {
                 .query
                 .visual_scroll(usize::from(search_area.width.max(3) - 3));
             let search_input = Paragraph::new(ui.query.value())
-                .scroll((0, u16::try_from(y_scroll).unwrap()))
+                .scroll((0, u16::try_from(y_scroll).unwrap_or(u16::MAX)))
                 .block(search_input);
 
             search_input.render(search_area, buf);
             *cursor_position = Some(
                 (
-                    search_area.x
-                        + u16::try_from(ui.query.visual_cursor().max(y_scroll) - y_scroll).unwrap()
-                        + 1,
+                    u16::try_from(
+                        usize::from(search_area.x) + ui.query.visual_cursor().max(y_scroll)
+                            - y_scroll
+                            + 1,
+                    )
+                    .unwrap_or(u16::MAX),
                     search_area.y + 1,
                 )
                     .into(),
@@ -862,17 +869,53 @@ impl AppWrapper<'_> {
                 let _ = requests.send(Command::LoadImage(entry.id()));
             }
         } else {
-            Paragraph::new(ui.detailed_entry.as_ref().map_or("Loading…", |r| match r {
-                Ok(DetailedEntry {
-                    mime_type: _,
-                    full_text,
-                }) => full_text.as_deref().unwrap_or("Binary data."),
-                Err(_) => &error,
-            }))
-            .block(inner_block)
-            .wrap(Wrap { trim: false })
-            .scroll((ui.detail_scroll, 0))
-            .render(inner_area, buf);
+            let paragraph =
+                Paragraph::new(ui.detailed_entry.as_ref().map_or("Loading…", |r| match r {
+                    Ok(DetailedEntry {
+                        mime_type: _,
+                        full_text,
+                    }) => full_text.as_deref().unwrap_or("Binary data."),
+                    Err(_) => &error,
+                }))
+                .block(inner_block)
+                .wrap(Wrap { trim: false });
+
+            {
+                let total_lines = paragraph.line_count(inner_area.width.saturating_sub(2));
+                let scrollable_lines = total_lines.saturating_sub(usize::from(inner_area.height));
+
+                if scrollable_lines > 0 {
+                    let cl = scrollable_lines + 1;
+                    if let Some(detail_scroll) = ui.detail_scroll {
+                        ui.detail_scroll = Some(
+                            detail_scroll
+                                .content_length(cl)
+                                .position(detail_scroll.get_position().min(scrollable_lines)),
+                        );
+                    } else {
+                        ui.detail_scroll = Some(ScrollbarState::new(cl));
+                    }
+                } else {
+                    ui.detail_scroll = None;
+                }
+            }
+
+            if let Some(detail_scroll) = &mut ui.detail_scroll {
+                paragraph
+                    .scroll((
+                        u16::try_from(detail_scroll.get_position()).unwrap_or(u16::MAX),
+                        0,
+                    ))
+                    .render(inner_area, buf);
+
+                Scrollbar::new(ScrollbarOrientation::VerticalRight).render(
+                    inner_area,
+                    buf,
+                    detail_scroll,
+                );
+            } else {
+                paragraph.render(inner_area, buf);
+            }
         }
     }
 
