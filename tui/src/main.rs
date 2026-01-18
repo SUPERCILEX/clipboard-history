@@ -25,7 +25,7 @@ use ratatui::{
         event::{Event, KeyEvent, KeyEventKind, KeyModifiers},
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
-    layout::{Alignment, Constraint, Layout, Rect},
+    layout::{Alignment, Constraint, Layout, Position, Rect},
     style::{Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{
@@ -47,7 +47,7 @@ use rustix::{
     stdio::raw_stdout,
 };
 use thiserror::Error;
-use tui_textarea::{CursorMove, Input, Key, TextArea};
+use tui_input::{Input, backend::crossterm::EventHandler};
 
 #[cfg(feature = "trace")]
 #[global_allocator]
@@ -104,7 +104,7 @@ struct UiState {
     detail_scroll: u16,
     detail_image_state: Option<ImageState>,
 
-    query: TextArea<'static>,
+    query: Input,
     search_state: Option<SearchState> = Some(SearchState {
         focused: true,
         kind: SearchKind::Plain,
@@ -128,7 +128,7 @@ enum ImageState {
 
 macro_rules! active_entries {
     ($entries:expr, $state:expr) => {{
-        if $state.query.is_empty() {
+        if $state.query.value().is_empty() {
             &$entries.loaded_entries
         } else {
             &$entries.search_results
@@ -138,7 +138,7 @@ macro_rules! active_entries {
 
 macro_rules! active_list_state {
     ($entries:expr, $state:expr) => {{
-        if $state.query.is_empty() {
+        if $state.query.value().is_empty() {
             &mut $entries.loaded_state
         } else {
             &mut $entries.search_state
@@ -148,7 +148,7 @@ macro_rules! active_list_state {
 
 macro_rules! selected_entry {
     ($entries:expr, $state:expr) => {{
-        if $state.query.is_empty() {
+        if $state.query.value().is_empty() {
             &$entries.loaded_state
         } else {
             &$entries.search_state
@@ -184,7 +184,9 @@ fn run() -> Result<(), CoreError> {
     r
 }
 
-fn init_terminal(mut stdout: impl io::Write) -> Result<Terminal<impl Backend>, CoreError> {
+fn init_terminal(
+    mut stdout: impl io::Write,
+) -> Result<Terminal<impl Backend<Error = io::Error>>, CoreError> {
     std::panic::set_hook({
         let hook = std::panic::take_hook();
         Box::new(move |info| {
@@ -211,7 +213,7 @@ fn restore_terminal(mut stdout: impl io::Write) -> Result<(), CoreError> {
 }
 
 impl App {
-    fn init(terminal: &mut Terminal<impl Backend>) -> Result<Self, CoreError> {
+    fn init(terminal: &mut Terminal<impl Backend<Error = io::Error>>) -> Result<Self, CoreError> {
         let (command_sender, command_receiver) = mpsc::channel();
         let (response_sender, response_receiver) = mpsc::sync_channel(8);
         let mut state = State::default();
@@ -219,11 +221,12 @@ impl App {
         AppWrapper {
             state: &mut state,
             requests: &command_sender,
+            cursor_position: None,
         }
         .draw(terminal)
         .map_io_err(|| "Failed to write to terminal.")?;
 
-        let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::from_fontsize((2, 4)));
+        let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
 
         thread::spawn({
             let sender = response_sender.clone();
@@ -282,7 +285,10 @@ impl App {
 }
 
 impl App {
-    fn run(mut self, mut terminal: Terminal<impl Backend>) -> Result<(), CoreError> {
+    fn run(
+        mut self,
+        mut terminal: Terminal<impl Backend<Error = io::Error>>,
+    ) -> Result<(), CoreError> {
         let Self {
             requests,
             responses,
@@ -306,7 +312,7 @@ impl App {
                     false
                 }
                 Action::User(event) => handle_event(
-                    event.map_io_err(|| "Failed to read terminal.")?,
+                    &event.map_io_err(|| "Failed to read terminal.")?,
                     state,
                     &requests,
                 ),
@@ -317,6 +323,7 @@ impl App {
             AppWrapper {
                 state,
                 requests: &requests,
+                cursor_position: None,
             }
             .draw(&mut terminal)
             .map_io_err(|| "Failed to write to terminal.")?;
@@ -430,7 +437,7 @@ fn maybe_get_details(entries: &UiEntries, ui: &mut UiState, requests: &Sender<Co
     }
 }
 
-fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> bool {
+fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) -> bool {
     let State { entries, ui } = state;
 
     let unselect = |ui: &mut UiState| {
@@ -438,13 +445,13 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
         ui.detailed_entry = None;
     };
     let search = |ui: &mut UiState, kind: SearchKind| {
-        if ui.query.is_empty() {
+        if ui.query.value().is_empty() {
             return;
         }
 
         let (source, sink) = cancellation_token();
         let _ = requests.send(Command::Search {
-            query: ui.query.lines().first().unwrap().as_str().into(),
+            query: ui.query.value().into(),
             kind,
             token: source,
         });
@@ -457,7 +464,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
         }
     };
 
-    match event {
+    match *event {
         Event::Key(KeyEvent {
             code,
             modifiers,
@@ -476,7 +483,7 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                             unselect(ui);
                         } else if ui.search_state.is_some() {
                             ui.search_state = None;
-                            ui.query = TextArea::default();
+                            ui.query = Input::default();
                         } else {
                             return true;
                         }
@@ -501,27 +508,10 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
                 }) = &mut ui.search_state
                     && *focused
                 {
-                    let changed = match Input::from(event) {
-                        Input {
-                            key: Key::Left,
-                            ctrl: true,
-                            alt: false,
-                            shift: _,
-                        } => {
-                            ui.query.move_cursor(CursorMove::WordBack);
-                            false
-                        }
-                        Input {
-                            key: Key::Right,
-                            ctrl: true,
-                            alt: false,
-                            shift: _,
-                        } => {
-                            ui.query.move_cursor(CursorMove::WordForward);
-                            false
-                        }
-                        i => ui.query.input(i),
-                    };
+                    let changed = ui
+                        .query
+                        .handle_event(event)
+                        .is_some_and(|changed| changed.value);
                     if changed {
                         search(ui, kind);
                     } else if code == Up || code == Down {
@@ -641,11 +631,17 @@ fn handle_event(event: Event, state: &mut State, requests: &Sender<Command>) -> 
 struct AppWrapper<'a> {
     requests: &'a Sender<Command>,
     state: &'a mut State,
+    cursor_position: Option<Position>,
 }
 
 impl AppWrapper<'_> {
-    fn draw(&mut self, terminal: &mut Terminal<impl Backend>) -> io::Result<()> {
-        terminal.draw(|f| f.render_widget(self, f.area()))?;
+    fn draw(&mut self, terminal: &mut Terminal<impl Backend<Error = io::Error>>) -> io::Result<()> {
+        terminal.draw(|f| {
+            f.render_widget(&mut *self, f.area());
+            if let Some(cursor_position) = self.cursor_position {
+                f.set_cursor_position(cursor_position);
+            }
+        })?;
         Ok(())
     }
 }
@@ -720,6 +716,7 @@ impl AppWrapper<'_> {
         let Self {
             state: State { entries, ui },
             requests: _,
+            cursor_position,
         } = self;
 
         let [search_area, entries_area] = Layout::vertical([
@@ -729,25 +726,40 @@ impl AppWrapper<'_> {
         .areas(area);
 
         if let &Some(SearchState { focused, kind }) = &ui.search_state {
-            ui.query.set_block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(if focused {
-                        Style::new().bold()
-                    } else {
-                        Style::default()
-                    })
-                    .title(if ui.pending_search_token.is_some() {
-                        "Searching…"
-                    } else {
-                        match kind {
-                            SearchKind::Plain => "Search",
-                            SearchKind::Regex => "RegEx search",
-                            SearchKind::Mime => "Mime type search",
-                        }
-                    }),
+            let search_input = Block::default()
+                .borders(Borders::ALL)
+                .border_style(if focused {
+                    Style::new().bold()
+                } else {
+                    Style::default()
+                })
+                .title(if ui.pending_search_token.is_some() {
+                    "Searching…"
+                } else {
+                    match kind {
+                        SearchKind::Plain => "Search",
+                        SearchKind::Regex => "RegEx search",
+                        SearchKind::Mime => "Mime type search",
+                    }
+                });
+
+            let y_scroll = ui
+                .query
+                .visual_scroll(usize::from(search_area.width.max(3) - 3));
+            let search_input = Paragraph::new(ui.query.value())
+                .scroll((0, u16::try_from(y_scroll).unwrap()))
+                .block(search_input);
+
+            search_input.render(search_area, buf);
+            *cursor_position = Some(
+                (
+                    search_area.x
+                        + u16::try_from(ui.query.visual_cursor().max(y_scroll) - y_scroll).unwrap()
+                        + 1,
+                    search_area.y + 1,
+                )
+                    .into(),
             );
-            ui.query.render(search_area, buf);
         }
 
         let outer_block = Block::new()
@@ -784,6 +796,7 @@ impl AppWrapper<'_> {
         let Self {
             state: State { entries, ui },
             requests,
+            cursor_position: _,
         } = self;
         if area.is_empty() {
             return;
