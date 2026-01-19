@@ -24,6 +24,9 @@ tui-input = "0.15.0"
 trace = ["dep:tracy-client"]
 chafa = ["ratatui-image/chafa-dyn"]
 
+# This should be removed once the image crate supports avif decoding by default
+avif = ["image/avif-native"]
+
 [[bin]]
 name = "ringboard-tui"
 path = "src/main.rs"

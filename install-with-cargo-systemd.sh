@@ -9,7 +9,7 @@ sed -i "s|ExecStart=ringboard-server|ExecStart=$(which ringboard-server)|g" ~/.c
 
 cargo +nightly install clipboard-history
 
-cargo +nightly install clipboard-history-egui --no-default-features --features $XDG_SESSION_TYPE
+cargo +nightly install clipboard-history-egui --no-default-features --features $XDG_SESSION_TYPE,avif || cargo +nightly install clipboard-history-egui --no-default-features --features $XDG_SESSION_TYPE
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/egui/ringboard-egui.desktop --create-dirs -O --output-dir ~/.local/share/applications/
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/logo.jpeg -o ringboard.jpeg --create-dirs -O --output-dir ~/.local/share/icons/hicolor/1024x1024/
 sed -i "s|Exec=ringboard-egui|Exec=$(echo $(which ringboard-egui) toggle)|g" ~/.local/share/applications/ringboard-egui.desktop
