@@ -3,6 +3,7 @@
 systemctl --user disable ringboard-server --now
 systemctl --user disable ringboard-x11 --now
 systemctl --user disable ringboard-wayland --now
+systemctl --user disable ringboard.slice --now
 systemctl --user daemon-reload
 
 rm ~/.config/systemd/user/ringboard*
