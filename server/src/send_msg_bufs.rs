@@ -165,14 +165,10 @@ impl LengthlessVec {
     }
 }
 
-#[allow(clippy::fallible_impl_from)]
 impl From<Vec<u8>> for LengthlessVec {
     fn from(value: Vec<u8>) -> Self {
-        let (ptr, _len, cap) = value.into_raw_parts();
-        Self {
-            ptr: NonNull::new(ptr).unwrap(),
-            cap,
-        }
+        let (ptr, _len, cap) = value.into_parts();
+        Self { ptr, cap }
     }
 }
 
