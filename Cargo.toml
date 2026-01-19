@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.13.2"
+version = "0.14.0"
 authors = ["Alex Saveau <saveau.alexandre@gmail.com>"]
 edition = "2024"
 repository = "https://github.com/SUPERCILEX/clipboard-history"
