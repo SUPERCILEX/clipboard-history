@@ -19,8 +19,6 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-      - name: Install deps
-        run: sudo apt-get update && sudo apt-get install libchafa-dev libglib2.0-dev
       - name: Build project
         run: cargo build --workspace --release
 
@@ -42,8 +40,6 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-      - name: Install deps
-        run: sudo apt-get update && sudo apt-get install libchafa-dev libglib2.0-dev
       - name: Run tests
         run: cargo test --workspace
 
@@ -59,8 +55,6 @@ jobs:
       - name: Install crates.io auth token
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
-      - name: Install deps
-        run: sudo apt-get update && sudo apt-get install libchafa-dev libglib2.0-dev
       - name: Publish release
         run: |
           cargo publish --workspace
@@ -110,8 +104,6 @@ jobs:
       - name: Install cross
         if: contains(matrix.tool, 'cross')
         run: cargo install cross
-      - name: Install deps
-        run: sudo apt-get update && sudo apt-get install libchafa-dev libglib2.0-dev
       - name: Build binary
         run: ${{ matrix.tool }} build --workspace --release --locked --target=${{ matrix.target }} -Z build-std=std,panic_abort -Z panic-immediate-abort
       - name: Upload binary
