@@ -48,7 +48,7 @@ if [ "$XDG_SESSION_TYPE" = "x11" ]; then
   echo "https://github.com/SUPERCILEX/clipboard-history/blob/master/x11/README.md#password-manager-integration"
 fi
 
-if [ "$XDG_CURRENT_DESKTOP" = "COSMIC" ]; then
+if [ "$XDG_CURRENT_DESKTOP" = "COSMIC" ] && [ ! -f /etc/profile.d/clipboard.sh ]; then
   echo
   echo "COSMIC_DATA_CONTROL_ENABLED must be set, which requires sudo."
   echo "Please reboot after letting the following command run:"
