@@ -236,18 +236,16 @@ pub fn clipboard_history_client_sdk::api::connect_to_server_with(addr: &rustix::
 pub fn clipboard_history_client_sdk::api::send_paste_buffer(server: impl std::os::fd::owned::AsFd, entry: clipboard_history_client_sdk::Entry, reader: &mut clipboard_history_client_sdk::EntryReader, trigger_paste: bool) -> clipboard_history_core::Result<()>
 pub mod clipboard_history_client_sdk::config
 pub mod clipboard_history_client_sdk::config::wayland
-pub enum clipboard_history_client_sdk::config::wayland::Config
-pub clipboard_history_client_sdk::config::wayland::Config::V1(clipboard_history_client_sdk::config::wayland::V1)
-impl clipboard_history_client_sdk::config::wayland::Config
-pub const fn clipboard_history_client_sdk::config::wayland::Config::to_latest(self) -> clipboard_history_client_sdk::config::wayland::Latest
+pub struct clipboard_history_client_sdk::config::wayland::Config
+pub clipboard_history_client_sdk::config::wayland::Config::auto_paste: bool
+impl core::convert::From<clipboard_history_client_sdk::config::wayland::Config> for clipboard_history_client_sdk::config::wayland::Stable
+pub fn clipboard_history_client_sdk::config::wayland::Stable::from(value: clipboard_history_client_sdk::config::wayland::Config) -> Self
+impl core::convert::From<clipboard_history_client_sdk::config::wayland::Stable> for clipboard_history_client_sdk::config::wayland::Config
+pub fn clipboard_history_client_sdk::config::wayland::Config::from(value: clipboard_history_client_sdk::config::wayland::Stable) -> Self
 impl core::default::Default for clipboard_history_client_sdk::config::wayland::Config
 pub fn clipboard_history_client_sdk::config::wayland::Config::default() -> Self
 impl core::fmt::Debug for clipboard_history_client_sdk::config::wayland::Config
 pub fn clipboard_history_client_sdk::config::wayland::Config::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl serde_core::ser::Serialize for clipboard_history_client_sdk::config::wayland::Config
-pub fn clipboard_history_client_sdk::config::wayland::Config::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
-impl<'de> serde_core::de::Deserialize<'de> for clipboard_history_client_sdk::config::wayland::Config
-pub fn clipboard_history_client_sdk::config::wayland::Config::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
 impl core::marker::Freeze for clipboard_history_client_sdk::config::wayland::Config
 impl core::marker::Send for clipboard_history_client_sdk::config::wayland::Config
 impl core::marker::Sync for clipboard_history_client_sdk::config::wayland::Config
@@ -280,65 +278,65 @@ pub unsafe fn clipboard_history_client_sdk::config::wayland::Config::drop(ptr: u
 pub unsafe fn clipboard_history_client_sdk::config::wayland::Config::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::config::wayland::Config
 impl<T> error_stack::context::OpaqueAttachment for clipboard_history_client_sdk::config::wayland::Config where T: core::marker::Send + core::marker::Sync + 'static
-impl<T> serde_core::de::DeserializeOwned for clipboard_history_client_sdk::config::wayland::Config where T: for<'de> serde_core::de::Deserialize<'de>
-pub struct clipboard_history_client_sdk::config::wayland::V1
-pub clipboard_history_client_sdk::config::wayland::V1::auto_paste: bool
-impl core::default::Default for clipboard_history_client_sdk::config::wayland::V1
-pub fn clipboard_history_client_sdk::config::wayland::V1::default() -> Self
-impl core::fmt::Debug for clipboard_history_client_sdk::config::wayland::V1
-pub fn clipboard_history_client_sdk::config::wayland::V1::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl serde_core::ser::Serialize for clipboard_history_client_sdk::config::wayland::V1
-pub fn clipboard_history_client_sdk::config::wayland::V1::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
-impl<'de> serde_core::de::Deserialize<'de> for clipboard_history_client_sdk::config::wayland::V1
-pub fn clipboard_history_client_sdk::config::wayland::V1::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
-impl core::marker::Freeze for clipboard_history_client_sdk::config::wayland::V1
-impl core::marker::Send for clipboard_history_client_sdk::config::wayland::V1
-impl core::marker::Sync for clipboard_history_client_sdk::config::wayland::V1
-impl core::marker::Unpin for clipboard_history_client_sdk::config::wayland::V1
-impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::config::wayland::V1
-impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::config::wayland::V1
-impl<R, P> lebe::io::ReadPrimitive<R> for clipboard_history_client_sdk::config::wayland::V1 where R: std::io::Read + lebe::io::ReadEndian<P>, P: core::default::Default
-impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::config::wayland::V1 where U: core::convert::From<T>
-pub fn clipboard_history_client_sdk::config::wayland::V1::into(self) -> U
-impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::config::wayland::V1 where U: core::convert::Into<T>
-pub type clipboard_history_client_sdk::config::wayland::V1::Error = core::convert::Infallible
-pub fn clipboard_history_client_sdk::config::wayland::V1::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
-impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::config::wayland::V1 where U: core::convert::TryFrom<T>
-pub type clipboard_history_client_sdk::config::wayland::V1::Error = <U as core::convert::TryFrom<T>>::Error
-pub fn clipboard_history_client_sdk::config::wayland::V1::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
-impl<T> core::any::Any for clipboard_history_client_sdk::config::wayland::V1 where T: 'static + ?core::marker::Sized
-pub fn clipboard_history_client_sdk::config::wayland::V1::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::config::wayland::V1 where T: ?core::marker::Sized
-pub fn clipboard_history_client_sdk::config::wayland::V1::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::config::wayland::V1 where T: ?core::marker::Sized
-pub fn clipboard_history_client_sdk::config::wayland::V1::borrow_mut(&mut self) -> &mut T
-impl<T> core::convert::From<T> for clipboard_history_client_sdk::config::wayland::V1
-pub fn clipboard_history_client_sdk::config::wayland::V1::from(t: T) -> T
-impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::config::wayland::V1
-pub type clipboard_history_client_sdk::config::wayland::V1::Init = T
-pub const clipboard_history_client_sdk::config::wayland::V1::ALIGN: usize
-pub unsafe fn clipboard_history_client_sdk::config::wayland::V1::deref<'a>(ptr: usize) -> &'a T
-pub unsafe fn clipboard_history_client_sdk::config::wayland::V1::deref_mut<'a>(ptr: usize) -> &'a mut T
-pub unsafe fn clipboard_history_client_sdk::config::wayland::V1::drop(ptr: usize)
-pub unsafe fn clipboard_history_client_sdk::config::wayland::V1::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
-impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::config::wayland::V1
-impl<T> error_stack::context::OpaqueAttachment for clipboard_history_client_sdk::config::wayland::V1 where T: core::marker::Send + core::marker::Sync + 'static
-impl<T> serde_core::de::DeserializeOwned for clipboard_history_client_sdk::config::wayland::V1 where T: for<'de> serde_core::de::Deserialize<'de>
+pub struct clipboard_history_client_sdk::config::wayland::Stable(_)
+impl core::convert::From<clipboard_history_client_sdk::config::wayland::Config> for clipboard_history_client_sdk::config::wayland::Stable
+pub fn clipboard_history_client_sdk::config::wayland::Stable::from(value: clipboard_history_client_sdk::config::wayland::Config) -> Self
+impl core::convert::From<clipboard_history_client_sdk::config::wayland::Stable> for clipboard_history_client_sdk::config::wayland::Config
+pub fn clipboard_history_client_sdk::config::wayland::Config::from(value: clipboard_history_client_sdk::config::wayland::Stable) -> Self
+impl core::default::Default for clipboard_history_client_sdk::config::wayland::Stable
+pub fn clipboard_history_client_sdk::config::wayland::Stable::default() -> clipboard_history_client_sdk::config::wayland::Stable
+impl core::fmt::Debug for clipboard_history_client_sdk::config::wayland::Stable
+pub fn clipboard_history_client_sdk::config::wayland::Stable::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for clipboard_history_client_sdk::config::wayland::Stable
+pub fn clipboard_history_client_sdk::config::wayland::Stable::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for clipboard_history_client_sdk::config::wayland::Stable
+pub fn clipboard_history_client_sdk::config::wayland::Stable::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for clipboard_history_client_sdk::config::wayland::Stable
+impl core::marker::Send for clipboard_history_client_sdk::config::wayland::Stable
+impl core::marker::Sync for clipboard_history_client_sdk::config::wayland::Stable
+impl core::marker::Unpin for clipboard_history_client_sdk::config::wayland::Stable
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::config::wayland::Stable
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::config::wayland::Stable
+impl<R, P> lebe::io::ReadPrimitive<R> for clipboard_history_client_sdk::config::wayland::Stable where R: std::io::Read + lebe::io::ReadEndian<P>, P: core::default::Default
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::config::wayland::Stable where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::config::wayland::Stable::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::config::wayland::Stable where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::config::wayland::Stable::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::config::wayland::Stable::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::config::wayland::Stable where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::config::wayland::Stable::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::config::wayland::Stable::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::config::wayland::Stable where T: 'static + ?core::marker::Sized
+pub fn clipboard_history_client_sdk::config::wayland::Stable::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::config::wayland::Stable where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::config::wayland::Stable::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::config::wayland::Stable where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::config::wayland::Stable::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::config::wayland::Stable
+pub fn clipboard_history_client_sdk::config::wayland::Stable::from(t: T) -> T
+impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::config::wayland::Stable
+pub type clipboard_history_client_sdk::config::wayland::Stable::Init = T
+pub const clipboard_history_client_sdk::config::wayland::Stable::ALIGN: usize
+pub unsafe fn clipboard_history_client_sdk::config::wayland::Stable::deref<'a>(ptr: usize) -> &'a T
+pub unsafe fn clipboard_history_client_sdk::config::wayland::Stable::deref_mut<'a>(ptr: usize) -> &'a mut T
+pub unsafe fn clipboard_history_client_sdk::config::wayland::Stable::drop(ptr: usize)
+pub unsafe fn clipboard_history_client_sdk::config::wayland::Stable::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
+impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::config::wayland::Stable
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_client_sdk::config::wayland::Stable where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for clipboard_history_client_sdk::config::wayland::Stable where T: for<'de> serde_core::de::Deserialize<'de>
 pub fn clipboard_history_client_sdk::config::wayland::file() -> std::path::PathBuf
-pub type clipboard_history_client_sdk::config::wayland::Latest = clipboard_history_client_sdk::config::wayland::V1
 pub mod clipboard_history_client_sdk::config::x11
-pub enum clipboard_history_client_sdk::config::x11::Config
-pub clipboard_history_client_sdk::config::x11::Config::V1(clipboard_history_client_sdk::config::x11::V1)
-impl clipboard_history_client_sdk::config::x11::Config
-pub const fn clipboard_history_client_sdk::config::x11::Config::to_latest(self) -> clipboard_history_client_sdk::config::x11::Latest
+pub struct clipboard_history_client_sdk::config::x11::Config
+pub clipboard_history_client_sdk::config::x11::Config::auto_paste: bool
+pub clipboard_history_client_sdk::config::x11::Config::fast_path_optimizations: bool
+impl core::convert::From<clipboard_history_client_sdk::config::x11::Config> for clipboard_history_client_sdk::config::x11::Stable
+pub fn clipboard_history_client_sdk::config::x11::Stable::from(value: clipboard_history_client_sdk::config::x11::Config) -> Self
+impl core::convert::From<clipboard_history_client_sdk::config::x11::Stable> for clipboard_history_client_sdk::config::x11::Config
+pub fn clipboard_history_client_sdk::config::x11::Config::from(value: clipboard_history_client_sdk::config::x11::Stable) -> Self
 impl core::default::Default for clipboard_history_client_sdk::config::x11::Config
 pub fn clipboard_history_client_sdk::config::x11::Config::default() -> Self
 impl core::fmt::Debug for clipboard_history_client_sdk::config::x11::Config
 pub fn clipboard_history_client_sdk::config::x11::Config::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl serde_core::ser::Serialize for clipboard_history_client_sdk::config::x11::Config
-pub fn clipboard_history_client_sdk::config::x11::Config::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
-impl<'de> serde_core::de::Deserialize<'de> for clipboard_history_client_sdk::config::x11::Config
-pub fn clipboard_history_client_sdk::config::x11::Config::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
 impl core::marker::Freeze for clipboard_history_client_sdk::config::x11::Config
 impl core::marker::Send for clipboard_history_client_sdk::config::x11::Config
 impl core::marker::Sync for clipboard_history_client_sdk::config::x11::Config
@@ -371,53 +369,53 @@ pub unsafe fn clipboard_history_client_sdk::config::x11::Config::drop(ptr: usize
 pub unsafe fn clipboard_history_client_sdk::config::x11::Config::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
 impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::config::x11::Config
 impl<T> error_stack::context::OpaqueAttachment for clipboard_history_client_sdk::config::x11::Config where T: core::marker::Send + core::marker::Sync + 'static
-impl<T> serde_core::de::DeserializeOwned for clipboard_history_client_sdk::config::x11::Config where T: for<'de> serde_core::de::Deserialize<'de>
-pub struct clipboard_history_client_sdk::config::x11::V1
-pub clipboard_history_client_sdk::config::x11::V1::auto_paste: bool
-pub clipboard_history_client_sdk::config::x11::V1::fast_path_optimizations: bool
-impl core::default::Default for clipboard_history_client_sdk::config::x11::V1
-pub fn clipboard_history_client_sdk::config::x11::V1::default() -> Self
-impl core::fmt::Debug for clipboard_history_client_sdk::config::x11::V1
-pub fn clipboard_history_client_sdk::config::x11::V1::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl serde_core::ser::Serialize for clipboard_history_client_sdk::config::x11::V1
-pub fn clipboard_history_client_sdk::config::x11::V1::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
-impl<'de> serde_core::de::Deserialize<'de> for clipboard_history_client_sdk::config::x11::V1
-pub fn clipboard_history_client_sdk::config::x11::V1::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
-impl core::marker::Freeze for clipboard_history_client_sdk::config::x11::V1
-impl core::marker::Send for clipboard_history_client_sdk::config::x11::V1
-impl core::marker::Sync for clipboard_history_client_sdk::config::x11::V1
-impl core::marker::Unpin for clipboard_history_client_sdk::config::x11::V1
-impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::config::x11::V1
-impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::config::x11::V1
-impl<R, P> lebe::io::ReadPrimitive<R> for clipboard_history_client_sdk::config::x11::V1 where R: std::io::Read + lebe::io::ReadEndian<P>, P: core::default::Default
-impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::config::x11::V1 where U: core::convert::From<T>
-pub fn clipboard_history_client_sdk::config::x11::V1::into(self) -> U
-impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::config::x11::V1 where U: core::convert::Into<T>
-pub type clipboard_history_client_sdk::config::x11::V1::Error = core::convert::Infallible
-pub fn clipboard_history_client_sdk::config::x11::V1::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
-impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::config::x11::V1 where U: core::convert::TryFrom<T>
-pub type clipboard_history_client_sdk::config::x11::V1::Error = <U as core::convert::TryFrom<T>>::Error
-pub fn clipboard_history_client_sdk::config::x11::V1::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
-impl<T> core::any::Any for clipboard_history_client_sdk::config::x11::V1 where T: 'static + ?core::marker::Sized
-pub fn clipboard_history_client_sdk::config::x11::V1::type_id(&self) -> core::any::TypeId
-impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::config::x11::V1 where T: ?core::marker::Sized
-pub fn clipboard_history_client_sdk::config::x11::V1::borrow(&self) -> &T
-impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::config::x11::V1 where T: ?core::marker::Sized
-pub fn clipboard_history_client_sdk::config::x11::V1::borrow_mut(&mut self) -> &mut T
-impl<T> core::convert::From<T> for clipboard_history_client_sdk::config::x11::V1
-pub fn clipboard_history_client_sdk::config::x11::V1::from(t: T) -> T
-impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::config::x11::V1
-pub type clipboard_history_client_sdk::config::x11::V1::Init = T
-pub const clipboard_history_client_sdk::config::x11::V1::ALIGN: usize
-pub unsafe fn clipboard_history_client_sdk::config::x11::V1::deref<'a>(ptr: usize) -> &'a T
-pub unsafe fn clipboard_history_client_sdk::config::x11::V1::deref_mut<'a>(ptr: usize) -> &'a mut T
-pub unsafe fn clipboard_history_client_sdk::config::x11::V1::drop(ptr: usize)
-pub unsafe fn clipboard_history_client_sdk::config::x11::V1::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
-impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::config::x11::V1
-impl<T> error_stack::context::OpaqueAttachment for clipboard_history_client_sdk::config::x11::V1 where T: core::marker::Send + core::marker::Sync + 'static
-impl<T> serde_core::de::DeserializeOwned for clipboard_history_client_sdk::config::x11::V1 where T: for<'de> serde_core::de::Deserialize<'de>
+pub struct clipboard_history_client_sdk::config::x11::Stable(_)
+impl core::convert::From<clipboard_history_client_sdk::config::x11::Config> for clipboard_history_client_sdk::config::x11::Stable
+pub fn clipboard_history_client_sdk::config::x11::Stable::from(value: clipboard_history_client_sdk::config::x11::Config) -> Self
+impl core::convert::From<clipboard_history_client_sdk::config::x11::Stable> for clipboard_history_client_sdk::config::x11::Config
+pub fn clipboard_history_client_sdk::config::x11::Config::from(value: clipboard_history_client_sdk::config::x11::Stable) -> Self
+impl core::default::Default for clipboard_history_client_sdk::config::x11::Stable
+pub fn clipboard_history_client_sdk::config::x11::Stable::default() -> clipboard_history_client_sdk::config::x11::Stable
+impl core::fmt::Debug for clipboard_history_client_sdk::config::x11::Stable
+pub fn clipboard_history_client_sdk::config::x11::Stable::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for clipboard_history_client_sdk::config::x11::Stable
+pub fn clipboard_history_client_sdk::config::x11::Stable::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for clipboard_history_client_sdk::config::x11::Stable
+pub fn clipboard_history_client_sdk::config::x11::Stable::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for clipboard_history_client_sdk::config::x11::Stable
+impl core::marker::Send for clipboard_history_client_sdk::config::x11::Stable
+impl core::marker::Sync for clipboard_history_client_sdk::config::x11::Stable
+impl core::marker::Unpin for clipboard_history_client_sdk::config::x11::Stable
+impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::config::x11::Stable
+impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::config::x11::Stable
+impl<R, P> lebe::io::ReadPrimitive<R> for clipboard_history_client_sdk::config::x11::Stable where R: std::io::Read + lebe::io::ReadEndian<P>, P: core::default::Default
+impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::config::x11::Stable where U: core::convert::From<T>
+pub fn clipboard_history_client_sdk::config::x11::Stable::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::config::x11::Stable where U: core::convert::Into<T>
+pub type clipboard_history_client_sdk::config::x11::Stable::Error = core::convert::Infallible
+pub fn clipboard_history_client_sdk::config::x11::Stable::try_from(value: U) -> core::result::Result<T, <T as core::convert::TryFrom<U>>::Error>
+impl<T, U> core::convert::TryInto<U> for clipboard_history_client_sdk::config::x11::Stable where U: core::convert::TryFrom<T>
+pub type clipboard_history_client_sdk::config::x11::Stable::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn clipboard_history_client_sdk::config::x11::Stable::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for clipboard_history_client_sdk::config::x11::Stable where T: 'static + ?core::marker::Sized
+pub fn clipboard_history_client_sdk::config::x11::Stable::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for clipboard_history_client_sdk::config::x11::Stable where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::config::x11::Stable::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for clipboard_history_client_sdk::config::x11::Stable where T: ?core::marker::Sized
+pub fn clipboard_history_client_sdk::config::x11::Stable::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for clipboard_history_client_sdk::config::x11::Stable
+pub fn clipboard_history_client_sdk::config::x11::Stable::from(t: T) -> T
+impl<T> crossbeam_epoch::atomic::Pointable for clipboard_history_client_sdk::config::x11::Stable
+pub type clipboard_history_client_sdk::config::x11::Stable::Init = T
+pub const clipboard_history_client_sdk::config::x11::Stable::ALIGN: usize
+pub unsafe fn clipboard_history_client_sdk::config::x11::Stable::deref<'a>(ptr: usize) -> &'a T
+pub unsafe fn clipboard_history_client_sdk::config::x11::Stable::deref_mut<'a>(ptr: usize) -> &'a mut T
+pub unsafe fn clipboard_history_client_sdk::config::x11::Stable::drop(ptr: usize)
+pub unsafe fn clipboard_history_client_sdk::config::x11::Stable::init(init: <T as crossbeam_epoch::atomic::Pointable>::Init) -> usize
+impl<T> either::into_either::IntoEither for clipboard_history_client_sdk::config::x11::Stable
+impl<T> error_stack::context::OpaqueAttachment for clipboard_history_client_sdk::config::x11::Stable where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for clipboard_history_client_sdk::config::x11::Stable where T: for<'de> serde_core::de::Deserialize<'de>
 pub fn clipboard_history_client_sdk::config::x11::file() -> std::path::PathBuf
-pub type clipboard_history_client_sdk::config::x11::Latest = clipboard_history_client_sdk::config::x11::V1
 pub mod clipboard_history_client_sdk::duplicate_detection
 pub struct clipboard_history_client_sdk::duplicate_detection::DuplicateDetector
 impl clipboard_history_client_sdk::duplicate_detection::DuplicateDetector

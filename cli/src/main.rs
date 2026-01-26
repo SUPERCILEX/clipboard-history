@@ -2187,13 +2187,13 @@ fn configure_x11(x11: ConfigureX11) -> Result<(), CliError> {
     }
     let mut file = File::create(&path).map_io_err(|| format!("Failed to open file: {path:?}"))?;
 
-    let mut config = config::x11::Latest::default();
+    let mut config = config::x11::Config::default();
     {
         let ConfigureX11 {
             auto_paste,
             fast_path_optimizations,
         } = x11;
-        let config::x11::Latest {
+        let config::x11::Config {
             auto_paste: ref mut auto_paste_,
             fast_path_optimizations: ref mut fast_path_optimizations_,
         } = config;
@@ -2204,7 +2204,7 @@ fn configure_x11(x11: ConfigureX11) -> Result<(), CliError> {
             *fast_path_optimizations_ = fast_path_optimizations;
         }
     }
-    let config = toml::to_string_pretty(&config::x11::Config::V1(config))?;
+    let config = toml::to_string_pretty(&config::x11::Stable::from(config))?;
     file.write_all(config.as_bytes())
         .map_io_err(|| format!("Failed to write to config file: {path:?}"))?;
 
@@ -2221,17 +2221,17 @@ fn configure_wayland(wayland: ConfigureWayland) -> Result<(), CliError> {
     }
     let mut file = File::create(&path).map_io_err(|| format!("Failed to open file: {path:?}"))?;
 
-    let mut config = config::wayland::Latest::default();
+    let mut config = config::wayland::Config::default();
     {
         let ConfigureWayland { auto_paste } = wayland;
-        let config::wayland::Latest {
+        let config::wayland::Config {
             auto_paste: ref mut auto_paste_,
         } = config;
         if let Some(auto_paste) = auto_paste {
             *auto_paste_ = auto_paste;
         }
     }
-    let config = toml::to_string_pretty(&config::wayland::Config::V1(config))?;
+    let config = toml::to_string_pretty(&config::wayland::Stable::from(config))?;
     file.write_all(config.as_bytes())
         .map_io_err(|| format!("Failed to write to config file: {path:?}"))?;
 

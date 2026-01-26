@@ -132,17 +132,17 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
     }
 }
 
-fn load_config() -> Result<config::wayland::Latest, CliError> {
+fn load_config() -> Result<config::wayland::Config, CliError> {
     let path = config::wayland::file();
     let mut file = match File::open(&path) {
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(config::wayland::Latest::default()),
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(config::wayland::Config::default()),
         r => r.map_io_err(|| format!("Failed to open file: {path:?}"))?,
     };
 
     let mut config = String::new();
     file.read_to_string(&mut config)
         .map_io_err(|| format!("Failed to read config: {path:?}"))?;
-    Ok(toml::from_str::<config::wayland::Config>(&config)?.to_latest())
+    Ok(toml::from_str::<config::wayland::Stable>(&config)?.into())
 }
 
 fn run() -> Result<(), CliError> {
@@ -151,7 +151,7 @@ fn run() -> Result<(), CliError> {
         env!("CARGO_PKG_VERSION")
     );
 
-    let ref config @ config::wayland::Latest { auto_paste } = load_config()?;
+    let ref config @ config::wayland::Config { auto_paste } = load_config()?;
     info!("Using configuration {config:?}");
 
     let server = {

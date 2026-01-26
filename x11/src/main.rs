@@ -246,17 +246,17 @@ enum PasteFile {
     Large(Rc<Mmap>),
 }
 
-fn load_config() -> Result<config::x11::Latest, CliError> {
+fn load_config() -> Result<config::x11::Config, CliError> {
     let path = config::x11::file();
     let mut file = match File::open(&path) {
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(config::x11::Latest::default()),
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(config::x11::Config::default()),
         r => r.map_io_err(|| format!("Failed to open file: {path:?}"))?,
     };
 
     let mut config = String::new();
     file.read_to_string(&mut config)
         .map_io_err(|| format!("Failed to read config: {path:?}"))?;
-    Ok(toml::from_str::<config::x11::Config>(&config)?.to_latest())
+    Ok(toml::from_str::<config::x11::Stable>(&config)?.into())
 }
 
 fn run() -> Result<(), CliError> {
@@ -265,7 +265,7 @@ fn run() -> Result<(), CliError> {
         env!("CARGO_PKG_VERSION")
     );
 
-    let ref config @ config::x11::Latest {
+    let ref config @ config::x11::Config {
         auto_paste,
         fast_path_optimizations,
     } = load_config()?;
