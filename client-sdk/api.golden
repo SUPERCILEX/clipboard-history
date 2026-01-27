@@ -241,7 +241,7 @@ pub clipboard_history_client_sdk::config::wayland::Config::auto_paste: bool
 impl core::convert::From<clipboard_history_client_sdk::config::wayland::Config> for clipboard_history_client_sdk::config::wayland::Stable
 pub fn clipboard_history_client_sdk::config::wayland::Stable::from(value: clipboard_history_client_sdk::config::wayland::Config) -> Self
 impl core::convert::From<clipboard_history_client_sdk::config::wayland::Stable> for clipboard_history_client_sdk::config::wayland::Config
-pub fn clipboard_history_client_sdk::config::wayland::Config::from(value: clipboard_history_client_sdk::config::wayland::Stable) -> Self
+pub fn clipboard_history_client_sdk::config::wayland::Config::from(stable: clipboard_history_client_sdk::config::wayland::Stable) -> Self
 impl core::default::Default for clipboard_history_client_sdk::config::wayland::Config
 pub fn clipboard_history_client_sdk::config::wayland::Config::default() -> Self
 impl core::fmt::Debug for clipboard_history_client_sdk::config::wayland::Config
@@ -282,9 +282,7 @@ pub struct clipboard_history_client_sdk::config::wayland::Stable(_)
 impl core::convert::From<clipboard_history_client_sdk::config::wayland::Config> for clipboard_history_client_sdk::config::wayland::Stable
 pub fn clipboard_history_client_sdk::config::wayland::Stable::from(value: clipboard_history_client_sdk::config::wayland::Config) -> Self
 impl core::convert::From<clipboard_history_client_sdk::config::wayland::Stable> for clipboard_history_client_sdk::config::wayland::Config
-pub fn clipboard_history_client_sdk::config::wayland::Config::from(value: clipboard_history_client_sdk::config::wayland::Stable) -> Self
-impl core::default::Default for clipboard_history_client_sdk::config::wayland::Stable
-pub fn clipboard_history_client_sdk::config::wayland::Stable::default() -> clipboard_history_client_sdk::config::wayland::Stable
+pub fn clipboard_history_client_sdk::config::wayland::Config::from(stable: clipboard_history_client_sdk::config::wayland::Stable) -> Self
 impl core::fmt::Debug for clipboard_history_client_sdk::config::wayland::Stable
 pub fn clipboard_history_client_sdk::config::wayland::Stable::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for clipboard_history_client_sdk::config::wayland::Stable
@@ -297,7 +295,6 @@ impl core::marker::Sync for clipboard_history_client_sdk::config::wayland::Stabl
 impl core::marker::Unpin for clipboard_history_client_sdk::config::wayland::Stable
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::config::wayland::Stable
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::config::wayland::Stable
-impl<R, P> lebe::io::ReadPrimitive<R> for clipboard_history_client_sdk::config::wayland::Stable where R: std::io::Read + lebe::io::ReadEndian<P>, P: core::default::Default
 impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::config::wayland::Stable where U: core::convert::From<T>
 pub fn clipboard_history_client_sdk::config::wayland::Stable::into(self) -> U
 impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::config::wayland::Stable where U: core::convert::Into<T>
@@ -332,7 +329,7 @@ pub clipboard_history_client_sdk::config::x11::Config::fast_path_optimizations: 
 impl core::convert::From<clipboard_history_client_sdk::config::x11::Config> for clipboard_history_client_sdk::config::x11::Stable
 pub fn clipboard_history_client_sdk::config::x11::Stable::from(value: clipboard_history_client_sdk::config::x11::Config) -> Self
 impl core::convert::From<clipboard_history_client_sdk::config::x11::Stable> for clipboard_history_client_sdk::config::x11::Config
-pub fn clipboard_history_client_sdk::config::x11::Config::from(value: clipboard_history_client_sdk::config::x11::Stable) -> Self
+pub fn clipboard_history_client_sdk::config::x11::Config::from(stable: clipboard_history_client_sdk::config::x11::Stable) -> Self
 impl core::default::Default for clipboard_history_client_sdk::config::x11::Config
 pub fn clipboard_history_client_sdk::config::x11::Config::default() -> Self
 impl core::fmt::Debug for clipboard_history_client_sdk::config::x11::Config
@@ -373,9 +370,7 @@ pub struct clipboard_history_client_sdk::config::x11::Stable(_)
 impl core::convert::From<clipboard_history_client_sdk::config::x11::Config> for clipboard_history_client_sdk::config::x11::Stable
 pub fn clipboard_history_client_sdk::config::x11::Stable::from(value: clipboard_history_client_sdk::config::x11::Config) -> Self
 impl core::convert::From<clipboard_history_client_sdk::config::x11::Stable> for clipboard_history_client_sdk::config::x11::Config
-pub fn clipboard_history_client_sdk::config::x11::Config::from(value: clipboard_history_client_sdk::config::x11::Stable) -> Self
-impl core::default::Default for clipboard_history_client_sdk::config::x11::Stable
-pub fn clipboard_history_client_sdk::config::x11::Stable::default() -> clipboard_history_client_sdk::config::x11::Stable
+pub fn clipboard_history_client_sdk::config::x11::Config::from(stable: clipboard_history_client_sdk::config::x11::Stable) -> Self
 impl core::fmt::Debug for clipboard_history_client_sdk::config::x11::Stable
 pub fn clipboard_history_client_sdk::config::x11::Stable::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for clipboard_history_client_sdk::config::x11::Stable
@@ -388,7 +383,6 @@ impl core::marker::Sync for clipboard_history_client_sdk::config::x11::Stable
 impl core::marker::Unpin for clipboard_history_client_sdk::config::x11::Stable
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::config::x11::Stable
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::config::x11::Stable
-impl<R, P> lebe::io::ReadPrimitive<R> for clipboard_history_client_sdk::config::x11::Stable where R: std::io::Read + lebe::io::ReadEndian<P>, P: core::default::Default
 impl<T, U> core::convert::Into<U> for clipboard_history_client_sdk::config::x11::Stable where U: core::convert::From<T>
 pub fn clipboard_history_client_sdk::config::x11::Stable::into(self) -> U
 impl<T, U> core::convert::TryFrom<U> for clipboard_history_client_sdk::config::x11::Stable where U: core::convert::Into<T>

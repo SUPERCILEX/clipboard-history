@@ -22,6 +22,7 @@ rustc-hash = { version = "2.1.1", optional = true }
 rustix = { version = "1.1.3", features = ["net", "fs", "thread"] }
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 smallvec = { version = "2.0.0-alpha.12", optional = true }
+stable-type = "0.1.0"
 thiserror = "2.0.18"
 
 [dev-dependencies]
