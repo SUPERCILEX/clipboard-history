@@ -475,8 +475,7 @@ fn handle_x11_event(
             Ok(Cow::Borrowed("NONE"))
         } else {
             Ok(String::from_utf8(conn.get_atom_name(atom)?.reply()?.name)
-                .map(Cow::Owned)
-                .unwrap_or(Cow::Borrowed("INVALID")))
+                .map_or(Cow::Borrowed("INVALID"), Cow::Owned))
         }
     }
 
