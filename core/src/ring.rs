@@ -3,7 +3,6 @@ use std::{
     fmt::{Debug, Formatter},
     fs, io,
     io::ErrorKind,
-    mem::MaybeUninit,
     ops::Deref,
     os::{fd::AsFd, unix::ffi::OsStrExt},
     path::{Path, PathBuf},
@@ -12,6 +11,7 @@ use std::{
     slice,
 };
 
+use arrayvec::ArrayVec;
 use rustix::{
     fs::{AtFlags, CWD, Mode, OFlags, StatxFlags, openat, statx},
     mm::{MapFlags, MremapFlags, ProtFlags, mmap, mremap, munmap},
@@ -266,7 +266,7 @@ impl Ring {
             || unsafe { slice::from_raw_parts(mem.ptr().as_ptr(), MAGIC.len()) } != MAGIC
         {
             let path = {
-                let mut buf = [MaybeUninit::uninit(); 26];
+                let mut buf = ArrayVec::new_const();
                 fs::read_link(Path::new(OsStr::from_bytes(
                     proc_self_fd_buf(&mut buf, &fd).to_bytes(),
                 )))

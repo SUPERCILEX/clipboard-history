@@ -5,12 +5,8 @@ use std::{
     fs::File,
     io,
     io::{BorrowedBuf, BorrowedCursor, ErrorKind, Write},
-    mem,
     mem::{MaybeUninit, size_of},
-    os::{
-        fd::{AsFd, OwnedFd, RawFd},
-        unix::fs::FileExt,
-    },
+    os::fd::{AsFd, OwnedFd, RawFd},
     path::Path,
     ptr, slice,
     str::FromStr,
@@ -28,7 +24,7 @@ use rustix::{
     net::{AddressFamily, SocketAddrUnix, SocketType, bind, listen, socket},
     path::{Arg, DecInt},
     process::{
-        Pid, PidfdFlags, Signal, getpid, kill_process, pidfd_open, pidfd_send_signal,
+        Pid, PidfdFlags, RawPid, Signal, getpid, kill_process, pidfd_open, pidfd_send_signal,
         test_kill_process,
     },
 };
@@ -61,36 +57,28 @@ pub const DIRECT_FILE_NAME_LEN: usize = "1099511627776".len();
 
 pub enum LockFilePid {
     Valid(Pid),
-    Deleted,
-    UserReset,
+    Reset,
 }
 
-// 2^32 is 10 chars
-const LOCK_FILE_BUF_SIZE: usize = 10;
-
 pub fn read_lock_file_pid(lock_file: impl Copy + Debug, file: &File) -> Result<LockFilePid> {
-    let mut pid = [MaybeUninit::uninit(); LOCK_FILE_BUF_SIZE];
+    let mut pid = [MaybeUninit::uninit(); RawPid::MAX_STR_LEN];
     let mut pid = BorrowedBuf::from(pid.as_mut_slice());
     read_at_to_end(file, pid.unfilled(), 0)
         .map_io_err(|| format!("Failed to read lock file: {lock_file:?}"))?;
     let pid = pid.filled();
-
-    if pid.iter().all(|&b| b == b'.') {
-        return Ok(LockFilePid::Deleted);
-    }
 
     let pid = pid
         .as_str()
         .map_io_err(|| format!("Lock file {lock_file:?} corrupted: {pid:?}"))?
         .trim();
     if pid.is_empty() {
-        Ok(LockFilePid::UserReset)
+        Ok(LockFilePid::Reset)
     } else {
         let pid = i32::from_str(pid).map_err(|error| Error::InvalidPidError {
             error,
             context: format!("Lock file {lock_file:?} contains invalid PID: {pid:?}").into(),
         })?;
-        Ok(Pid::from_raw(pid).map_or(LockFilePid::UserReset, LockFilePid::Valid))
+        Ok(Pid::from_raw(pid).map_or(LockFilePid::Reset, LockFilePid::Valid))
     }
 }
 
@@ -161,7 +149,7 @@ pub fn acquire_lock_file<
     path: P3,
     _: A,
 ) -> Result<A::Output> {
-    let mut lock_file = File::from(
+    let mut new_lock_file = File::from(
         create_tmp_file(
             tmp_file_unsupported,
             dirfd,
@@ -174,11 +162,17 @@ pub fn acquire_lock_file<
     );
 
     let me = getpid();
-    writeln!(lock_file, "{}", me.as_raw_nonzero())
-        .map_io_err(|| "Failed to write to prepared lock file.")?;
+    {
+        let mut buf = ArrayVec::<_, { RawPid::MAX_STR_LEN + 1 }>::new_const();
+        writeln!(buf, "{}", me.as_raw_nonzero()).unwrap();
+        new_lock_file
+            .write_all(&buf)
+            .map_io_err(|| "Failed to write to prepared lock file.")?;
+    }
 
+    let mut existing_lock_file;
     loop {
-        match link_tmp_file(&lock_file, dirfd, path) {
+        match link_tmp_file(&new_lock_file, dirfd, path) {
             Err(Errno::EXIST) => {}
             r => {
                 return r
@@ -187,7 +181,7 @@ pub fn acquire_lock_file<
             }
         }
 
-        let lock_file = 'retry: {
+        existing_lock_file = 'retry: {
             let lock_file = match openat(dirfd, path, OFlags::RDWR, Mode::empty()) {
                 Err(Errno::NOENT) => break 'retry None,
                 r => r.map_io_err(|| format!("Failed to open lock file: {path:?}"))?,
@@ -198,8 +192,7 @@ pub fn acquire_lock_file<
 
             let pid = match read_lock_file_pid(path, &lock_file)? {
                 LockFilePid::Valid(pid) => pid,
-                LockFilePid::Deleted => break 'retry None,
-                LockFilePid::UserReset => break 'retry Some(lock_file),
+                LockFilePid::Reset => break 'retry Some(lock_file),
             };
 
             if pid == me {
@@ -214,7 +207,7 @@ pub fn acquire_lock_file<
                     };
 
                     match pidfd_send_signal(&fd, Signal::QUIT) {
-                        Err(Errno::SRCH) => break 'retry None,
+                        Err(Errno::SRCH) => break 'retry Some(lock_file),
                         r => r.map_io_err(|| {
                             format!("Failed to send quit to lock file {path:?} owner: {pid:?}")
                         })?,
@@ -230,7 +223,7 @@ pub fn acquire_lock_file<
                             context: "Failed to receive PID poll response.".into(),
                         });
                     }
-                    None
+                    Some(lock_file)
                 }
                 LockAlreadyOwnedActionKind::SendKillAndTakeover => {
                     match kill_process(pid, Signal::TERM) {
@@ -256,14 +249,33 @@ pub fn acquire_lock_file<
             }
         };
 
-        if let Some(lock_file) = lock_file {
+        if let Some(lock_file) = &existing_lock_file {
             lock_file
-                .write_all_at(&[b'.'; LOCK_FILE_BUF_SIZE], 0)
-                .map_io_err(|| {
-                    format!("Failed to write deletion pattern to previous lock file: {path:?}")
-                })?;
-            unlinkat(dirfd, path, AtFlags::empty())
-                .map_io_err(|| format!("Failed to remove previous lock file: {path:?}"))?;
+                .set_len(0)
+                .map_io_err(|| format!("Failed to truncate previous lock file: {path:?}"))?;
+
+            match statx(dirfd, path, AtFlags::empty(), StatxFlags::INO) {
+                Err(Errno::NOENT) => (),
+                Ok(actual) => {
+                    let actual = actual.stx_ino;
+                    let expected = statx(lock_file, c"", AtFlags::EMPTY_PATH, StatxFlags::INO)
+                        .map_io_err(|| format!("Failed to statx open lock file: {path:?}"))?
+                        .stx_ino;
+                    if expected == actual {
+                        match unlinkat(dirfd, path, AtFlags::empty()) {
+                            Err(Errno::NOENT) => (),
+                            r => {
+                                r.map_io_err(|| {
+                                    format!("Failed to remove previous lock file: {path:?}")
+                                })?;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(e).map_io_err(|| format!("Failed to statx lock file: {path:?}"));
+                }
+            }
         }
     }
 }
@@ -271,27 +283,17 @@ pub fn acquire_lock_file<
 const PROC_SELF_FD_BUF_LEN: usize = "/proc/self/fd/".len() + RawFd::MAX_STR_LEN + 1;
 
 #[inline]
-#[allow(clippy::transmute_ptr_to_ptr)]
 pub fn proc_self_fd_buf<'a, Fd: AsFd>(
-    buf: &'a mut [MaybeUninit<u8>; PROC_SELF_FD_BUF_LEN],
+    buf: &'a mut ArrayVec<u8, PROC_SELF_FD_BUF_LEN>,
     fd: &Fd,
 ) -> &'a CStr {
-    let (header, fd_buf) = buf.split_at_mut("/proc/self/fd/".len());
-
-    header
-        .copy_from_slice(unsafe { mem::transmute::<&[u8], &[MaybeUninit<u8>]>(b"/proc/self/fd/") });
+    buf.try_extend_from_slice(b"/proc/self/fd/").unwrap();
 
     let fd_bytes = DecInt::from_fd(fd);
     let fd_bytes = fd_bytes.as_bytes_with_nul();
-    fd_buf[..fd_bytes.len()]
-        .copy_from_slice(unsafe { mem::transmute::<&[u8], &[MaybeUninit<u8>]>(fd_bytes) });
+    buf.try_extend_from_slice(fd_bytes).unwrap();
 
-    let len = header.len() + fd_bytes.len();
-    unsafe {
-        CStr::from_bytes_with_nul_unchecked(mem::transmute::<&[MaybeUninit<u8>], &[u8]>(
-            &buf[..len],
-        ))
-    }
+    unsafe { CStr::from_bytes_with_nul_unchecked(buf) }
 }
 
 pub fn link_tmp_file<Fd: AsFd, DirFd: AsFd, P: Arg>(
@@ -299,7 +301,7 @@ pub fn link_tmp_file<Fd: AsFd, DirFd: AsFd, P: Arg>(
     dirfd: DirFd,
     path: P,
 ) -> rustix::io::Result<()> {
-    let mut buf = [MaybeUninit::uninit(); PROC_SELF_FD_BUF_LEN];
+    let mut buf = ArrayVec::new_const();
     linkat(
         CWD,
         proc_self_fd_buf(&mut buf, &tmp_file),

@@ -36,7 +36,7 @@ pub fn maybe_open_existing_instance_and_exit() -> Result<(), CoreError> {
     };
     let existing_instance = match read_lock_file_pid(&path, &sleep_file)? {
         LockFilePid::Valid(pid) => pid,
-        LockFilePid::Deleted | LockFilePid::UserReset => return Ok(()),
+        LockFilePid::Reset => return Ok(()),
     };
     match test_kill_process(existing_instance) {
         Err(Errno::SRCH) => return Ok(()),
