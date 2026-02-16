@@ -19,6 +19,7 @@ impl core::marker::Freeze for clipboard_history_core::protocol::AddResponse
 impl core::marker::Send for clipboard_history_core::protocol::AddResponse
 impl core::marker::Sync for clipboard_history_core::protocol::AddResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::AddResponse
+impl core::marker::UnsafeUnpin for clipboard_history_core::protocol::AddResponse
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::AddResponse
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::AddResponse
 impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::AddResponse where U: core::convert::From<T>
@@ -61,6 +62,7 @@ impl core::marker::Freeze for clipboard_history_core::protocol::IdNotFoundError
 impl core::marker::Send for clipboard_history_core::protocol::IdNotFoundError
 impl core::marker::Sync for clipboard_history_core::protocol::IdNotFoundError
 impl core::marker::Unpin for clipboard_history_core::protocol::IdNotFoundError
+impl core::marker::UnsafeUnpin for clipboard_history_core::protocol::IdNotFoundError
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::IdNotFoundError
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::IdNotFoundError
 impl<C> error_stack::context::Context for clipboard_history_core::protocol::IdNotFoundError where C: core::error::Error + core::marker::Send + core::marker::Sync + 'static
@@ -108,6 +110,7 @@ impl core::marker::Freeze for clipboard_history_core::protocol::MoveToFrontRespo
 impl core::marker::Send for clipboard_history_core::protocol::MoveToFrontResponse
 impl core::marker::Sync for clipboard_history_core::protocol::MoveToFrontResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::MoveToFrontResponse
+impl core::marker::UnsafeUnpin for clipboard_history_core::protocol::MoveToFrontResponse
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::MoveToFrontResponse
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::MoveToFrontResponse
 impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::MoveToFrontResponse where U: core::convert::From<T>
@@ -157,6 +160,7 @@ impl core::marker::Freeze for clipboard_history_core::protocol::Request
 impl core::marker::Send for clipboard_history_core::protocol::Request
 impl core::marker::Sync for clipboard_history_core::protocol::Request
 impl core::marker::Unpin for clipboard_history_core::protocol::Request
+impl core::marker::UnsafeUnpin for clipboard_history_core::protocol::Request
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::Request
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::Request
 impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::Request where U: core::convert::From<T>
@@ -206,6 +210,7 @@ impl core::marker::Freeze for clipboard_history_core::protocol::RingKind
 impl core::marker::Send for clipboard_history_core::protocol::RingKind
 impl core::marker::Sync for clipboard_history_core::protocol::RingKind
 impl core::marker::Unpin for clipboard_history_core::protocol::RingKind
+impl core::marker::UnsafeUnpin for clipboard_history_core::protocol::RingKind
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::RingKind
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::RingKind
 impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::RingKind where U: core::convert::From<T>
@@ -243,6 +248,7 @@ impl core::marker::Freeze for clipboard_history_core::protocol::GarbageCollectRe
 impl core::marker::Send for clipboard_history_core::protocol::GarbageCollectResponse
 impl core::marker::Sync for clipboard_history_core::protocol::GarbageCollectResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::GarbageCollectResponse
+impl core::marker::UnsafeUnpin for clipboard_history_core::protocol::GarbageCollectResponse
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::GarbageCollectResponse
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::GarbageCollectResponse
 impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::GarbageCollectResponse where U: core::convert::From<T>
@@ -280,6 +286,7 @@ impl core::marker::Freeze for clipboard_history_core::protocol::RemoveResponse
 impl core::marker::Send for clipboard_history_core::protocol::RemoveResponse
 impl core::marker::Sync for clipboard_history_core::protocol::RemoveResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::RemoveResponse
+impl core::marker::UnsafeUnpin for clipboard_history_core::protocol::RemoveResponse
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::RemoveResponse
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::RemoveResponse
 impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::RemoveResponse where U: core::convert::From<T>
@@ -315,6 +322,7 @@ impl<T> core::marker::Freeze for clipboard_history_core::protocol::Response<T> w
 impl<T> core::marker::Send for clipboard_history_core::protocol::Response<T> where T: core::marker::Send
 impl<T> core::marker::Sync for clipboard_history_core::protocol::Response<T> where T: core::marker::Sync
 impl<T> core::marker::Unpin for clipboard_history_core::protocol::Response<T> where T: core::marker::Unpin
+impl<T> core::marker::UnsafeUnpin for clipboard_history_core::protocol::Response<T> where T: core::marker::UnsafeUnpin
 impl<T> core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::Response<T> where T: core::panic::unwind_safe::RefUnwindSafe
 impl<T> core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::Response<T> where T: core::panic::unwind_safe::UnwindSafe
 impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::Response<T> where U: core::convert::From<T>
@@ -353,6 +361,7 @@ impl core::marker::Freeze for clipboard_history_core::protocol::SwapResponse
 impl core::marker::Send for clipboard_history_core::protocol::SwapResponse
 impl core::marker::Sync for clipboard_history_core::protocol::SwapResponse
 impl core::marker::Unpin for clipboard_history_core::protocol::SwapResponse
+impl core::marker::UnsafeUnpin for clipboard_history_core::protocol::SwapResponse
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::protocol::SwapResponse
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::protocol::SwapResponse
 impl<T, U> core::convert::Into<U> for clipboard_history_core::protocol::SwapResponse where U: core::convert::From<T>
@@ -406,6 +415,7 @@ impl core::marker::Freeze for clipboard_history_core::ring::Entry
 impl core::marker::Send for clipboard_history_core::ring::Entry
 impl core::marker::Sync for clipboard_history_core::ring::Entry
 impl core::marker::Unpin for clipboard_history_core::ring::Entry
+impl core::marker::UnsafeUnpin for clipboard_history_core::ring::Entry
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::Entry
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::Entry
 impl<T, U> core::convert::Into<U> for clipboard_history_core::ring::Entry where U: core::convert::From<T>
@@ -441,6 +451,7 @@ impl core::marker::Freeze for clipboard_history_core::ring::Header
 impl core::marker::Send for clipboard_history_core::ring::Header
 impl core::marker::Sync for clipboard_history_core::ring::Header
 impl core::marker::Unpin for clipboard_history_core::ring::Header
+impl core::marker::UnsafeUnpin for clipboard_history_core::ring::Header
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::Header
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::Header
 impl<T, U> core::convert::Into<U> for clipboard_history_core::ring::Header where U: core::convert::From<T>
@@ -482,6 +493,7 @@ impl core::marker::Freeze for clipboard_history_core::ring::InitializedEntry
 impl core::marker::Send for clipboard_history_core::ring::InitializedEntry
 impl core::marker::Sync for clipboard_history_core::ring::InitializedEntry
 impl core::marker::Unpin for clipboard_history_core::ring::InitializedEntry
+impl core::marker::UnsafeUnpin for clipboard_history_core::ring::InitializedEntry
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::InitializedEntry
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::InitializedEntry
 impl<T, U> core::convert::Into<U> for clipboard_history_core::ring::InitializedEntry where U: core::convert::From<T>
@@ -528,6 +540,7 @@ impl core::ops::drop::Drop for clipboard_history_core::ring::Mmap
 pub fn clipboard_history_core::ring::Mmap::drop(&mut self)
 impl core::marker::Freeze for clipboard_history_core::ring::Mmap
 impl core::marker::Unpin for clipboard_history_core::ring::Mmap
+impl core::marker::UnsafeUnpin for clipboard_history_core::ring::Mmap
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::Mmap
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::Mmap
 impl<P, T> core::ops::deref::Receiver for clipboard_history_core::ring::Mmap where P: core::ops::deref::Deref<Target = T> + ?core::marker::Sized, T: ?core::marker::Sized
@@ -561,6 +574,7 @@ impl core::marker::Freeze for clipboard_history_core::ring::RawEntry
 impl core::marker::Send for clipboard_history_core::ring::RawEntry
 impl core::marker::Sync for clipboard_history_core::ring::RawEntry
 impl core::marker::Unpin for clipboard_history_core::ring::RawEntry
+impl core::marker::UnsafeUnpin for clipboard_history_core::ring::RawEntry
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::RawEntry
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::RawEntry
 impl<P, T> core::ops::deref::Receiver for clipboard_history_core::ring::RawEntry where P: core::ops::deref::Deref<Target = T> + ?core::marker::Sized, T: ?core::marker::Sized
@@ -601,6 +615,7 @@ impl core::marker::Freeze for clipboard_history_core::ring::Ring
 impl core::marker::Send for clipboard_history_core::ring::Ring
 impl core::marker::Sync for clipboard_history_core::ring::Ring
 impl core::marker::Unpin for clipboard_history_core::ring::Ring
+impl core::marker::UnsafeUnpin for clipboard_history_core::ring::Ring
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::ring::Ring
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::ring::Ring
 impl<T, U> core::convert::Into<U> for clipboard_history_core::ring::Ring where U: core::convert::From<T>
@@ -647,6 +662,7 @@ impl core::marker::Freeze for clipboard_history_core::Error
 impl core::marker::Send for clipboard_history_core::Error
 impl core::marker::Sync for clipboard_history_core::Error
 impl core::marker::Unpin for clipboard_history_core::Error
+impl core::marker::UnsafeUnpin for clipboard_history_core::Error
 impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::Error
 impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_core::Error
 impl<C> error_stack::context::Context for clipboard_history_core::Error where C: core::error::Error + core::marker::Send + core::marker::Sync + 'static
@@ -681,6 +697,7 @@ impl core::marker::Freeze for clipboard_history_core::LockFilePid
 impl core::marker::Send for clipboard_history_core::LockFilePid
 impl core::marker::Sync for clipboard_history_core::LockFilePid
 impl core::marker::Unpin for clipboard_history_core::LockFilePid
+impl core::marker::UnsafeUnpin for clipboard_history_core::LockFilePid
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::LockFilePid
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::LockFilePid
 impl<T, U> core::convert::Into<U> for clipboard_history_core::LockFilePid where U: core::convert::From<T>
@@ -724,6 +741,7 @@ impl core::marker::Freeze for clipboard_history_core::BucketAndIndex
 impl core::marker::Send for clipboard_history_core::BucketAndIndex
 impl core::marker::Sync for clipboard_history_core::BucketAndIndex
 impl core::marker::Unpin for clipboard_history_core::BucketAndIndex
+impl core::marker::UnsafeUnpin for clipboard_history_core::BucketAndIndex
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::BucketAndIndex
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::BucketAndIndex
 impl<T, U> core::convert::Into<U> for clipboard_history_core::BucketAndIndex where U: core::convert::From<T>
@@ -754,6 +772,7 @@ impl core::marker::Freeze for clipboard_history_core::LeaveBe
 impl core::marker::Send for clipboard_history_core::LeaveBe
 impl core::marker::Sync for clipboard_history_core::LeaveBe
 impl core::marker::Unpin for clipboard_history_core::LeaveBe
+impl core::marker::UnsafeUnpin for clipboard_history_core::LeaveBe
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::LeaveBe
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::LeaveBe
 impl<T, U> core::convert::Into<U> for clipboard_history_core::LeaveBe where U: core::convert::From<T>
@@ -791,6 +810,7 @@ impl<'a> core::marker::Freeze for clipboard_history_core::PathView<'a>
 impl<'a> core::marker::Send for clipboard_history_core::PathView<'a>
 impl<'a> core::marker::Sync for clipboard_history_core::PathView<'a>
 impl<'a> core::marker::Unpin for clipboard_history_core::PathView<'a>
+impl<'a> core::marker::UnsafeUnpin for clipboard_history_core::PathView<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::PathView<'a>
 impl<'a> !core::panic::unwind_safe::UnwindSafe for clipboard_history_core::PathView<'a>
 impl<P, T> core::ops::deref::Receiver for clipboard_history_core::PathView<'a> where P: core::ops::deref::Deref<Target = T> + ?core::marker::Sized, T: ?core::marker::Sized
@@ -838,6 +858,7 @@ impl core::marker::Freeze for clipboard_history_core::RingAndIndex
 impl core::marker::Send for clipboard_history_core::RingAndIndex
 impl core::marker::Sync for clipboard_history_core::RingAndIndex
 impl core::marker::Unpin for clipboard_history_core::RingAndIndex
+impl core::marker::UnsafeUnpin for clipboard_history_core::RingAndIndex
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::RingAndIndex
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::RingAndIndex
 impl<T, U> core::convert::Into<U> for clipboard_history_core::RingAndIndex where U: core::convert::From<T>
@@ -868,6 +889,7 @@ impl core::marker::Freeze for clipboard_history_core::SendKillAndTakeover
 impl core::marker::Send for clipboard_history_core::SendKillAndTakeover
 impl core::marker::Sync for clipboard_history_core::SendKillAndTakeover
 impl core::marker::Unpin for clipboard_history_core::SendKillAndTakeover
+impl core::marker::UnsafeUnpin for clipboard_history_core::SendKillAndTakeover
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::SendKillAndTakeover
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::SendKillAndTakeover
 impl<T, U> core::convert::Into<U> for clipboard_history_core::SendKillAndTakeover where U: core::convert::From<T>
@@ -892,6 +914,7 @@ impl core::marker::Freeze for clipboard_history_core::SendQuitAndWait
 impl core::marker::Send for clipboard_history_core::SendQuitAndWait
 impl core::marker::Sync for clipboard_history_core::SendQuitAndWait
 impl core::marker::Unpin for clipboard_history_core::SendQuitAndWait
+impl core::marker::UnsafeUnpin for clipboard_history_core::SendQuitAndWait
 impl core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::SendQuitAndWait
 impl core::panic::unwind_safe::UnwindSafe for clipboard_history_core::SendQuitAndWait
 impl<T, U> core::convert::Into<U> for clipboard_history_core::SendQuitAndWait where U: core::convert::From<T>
@@ -929,6 +952,7 @@ impl<'a> core::marker::Freeze for clipboard_history_core::StringView<'a>
 impl<'a> core::marker::Send for clipboard_history_core::StringView<'a>
 impl<'a> core::marker::Sync for clipboard_history_core::StringView<'a>
 impl<'a> core::marker::Unpin for clipboard_history_core::StringView<'a>
+impl<'a> core::marker::UnsafeUnpin for clipboard_history_core::StringView<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for clipboard_history_core::StringView<'a>
 impl<'a> !core::panic::unwind_safe::UnwindSafe for clipboard_history_core::StringView<'a>
 impl<P, T> core::ops::deref::Receiver for clipboard_history_core::StringView<'a> where P: core::ops::deref::Deref<Target = T> + ?core::marker::Sized, T: ?core::marker::Sized

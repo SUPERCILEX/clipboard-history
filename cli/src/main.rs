@@ -28,14 +28,11 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_num::si_number;
 use error_stack::Report;
 use rand::{
-    Rng, TryRngCore,
+    Rng, RngExt, RngReader,
     distr::{Alphanumeric, SampleString, StandardUniform},
 };
 use rand_distr::{Distribution, LogNormal, weighted::WeightedAliasIndex};
-use rand_xoshiro::{
-    Xoshiro256PlusPlus,
-    rand_core::{RngCore, SeedableRng},
-};
+use rand_xoshiro::{Xoshiro256PlusPlus, rand_core::SeedableRng};
 use regex::bytes::Regex;
 use ringboard_sdk::{
     ClientError, DatabaseReader, EntryReader, Kind,
@@ -1657,7 +1654,7 @@ fn generate(
     }: Generate,
 ) -> Result<(), CliError> {
     fn generate_random_entry_file(
-        rng: &mut (impl RngCore + 'static),
+        rng: &mut (impl Rng + 'static),
         len_distr: LogNormal<f64>,
     ) -> Result<File, CliError> {
         let mut file = File::from(
@@ -1667,7 +1664,7 @@ fn generate(
 
         #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
         let len = len_distr.sample(rng).round().max(1.) as u64;
-        let result = io::copy(&mut rng.read_adapter().take(len), &mut file)
+        let result = io::copy(&mut RngReader(rng).take(len), &mut file)
             .map_io_err(|| "Failed to write bytes to entry file.")?;
         debug_assert_eq!(len, result);
         file.seek(SeekFrom::Start(0))

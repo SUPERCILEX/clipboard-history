@@ -121,6 +121,7 @@ struct SearchState {
     kind: SearchKind,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum ImageState {
     Requested(u64),
     Loaded(StatefulProtocol),
