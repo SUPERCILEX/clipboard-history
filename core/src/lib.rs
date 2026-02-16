@@ -38,9 +38,12 @@ pub trait IoErr<Out> {
 
 impl<T> IoErr<Result<T>> for std::result::Result<T, io::Error> {
     fn map_io_err<I: Into<Cow<'static, str>>>(self, context: impl FnOnce() -> I) -> Result<T> {
-        self.map_err(|error| Error::Io {
-            error,
-            context: context().into(),
+        self.map_err(|error| {
+            std::hint::cold_path();
+            Error::Io {
+                error,
+                context: context().into(),
+            }
         })
     }
 }
