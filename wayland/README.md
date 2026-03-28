@@ -7,4 +7,6 @@ the Wayland and Ringboard servers and uses the `ext_data_control_v1` protocol to
 clipboard for new clipboard selections to send to the Ringboard server.
 
 Additionally, it offers a paste server capable of becoming the Wayland selection owner for clients
-to call. Implementation notes are similar to the [X11 watcher](../x11).
+to call. Auto-paste uses a Ringboard-owned virtual keyboard with a dedicated keymap for the paste
+shortcut instead of mirroring the seat keymap. Implementation notes are similar to the [X11
+watcher](../x11).

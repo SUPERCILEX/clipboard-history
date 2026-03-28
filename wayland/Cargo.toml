@@ -27,6 +27,9 @@ wayland-protocols-misc = { version = "0.3.12", features = ["client"] }
 default = ["human-logs"]
 human-logs = ["env_logger/default"]
 
+[dev-dependencies]
+xkbcommon = { version = "0.9.0", default-features = false }
+
 [[bin]]
 name = "ringboard-wayland"
 path = "src/main.rs"
