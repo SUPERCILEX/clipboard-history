@@ -101,6 +101,12 @@ enum Cmd {
     #[command(aliases = ["g", "at", "gimme"])]
     Get(EntryAction),
 
+    /// Get an entry from the database by position (rather than by ID in [get]).
+    ///
+    /// The entry bytes will be outputted to stdout.
+    #[command(aliases = ["l", "paste"])]
+    Last(Last),
+
     /// Searches the Ringboard database for entries matching a query.
     #[command(aliases = ["f", "find", "query"])]
     Search(Search),
@@ -244,6 +250,24 @@ enum Dev {
 
     /// Spam the server with random commands.
     Fuzz(Fuzz),
+}
+
+#[derive(Args, Debug)]
+struct Last {
+    /// The entry position.
+    ///
+    /// Zero (the default) retrieves the last entry added to the clipboard.
+    /// Positive integers go further into the past as they increase whereas
+    /// negative numbers go towards the present as they decrease (where -1 is
+    /// the oldest entry).
+    #[clap(default_value_t = 0)]
+    #[arg(allow_hyphen_values = true)]
+    n: isize,
+
+    /// Retrieve entries from the favorites ring.
+    #[clap(short, long)]
+    #[clap(default_value_t = false)]
+    favorite: bool,
 }
 
 #[derive(Args, Debug)]
@@ -412,6 +436,8 @@ struct Fuzz {
 enum CliError {
     #[error("{0}")]
     Core(#[from] CoreError),
+    #[error("invalid entry position")]
+    InvalidEntryPosition(isize),
     #[error("{0}")]
     Sdk(#[from] ClientError),
     #[error("failed to delete or copy files")]
@@ -448,6 +474,8 @@ fn main() -> Result<(), Report<Wrapper>> {
         let wrapper = Wrapper::W(e.to_string());
         match e {
             CliError::Core(e) => e.into_report(wrapper),
+            CliError::InvalidEntryPosition(n) => Report::new(wrapper)
+                .attach(format!("Position out of bounds: {n}")),
             CliError::Fuc(fuc_engine::Error::Io { error, context }) => Report::new(error)
                 .attach(context)
                 .change_context(wrapper),
@@ -487,6 +515,7 @@ fn run() -> Result<(), CliError> {
     };
     match cmd {
         Cmd::Get(data) => get(data),
+        Cmd::Last(data) => last(data),
         Cmd::Search(data) => search(data),
         Cmd::Add(data) => add(connect_to_server(&server_addr)?, data),
         Cmd::Favorite(data) => move_to_front(
@@ -531,6 +560,27 @@ fn open_db() -> Result<(DatabaseReader, EntryReader), CliError> {
 fn get(EntryAction { id }: EntryAction) -> Result<(), CliError> {
     let (database, mut reader) = open_db()?;
     let entry = database.get_raw(id)?;
+    io::copy(&mut *entry.to_file(&mut reader)?, &mut io::stdout().lock())
+        .map_io_err(|| "Failed to write entry to stdout")?;
+    Ok(())
+}
+
+fn last(Last { n, favorite }: Last) -> Result<(), CliError> {
+    let (database, mut reader) = open_db()?;
+    let mut iter = if favorite {
+        database.favorites()
+    } else {
+        database.main()
+    };
+    let entry = if n >= 0 {
+        iter.nth_back(n.unsigned_abs())
+    } else {
+        iter.nth(n.unsigned_abs() - 1)
+    };
+    let Some(entry) = entry else {
+        return Err(CliError::InvalidEntryPosition(n));
+    };
+
     io::copy(&mut *entry.to_file(&mut reader)?, &mut io::stdout().lock())
         .map_io_err(|| "Failed to write entry to stdout")?;
     Ok(())

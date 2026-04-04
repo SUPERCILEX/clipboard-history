@@ -4,6 +4,7 @@ Usage: clipboard-history <COMMAND>
 
 Commands:
   get              Get an entry from the database
+  last             Get an entry from the database by position (rather than by ID in [get])
   search           Searches the Ringboard database for entries matching a query
   add              Add an entry to the database
   favorite         Favorite an entry
@@ -33,6 +34,19 @@ Arguments:
 
 Options:
   -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Get an entry from the database by position (rather than by ID in [get])
+
+Usage: clipboard-history last [OPTIONS] [N]
+
+Arguments:
+  [N]  The entry position [default: 0]
+
+Options:
+  -f, --favorite  Retrieve entries from the favorites ring
+  -h, --help      Print help (use `--help` for more detail)
 
 ---
 
