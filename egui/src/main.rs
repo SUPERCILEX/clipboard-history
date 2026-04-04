@@ -131,6 +131,8 @@ fn main() -> Result<(), eframe::Error> {
                 }
             });
 
+            let daemon = env::var_os("RINGBOARD_NO_DAEMON").is_none();
+
             thread::spawn({
                 let ctx = cc.egui_ctx.clone();
                 let stop = stop.clone();
@@ -141,10 +143,12 @@ fn main() -> Result<(), eframe::Error> {
                             .into(),
                     )));
 
-                    if let Err(e) = maintain_single_instance(&stop, || {
-                        ctx.send_viewport_cmd(ViewportCommand::Visible(true));
-                        ctx.send_viewport_cmd(ViewportCommand::Focus);
-                    }) {
+                    if daemon
+                        && let Err(e) = maintain_single_instance(&stop, || {
+                            ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+                            ctx.send_viewport_cmd(ViewportCommand::Focus);
+                        })
+                    {
                         let _ = response_sender.send(Message::Error(e.into()));
                     }
                 }
@@ -154,7 +158,11 @@ fn main() -> Result<(), eframe::Error> {
                 cc.egui_ctx.set_theme(ThemePreference::Light);
             }
 
-            Ok(Box::new(App::start(command_sender, response_receiver)))
+            Ok(Box::new(App::start(
+                command_sender,
+                response_receiver,
+                daemon,
+            )))
         }),
     );
 
@@ -234,7 +242,7 @@ impl Default for UriBuf {
 }
 
 impl App {
-    fn start(requests: Sender<Command>, responses: Receiver<Message>) -> Self {
+    fn start(requests: Sender<Command>, responses: Receiver<Message>, daemon: bool) -> Self {
         let mut state = State::default();
         state.ui.skip_first_focus = true;
         Self {
@@ -248,7 +256,7 @@ impl App {
                     option_env!("XDG_CURRENT_DESKTOP")
                         .is_none_or(|de| !de.eq_ignore_ascii_case("i3"))
                 }
-                && env::var_os("RINGBOARD_NO_DAEMON").is_none(),
+                && daemon,
         }
     }
 }
