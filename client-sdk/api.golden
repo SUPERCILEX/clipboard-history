@@ -866,8 +866,6 @@ impl core::marker::Unpin for clipboard_history_client_sdk::ui_actor::CommandErro
 impl core::marker::UnsafeUnpin for clipboard_history_client_sdk::ui_actor::CommandError
 impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ui_actor::CommandError
 impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ui_actor::CommandError
-impl<C> error_stack::context::Context for clipboard_history_client_sdk::ui_actor::CommandError where C: core::error::Error + core::marker::Send + core::marker::Sync + 'static
-pub fn clipboard_history_client_sdk::ui_actor::CommandError::provide<'a>(&'a self, request: &mut core::error::Request<'a>)
 impl<E> error_stack::report::IntoReport for clipboard_history_client_sdk::ui_actor::CommandError where E: core::convert::Into<error_stack::report::Report<E>>
 pub type clipboard_history_client_sdk::ui_actor::CommandError::Context = E
 pub fn clipboard_history_client_sdk::ui_actor::CommandError::into_report(self) -> error_stack::report::Report<<E as error_stack::report::IntoReport>::Context>
@@ -1290,8 +1288,6 @@ impl core::marker::Unpin for clipboard_history_client_sdk::ClientError
 impl core::marker::UnsafeUnpin for clipboard_history_client_sdk::ClientError
 impl !core::panic::unwind_safe::RefUnwindSafe for clipboard_history_client_sdk::ClientError
 impl !core::panic::unwind_safe::UnwindSafe for clipboard_history_client_sdk::ClientError
-impl<C> error_stack::context::Context for clipboard_history_client_sdk::ClientError where C: core::error::Error + core::marker::Send + core::marker::Sync + 'static
-pub fn clipboard_history_client_sdk::ClientError::provide<'a>(&'a self, request: &mut core::error::Request<'a>)
 impl<E> error_stack::report::IntoReport for clipboard_history_client_sdk::ClientError where E: core::convert::Into<error_stack::report::Report<E>>
 pub type clipboard_history_client_sdk::ClientError::Context = E
 pub fn clipboard_history_client_sdk::ClientError::into_report(self) -> error_stack::report::Report<<E as error_stack::report::IntoReport>::Context>

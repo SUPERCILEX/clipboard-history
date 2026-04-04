@@ -1,4 +1,4 @@
-#![feature(debug_closure_helpers, core_io_borrowed_buf)]
+#![feature(core_io_borrowed_buf)]
 
 use std::{
     borrow::Cow,

@@ -232,7 +232,7 @@ pub fn run(allocator: &mut Allocator) -> Result<(), CliError> {
         setup_uring()?;
 
     #[cfg(feature = "systemd")]
-    sd_notify::notify(false, &[sd_notify::NotifyState::Ready])
+    sd_notify::notify(&[sd_notify::NotifyState::Ready])
         .map_io_err(|| "Failed to notify systemd of startup completion.")?;
 
     let accept = AcceptMulti::new(Fixed(accept_fd))

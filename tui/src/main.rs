@@ -469,156 +469,153 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
         Event::Key(KeyEvent {
             code,
             modifiers,
-            kind,
+            kind: KeyEventKind::Press,
             state: _,
         }) => {
-            if kind == KeyEventKind::Press {
-                use ratatui::crossterm::event::KeyCode::{Char, Down, Enter, Esc, Left, Right, Up};
-                match code {
-                    Esc => {
-                        if let Some(SearchState { focused, .. }) = &mut ui.search_state
-                            && *focused
-                        {
-                            *focused = false;
-                        } else if ui.details_requested.is_some() {
-                            unselect(ui);
-                        } else if ui.search_state.is_some() {
-                            ui.search_state = None;
-                            ui.query = Input::default();
-                        } else {
-                            return true;
-                        }
+            use ratatui::crossterm::event::KeyCode::{Char, Down, Enter, Esc, Left, Right, Up};
+            match code {
+                Esc => {
+                    if let Some(SearchState { focused, .. }) = &mut ui.search_state
+                        && *focused
+                    {
+                        *focused = false;
+                    } else if ui.details_requested.is_some() {
+                        unselect(ui);
+                    } else if ui.search_state.is_some() {
+                        ui.search_state = None;
+                        ui.query = Input::default();
+                    } else {
+                        return true;
                     }
-                    Enter => {
-                        if let Some(SearchState { focused, .. }) = &mut ui.search_state
-                            && *focused
-                        {
-                            *focused = false;
-                        } else if let Some(&UiEntry { entry, cache: _ }) =
-                            selected_entry!(entries, ui)
+                }
+                Enter => {
+                    if let Some(SearchState { focused, .. }) = &mut ui.search_state
+                        && *focused
+                    {
+                        *focused = false;
+                    } else if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
+                    {
+                        let _ = requests.send(Command::Paste(entry.id()));
+                    }
+                }
+                _ => {}
+            }
+
+            if let &mut Some(SearchState {
+                ref mut focused,
+                kind,
+            }) = &mut ui.search_state
+                && *focused
+            {
+                let changed = ui
+                    .query
+                    .handle_event(event)
+                    .is_some_and(|changed| changed.value);
+                if changed {
+                    search(ui, kind);
+                } else if code == Up || code == Down {
+                    *focused = false;
+                }
+            } else {
+                match code {
+                    Char('q') => return true,
+                    Char('c') if modifiers == KeyModifiers::CONTROL => return true,
+                    Char(c @ '0'..='9') => {
+                        if let Some(UiEntry { entry, cache: _ }) = active_entries!(entries, ui)
+                            .get(usize::try_from(u32::from(c) - u32::from('0')).unwrap())
                         {
                             let _ = requests.send(Command::Paste(entry.id()));
                         }
                     }
-                    _ => {}
-                }
-
-                if let &mut Some(SearchState {
-                    ref mut focused,
-                    kind,
-                }) = &mut ui.search_state
-                    && *focused
-                {
-                    let changed = ui
-                        .query
-                        .handle_event(event)
-                        .is_some_and(|changed| changed.value);
-                    if changed {
+                    Char('h') | Left => unselect(ui),
+                    Char('j') | Down => {
+                        let state = active_list_state!(entries, ui);
+                        let len = active_entries!(entries, ui).len();
+                        let next = state
+                            .selected()
+                            .map_or(0, |i| if i + 1 == len { 0 } else { i + 1 });
+                        state.select(Some(next.min(len)));
+                    }
+                    Char('J') => {
+                        if let Some(detail_scroll) = &mut ui.detail_scroll {
+                            detail_scroll.next();
+                        }
+                    }
+                    Char('k') | Up => {
+                        let state = active_list_state!(entries, ui);
+                        let len = active_entries!(entries, ui).len();
+                        let previous = state.selected().map_or(usize::MAX, |i| {
+                            if i == 0 { len.wrapping_sub(1) } else { i - 1 }
+                        });
+                        if let Some(SearchState { focused, .. }) = &mut ui.search_state
+                            && Some(previous) > state.selected()
+                        {
+                            *focused = true;
+                        } else {
+                            state.select(Some(previous.min(len)));
+                        }
+                    }
+                    Char('K') => {
+                        if let Some(detail_scroll) = &mut ui.detail_scroll {
+                            detail_scroll.prev();
+                        }
+                    }
+                    Char('l') | Right => maybe_get_details(entries, ui, requests),
+                    Char(' ') => {
+                        if ui.details_requested.is_some() {
+                            unselect(ui);
+                        } else {
+                            maybe_get_details(entries, ui, requests);
+                        }
+                    }
+                    Char(c @ ('/' | 's' | 'x' | 'm')) => {
+                        let kind = match c {
+                            'x' => SearchKind::Regex,
+                            'm' => SearchKind::Mime,
+                            _ => SearchKind::Plain,
+                        };
+                        ui.search_state = Some(SearchState {
+                            focused: true,
+                            kind,
+                        });
                         search(ui, kind);
-                    } else if code == Up || code == Down {
-                        *focused = false;
                     }
-                } else {
-                    match code {
-                        Char('q') => return true,
-                        Char('c') if modifiers == KeyModifiers::CONTROL => return true,
-                        Char(c @ '0'..='9') => {
-                            if let Some(UiEntry { entry, cache: _ }) = active_entries!(entries, ui)
-                                .get(usize::try_from(u32::from(c) - u32::from('0')).unwrap())
-                            {
-                                let _ = requests.send(Command::Paste(entry.id()));
-                            }
-                        }
-                        Char('h') | Left => unselect(ui),
-                        Char('j') | Down => {
-                            let state = active_list_state!(entries, ui);
-                            let len = active_entries!(entries, ui).len();
-                            let next = state
-                                .selected()
-                                .map_or(0, |i| if i + 1 == len { 0 } else { i + 1 });
-                            state.select(Some(next.min(len)));
-                        }
-                        Char('J') => {
-                            if let Some(detail_scroll) = &mut ui.detail_scroll {
-                                detail_scroll.next();
-                            }
-                        }
-                        Char('k') | Up => {
-                            let state = active_list_state!(entries, ui);
-                            let len = active_entries!(entries, ui).len();
-                            let previous = state.selected().map_or(usize::MAX, |i| {
-                                if i == 0 { len.wrapping_sub(1) } else { i - 1 }
-                            });
-                            if let Some(SearchState { focused, .. }) = &mut ui.search_state
-                                && Some(previous) > state.selected()
-                            {
-                                *focused = true;
-                            } else {
-                                state.select(Some(previous.min(len)));
-                            }
-                        }
-                        Char('K') => {
-                            if let Some(detail_scroll) = &mut ui.detail_scroll {
-                                detail_scroll.prev();
-                            }
-                        }
-                        Char('l') | Right => maybe_get_details(entries, ui, requests),
-                        Char(' ') => {
-                            if ui.details_requested.is_some() {
-                                unselect(ui);
-                            } else {
-                                maybe_get_details(entries, ui, requests);
-                            }
-                        }
-                        Char(c @ ('/' | 's' | 'x' | 'm')) => {
-                            let kind = match c {
-                                'x' => SearchKind::Regex,
-                                'm' => SearchKind::Mime,
-                                _ => SearchKind::Plain,
-                            };
-                            ui.search_state = Some(SearchState {
-                                focused: true,
-                                kind,
-                            });
-                            search(ui, kind);
-                        }
-                        Char('f') => {
-                            if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
-                                && ui.outstanding_request != Some(entry.id())
-                            {
-                                ui.outstanding_request = Some(entry.id());
-                                match entry.ring() {
-                                    RingKind::Favorites => {
-                                        let _ = requests.send(Command::Unfavorite(entry.id()));
-                                    }
-                                    RingKind::Main => {
-                                        let _ = requests.send(Command::Favorite(entry.id()));
-                                    }
+                    Char('f') => {
+                        if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
+                            && ui.outstanding_request != Some(entry.id())
+                        {
+                            ui.outstanding_request = Some(entry.id());
+                            match entry.ring() {
+                                RingKind::Favorites => {
+                                    let _ = requests.send(Command::Unfavorite(entry.id()));
                                 }
-                                refresh(ui);
+                                RingKind::Main => {
+                                    let _ = requests.send(Command::Favorite(entry.id()));
+                                }
                             }
+                            refresh(ui);
                         }
-                        Char('d') => {
-                            if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
-                                && ui.outstanding_request != Some(entry.id())
-                            {
-                                ui.outstanding_request = Some(entry.id());
-                                let _ = requests.send(Command::Delete(entry.id()));
-                                refresh(ui);
-                            }
-                        }
-                        Char('?') => {
-                            ui.show_help ^= true;
-                        }
-                        Char('r') => {
-                            if modifiers == KeyModifiers::CONTROL {
-                                *state = State::default();
-                            }
-                            refresh(&mut state.ui);
-                            return false;
-                        }
-                        _ => {}
                     }
+                    Char('d') => {
+                        if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
+                            && ui.outstanding_request != Some(entry.id())
+                        {
+                            ui.outstanding_request = Some(entry.id());
+                            let _ = requests.send(Command::Delete(entry.id()));
+                            refresh(ui);
+                        }
+                    }
+                    Char('?') => {
+                        ui.show_help ^= true;
+                    }
+                    Char('r') => {
+                        if modifiers == KeyModifiers::CONTROL {
+                            *state = State::default();
+                        }
+                        refresh(&mut state.ui);
+                        return false;
+                    }
+                    _ => {}
                 }
             }
         }

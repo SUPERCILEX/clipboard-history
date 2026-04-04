@@ -1,5 +1,3 @@
-#![feature(if_let_guard)]
-
 use std::{
     borrow::Cow,
     fmt::Display,
@@ -821,7 +819,7 @@ fn handle_x11_event(
                         warn!("No usable targets returned, dropping selection.");
                         return Ok(());
                     };
-                    info!("Choosing target {target_mime:?} on atom {target}.",);
+                    info!("Choosing target {target_mime:?} on atom {target}.");
 
                     *state = State::PendingSelection {
                         mime_atom: target,

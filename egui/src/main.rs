@@ -22,10 +22,9 @@ use arrayvec::ArrayVec;
 use eframe::{
     egui,
     egui::{
-        CentralPanel, Event, FontId, Frame, Image, Key, Label, Margin, Modifiers, Popup,
+        CentralPanel, Event, FontId, Frame, Image, Key, Label, Margin, Modifiers, Panel, Popup,
         PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke, TextEdit,
-        TextFormat, ThemePreference, TopBottomPanel, Ui, Vec2, ViewportBuilder, ViewportCommand,
-        Widget,
+        TextFormat, ThemePreference, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
         text::{LayoutJob, LayoutSection},
     },
 };
@@ -358,19 +357,19 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         for message in self.responses.try_iter() {
-            handle_message(message, &mut self.state, ctx);
+            handle_message(message, &mut self.state, ui);
         }
 
-        let up_pressed = ctx
-            .input_mut(|i| i.key_pressed(Key::ArrowUp) || i.consume_key(Modifiers::CTRL, Key::K));
-        let down_pressed = ctx
+        let up_pressed =
+            ui.input_mut(|i| i.key_pressed(Key::ArrowUp) || i.consume_key(Modifiers::CTRL, Key::K));
+        let down_pressed = ui
             .input_mut(|i| i.key_pressed(Key::ArrowDown) || i.consume_key(Modifiers::CTRL, Key::J));
 
-        TopBottomPanel::top("search_bar")
-            .frame(Frame::side_top_panel(&ctx.style()).inner_margin(0.))
-            .show(ctx, |ui| {
+        Panel::top("search_bar")
+            .frame(Frame::side_top_panel(ui.style()).inner_margin(0.))
+            .show_inside(ui, |ui| {
                 search_ui(
                     ui,
                     &mut self.state,
@@ -380,11 +379,11 @@ impl eframe::App for App {
                 );
             });
         CentralPanel::default()
-            .frame(Frame::central_panel(&ctx.style()).inner_margin(Margin {
+            .frame(Frame::central_panel(ui.style()).inner_margin(Margin {
                 top: 5,
                 ..Margin::ZERO
             }))
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 main_ui(
                     ui,
                     &mut self.state,
@@ -394,12 +393,12 @@ impl eframe::App for App {
                 );
             });
 
-        if self.daemon && ctx.input(|i| i.viewport().close_requested() && !i.modifiers.shift) {
-            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-            ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+        if self.daemon && ui.input(|i| i.viewport().close_requested() && !i.modifiers.shift) {
+            ui.send_viewport_cmd(ViewportCommand::CancelClose);
+            ui.send_viewport_cmd(ViewportCommand::Visible(false));
 
             self.state = State::default();
-            ctx.forget_all_images();
+            ui.forget_all_images();
         }
     }
 }
@@ -448,22 +447,27 @@ fn search_ui(
         search_changed = true;
     }
 
-    let response = ui.add(
-        TextEdit::singleline(query)
-            .hint_text(match search_kind {
-                SearchKind::Plain => "Search",
-                SearchKind::Regex => "RegEx search",
-                SearchKind::Mime => "Mime type search",
-            })
-            .font(match search_kind {
-                SearchKind::Plain => FontId::proportional(17.75),
-                SearchKind::Regex | SearchKind::Mime => FontId::monospace(16.),
-            })
-            .desired_width(f32::INFINITY)
-            .cursor_at_end(true)
-            .frame(false)
-            .margin(8.),
-    );
+    let response = {
+        let search_font = match search_kind {
+            SearchKind::Plain => FontId::proportional(17.75),
+            SearchKind::Regex | SearchKind::Mime => FontId::monospace(16.),
+        };
+        ui.add(
+            TextEdit::singleline(query)
+                .hint_text(
+                    RichText::new(match search_kind {
+                        SearchKind::Plain => "Search",
+                        SearchKind::Regex => "RegEx search",
+                        SearchKind::Mime => "Mime type search",
+                    })
+                    .font(search_font.clone()),
+                )
+                .font(search_font)
+                .desired_width(f32::INFINITY)
+                .cursor_at_end(true)
+                .frame(Frame::NONE.inner_margin(8.)),
+        )
+    };
     let mut reset = |query: &mut String| {
         remove_old_images(
             ui.ctx(),
