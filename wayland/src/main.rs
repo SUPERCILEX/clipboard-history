@@ -1,12 +1,11 @@
 use std::{
     collections::HashMap,
     convert::identity,
-    ffi::CStr,
     fmt::{Debug, Formatter},
     fs::File,
     hash::BuildHasherDefault,
     io,
-    io::{ErrorKind, ErrorKind::WouldBlock, Read, Write},
+    io::{ErrorKind, ErrorKind::WouldBlock, Read},
     mem,
     mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
@@ -50,11 +49,7 @@ use wayland_client::{
     backend::WaylandError,
     event_created_child,
     protocol::{
-        wl_keyboard::{KeyState, WlKeyboard},
-        wl_registry,
-        wl_registry::WlRegistry,
-        wl_seat,
-        wl_seat::WlSeat,
+        wl_keyboard::WlKeyboard, wl_registry, wl_registry::WlRegistry, wl_seat, wl_seat::WlSeat,
     },
 };
 use wayland_protocols::ext::{
@@ -144,65 +139,6 @@ fn load_config() -> Result<config::wayland::Config, CliError> {
     file.read_to_string(&mut config)
         .map_io_err(|| format!("Failed to read config: {path:?}"))?;
     Ok(toml::from_str::<config::wayland::Stable>(&config)?.into())
-}
-
-const PASTE_MOD_SHIFT: u32 = 1;
-const PASTE_KEY_INSERT: u32 = 110;
-const PASTE_KEYMAP: &CStr = cr#"xkb_keymap {
-   xkb_keycodes "ringboard" {
-       minimum = 8;
-       maximum = 118;
-       <LFSH> = 50;
-       <INS> = 118;
-   };
-
-   xkb_types "ringboard" {
-       include "complete"
-   };
-
-   xkb_compatibility "ringboard" {
-       include "complete"
-   };
-
-   xkb_symbols "ringboard" {
-       key <LFSH> {[ Shift_L ]};
-       key <INS> {[ Insert ]};
-       modifier_map Shift { <LFSH> };
-   };
-};"#;
-
-const fn paste_keymap_bytes() -> &'static [u8] {
-    PASTE_KEYMAP.to_bytes_with_nul()
-}
-
-fn create_virtual_keyboard_keymap() -> Result<OwnedFd, CliError> {
-    let fd = memfd_create(c"ringboard_wayland_keymap", MemfdFlags::empty())
-        .map_io_err(|| "Failed to create virtual keyboard keymap file.")?;
-    let mut file = File::from(fd);
-    file.write_all(paste_keymap_bytes())
-        .map_io_err(|| "Failed to write virtual keyboard keymap file.")?;
-    Ok(file.into())
-}
-
-fn ensure_virtual_keyboard(
-    manager: &ZwpVirtualKeyboardManagerV1,
-    seat: &WlSeat,
-    qh: &QueueHandle<App>,
-    virtual_keyboard: &mut Option<AutoDestroy<ZwpVirtualKeyboardV1>>,
-) -> Result<(), CliError> {
-    if virtual_keyboard.is_some() {
-        return Ok(());
-    }
-
-    let keyboard = AutoDestroy(manager.create_virtual_keyboard(seat, qh, ()));
-    let keymap = create_virtual_keyboard_keymap()?;
-    keyboard.keymap(
-        1,
-        keymap.as_fd(),
-        u32::try_from(paste_keymap_bytes().len()).unwrap(),
-    );
-    *virtual_keyboard = Some(keyboard);
-    Ok(())
 }
 
 fn run() -> Result<(), CliError> {
@@ -1252,7 +1188,12 @@ fn handle_paste_event(
     let mut should_paste = false;
     if auto_paste && trigger_paste {
         if let Some(virtual_keyboard_manager) = virtual_keyboard_manager {
-            ensure_virtual_keyboard(virtual_keyboard_manager, seat, qh, virtual_keyboard)?;
+            virtual_keyboard::ensure_virtual_keyboard(
+                virtual_keyboard_manager,
+                seat,
+                qh,
+                virtual_keyboard,
+            )?;
             should_paste = true;
         } else {
             warn!("Virtual keyboard protocol not available: auto-paste will not work.");
@@ -1440,10 +1381,7 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for App {
             && matches!(event, Event::Done | Event::Closed)
             && let Some((_, _, _, Some(keyboard))) = &this.inner.seats.get(this.inner.seats.active)
         {
-            keyboard.modifiers(PASTE_MOD_SHIFT, 0, 0, 0);
-            keyboard.key(1, PASTE_KEY_INSERT, KeyState::Pressed.into());
-            keyboard.key(2, PASTE_KEY_INSERT, KeyState::Released.into());
-            keyboard.modifiers(0, 0, 0, 0);
+            virtual_keyboard::paste(keyboard);
             info!("Sent paste command.");
 
             this.inner.pending_paste = false;
@@ -1454,50 +1392,140 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for App {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use xkbcommon::xkb;
+mod virtual_keyboard {
+    use std::{
+        ffi::CStr,
+        fs::File,
+        io::Write,
+        os::fd::{AsFd, OwnedFd},
+    };
 
-    use super::{PASTE_KEYMAP, paste_keymap_bytes};
+    use ringboard_sdk::core::IoErr;
+    use rustix::fs::{MemfdFlags, memfd_create};
+    use wayland_client::{
+        QueueHandle,
+        protocol::{wl_keyboard::KeyState, wl_seat::WlSeat},
+    };
+    use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
+        zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
+        zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
+    };
 
-    const XKB_KEY_LEFT_SHIFT: u32 = 50;
-    const XKB_KEY_INSERT: u32 = 118;
+    use crate::{App, AutoDestroy, CliError};
 
-    fn parse_paste_keymap() -> xkb::Keymap {
-        let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
-        xkb::Keymap::new_from_string(
-            &context,
-            PASTE_KEYMAP.to_str().unwrap().to_owned(),
-            xkb::KEYMAP_FORMAT_TEXT_V1,
-            xkb::KEYMAP_COMPILE_NO_FLAGS,
-        )
-        .unwrap()
+    const PASTE_MOD_SHIFT: u32 = 1;
+    const PASTE_KEY_INSERT: u32 = 110;
+    const PASTE_KEYMAP: &CStr = cr#"
+    xkb_keymap {
+        xkb_keycodes "ringboard" {
+            minimum = 8;
+            maximum = 118;
+            <LFSH> = 50;
+            <INS> = 118;
+        };
+
+        xkb_types "ringboard" {
+            include "complete"
+        };
+
+        xkb_compatibility "ringboard" {
+            include "complete"
+        };
+
+        xkb_symbols "ringboard" {
+            key <LFSH> {[ Shift_L ]};
+            key <INS> {[ Insert ]};
+            modifier_map Shift { <LFSH> };
+        };
+    };
+    "#;
+
+    const fn paste_keymap_bytes() -> &'static [u8] {
+        PASTE_KEYMAP.to_bytes_with_nul()
     }
 
-    #[test]
-    fn paste_keymap_is_nul_terminated() {
-        assert_eq!(paste_keymap_bytes().last(), Some(&0));
+    fn create_virtual_keyboard_keymap() -> Result<OwnedFd, CliError> {
+        let fd = memfd_create(c"ringboard_wayland_keymap", MemfdFlags::empty())
+            .map_io_err(|| "Failed to create virtual keyboard keymap file.")?;
+        let mut file = File::from(fd);
+        file.write_all(paste_keymap_bytes())
+            .map_io_err(|| "Failed to write virtual keyboard keymap file.")?;
+        Ok(file.into())
     }
 
-    #[test]
-    fn paste_keymap_has_expected_semantics() {
-        let keymap = parse_paste_keymap();
-        let shift = xkb::Keycode::new(XKB_KEY_LEFT_SHIFT);
-        let insert = xkb::Keycode::new(XKB_KEY_INSERT);
+    pub fn ensure_virtual_keyboard(
+        manager: &ZwpVirtualKeyboardManagerV1,
+        seat: &WlSeat,
+        qh: &QueueHandle<App>,
+        virtual_keyboard: &mut Option<AutoDestroy<ZwpVirtualKeyboardV1>>,
+    ) -> Result<(), CliError> {
+        if virtual_keyboard.is_some() {
+            return Ok(());
+        }
 
-        assert_eq!(keymap.key_get_name(shift), Some("LFSH"));
-        assert_eq!(keymap.key_get_name(insert), Some("INS"));
-        assert_eq!(keymap.key_get_syms_by_level(shift, 0, 0), &[
-            xkb::Keysym::new(xkb::keysyms::KEY_Shift_L)
-        ],);
-        assert_eq!(keymap.key_get_syms_by_level(insert, 0, 0), &[
-            xkb::Keysym::new(xkb::keysyms::KEY_Insert)
-        ],);
+        let keyboard = AutoDestroy(manager.create_virtual_keyboard(seat, qh, ()));
+        let keymap = create_virtual_keyboard_keymap()?;
+        keyboard.keymap(
+            1,
+            keymap.as_fd(),
+            u32::try_from(paste_keymap_bytes().len()).unwrap(),
+        );
+        *virtual_keyboard = Some(keyboard);
+        Ok(())
+    }
 
-        let mut state = xkb::State::new(&keymap);
-        state.update_key(shift, xkb::KeyDirection::Down);
-        assert!(state.mod_name_is_active("Shift", xkb::STATE_MODS_EFFECTIVE));
-        state.update_key(shift, xkb::KeyDirection::Up);
-        assert!(!state.mod_name_is_active("Shift", xkb::STATE_MODS_EFFECTIVE));
+    pub fn paste(keyboard: &ZwpVirtualKeyboardV1) {
+        keyboard.modifiers(PASTE_MOD_SHIFT, 0, 0, 0);
+        keyboard.key(1, PASTE_KEY_INSERT, KeyState::Pressed.into());
+        keyboard.key(2, PASTE_KEY_INSERT, KeyState::Released.into());
+        keyboard.modifiers(0, 0, 0, 0);
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use xkbcommon::xkb;
+
+        use super::{PASTE_KEYMAP, paste_keymap_bytes};
+
+        const XKB_KEY_LEFT_SHIFT: u32 = 50;
+        const XKB_KEY_INSERT: u32 = 118;
+
+        fn parse_paste_keymap() -> xkb::Keymap {
+            let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+            xkb::Keymap::new_from_string(
+                &context,
+                PASTE_KEYMAP.to_str().unwrap().to_owned(),
+                xkb::KEYMAP_FORMAT_TEXT_V1,
+                xkb::KEYMAP_COMPILE_NO_FLAGS,
+            )
+            .unwrap()
+        }
+
+        #[test]
+        fn paste_keymap_is_nul_terminated() {
+            assert_eq!(paste_keymap_bytes().last(), Some(&0));
+        }
+
+        #[test]
+        fn paste_keymap_has_expected_semantics() {
+            let keymap = parse_paste_keymap();
+            let shift = xkb::Keycode::new(XKB_KEY_LEFT_SHIFT);
+            let insert = xkb::Keycode::new(XKB_KEY_INSERT);
+
+            assert_eq!(keymap.key_get_name(shift), Some("LFSH"));
+            assert_eq!(keymap.key_get_name(insert), Some("INS"));
+            assert_eq!(keymap.key_get_syms_by_level(shift, 0, 0), &[
+                xkb::Keysym::new(xkb::keysyms::KEY_Shift_L)
+            ],);
+            assert_eq!(keymap.key_get_syms_by_level(insert, 0, 0), &[
+                xkb::Keysym::new(xkb::keysyms::KEY_Insert)
+            ],);
+
+            let mut state = xkb::State::new(&keymap);
+            state.update_key(shift, xkb::KeyDirection::Down);
+            assert!(state.mod_name_is_active("Shift", xkb::STATE_MODS_EFFECTIVE));
+            state.update_key(shift, xkb::KeyDirection::Up);
+            assert!(!state.mod_name_is_active("Shift", xkb::STATE_MODS_EFFECTIVE));
+        }
     }
 }
