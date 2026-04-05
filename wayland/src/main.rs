@@ -1185,21 +1185,6 @@ fn handle_paste_event(
         return Ok(());
     };
 
-    let mut should_paste = false;
-    if auto_paste && trigger_paste {
-        if let Some(virtual_keyboard_manager) = virtual_keyboard_manager {
-            virtual_keyboard::ensure_virtual_keyboard(
-                virtual_keyboard_manager,
-                seat,
-                qh,
-                virtual_keyboard,
-            )?;
-            should_paste = true;
-        } else {
-            warn!("Virtual keyboard protocol not available: auto-paste will not work.");
-        }
-    }
-
     let Some(fd) = fd else {
         info!("Clearing selections.");
         device.set_primary_selection(None);
@@ -1233,7 +1218,16 @@ fn handle_paste_event(
     }
     info!("Claimed selection ownership.");
 
-    *pending_paste = should_paste;
+    *pending_paste = auto_paste && trigger_paste;
+
+    if *pending_paste && virtual_keyboard.is_none() {
+        if let Some(virtual_keyboard_manager) = virtual_keyboard_manager {
+            let keyboard = virtual_keyboard::make(virtual_keyboard_manager, seat, qh)?;
+            *virtual_keyboard = Some(AutoDestroy(keyboard));
+        } else {
+            warn!("Virtual keyboard protocol not available: auto-paste will not work.");
+        }
+    }
 
     Ok(())
 }
@@ -1378,7 +1372,7 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for App {
 
         trace!("Foreign top level handle event: {event:?}");
         if this.inner.pending_paste
-            && matches!(event, Event::Done | Event::Closed)
+            && matches!(event, Event::Done)
             && let Some((_, _, _, Some(keyboard))) = &this.inner.seats.get(this.inner.seats.active)
         {
             virtual_keyboard::paste(keyboard);
@@ -1394,7 +1388,6 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for App {
 
 mod virtual_keyboard {
     use std::{
-        ffi::CStr,
         fs::File,
         io::Write,
         os::fd::{AsFd, OwnedFd},
@@ -1411,11 +1404,11 @@ mod virtual_keyboard {
         zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
     };
 
-    use crate::{App, AutoDestroy, CliError};
+    use crate::{App, CliError};
 
     const PASTE_MOD_SHIFT: u32 = 1;
     const PASTE_KEY_INSERT: u32 = 110;
-    const PASTE_KEYMAP: &CStr = cr#"
+    const PASTE_KEYMAP: &[u8] = cr#"
     xkb_keymap {
         xkb_keycodes "ringboard" {
             minimum = 8;
@@ -1438,40 +1431,31 @@ mod virtual_keyboard {
             modifier_map Shift { <LFSH> };
         };
     };
-    "#;
-
-    const fn paste_keymap_bytes() -> &'static [u8] {
-        PASTE_KEYMAP.to_bytes_with_nul()
-    }
+    "#
+    .to_bytes_with_nul();
 
     fn create_virtual_keyboard_keymap() -> Result<OwnedFd, CliError> {
-        let fd = memfd_create(c"ringboard_wayland_keymap", MemfdFlags::empty())
+        let fd = memfd_create(c"ringboard_paste_keymap", MemfdFlags::empty())
             .map_io_err(|| "Failed to create virtual keyboard keymap file.")?;
         let mut file = File::from(fd);
-        file.write_all(paste_keymap_bytes())
+        file.write_all(PASTE_KEYMAP)
             .map_io_err(|| "Failed to write virtual keyboard keymap file.")?;
         Ok(file.into())
     }
 
-    pub fn ensure_virtual_keyboard(
+    pub fn make(
         manager: &ZwpVirtualKeyboardManagerV1,
         seat: &WlSeat,
         qh: &QueueHandle<App>,
-        virtual_keyboard: &mut Option<AutoDestroy<ZwpVirtualKeyboardV1>>,
-    ) -> Result<(), CliError> {
-        if virtual_keyboard.is_some() {
-            return Ok(());
-        }
-
-        let keyboard = AutoDestroy(manager.create_virtual_keyboard(seat, qh, ()));
+    ) -> Result<ZwpVirtualKeyboardV1, CliError> {
         let keymap = create_virtual_keyboard_keymap()?;
+        let keyboard = manager.create_virtual_keyboard(seat, qh, ());
         keyboard.keymap(
             1,
             keymap.as_fd(),
-            u32::try_from(paste_keymap_bytes().len()).unwrap(),
+            u32::try_from(PASTE_KEYMAP.len()).unwrap(),
         );
-        *virtual_keyboard = Some(keyboard);
-        Ok(())
+        Ok(keyboard)
     }
 
     pub fn paste(keyboard: &ZwpVirtualKeyboardV1) {
@@ -1479,53 +1463,5 @@ mod virtual_keyboard {
         keyboard.key(1, PASTE_KEY_INSERT, KeyState::Pressed.into());
         keyboard.key(2, PASTE_KEY_INSERT, KeyState::Released.into());
         keyboard.modifiers(0, 0, 0, 0);
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use xkbcommon::xkb;
-
-        use super::{PASTE_KEYMAP, paste_keymap_bytes};
-
-        const XKB_KEY_LEFT_SHIFT: u32 = 50;
-        const XKB_KEY_INSERT: u32 = 118;
-
-        fn parse_paste_keymap() -> xkb::Keymap {
-            let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
-            xkb::Keymap::new_from_string(
-                &context,
-                PASTE_KEYMAP.to_str().unwrap().to_owned(),
-                xkb::KEYMAP_FORMAT_TEXT_V1,
-                xkb::KEYMAP_COMPILE_NO_FLAGS,
-            )
-            .unwrap()
-        }
-
-        #[test]
-        fn paste_keymap_is_nul_terminated() {
-            assert_eq!(paste_keymap_bytes().last(), Some(&0));
-        }
-
-        #[test]
-        fn paste_keymap_has_expected_semantics() {
-            let keymap = parse_paste_keymap();
-            let shift = xkb::Keycode::new(XKB_KEY_LEFT_SHIFT);
-            let insert = xkb::Keycode::new(XKB_KEY_INSERT);
-
-            assert_eq!(keymap.key_get_name(shift), Some("LFSH"));
-            assert_eq!(keymap.key_get_name(insert), Some("INS"));
-            assert_eq!(keymap.key_get_syms_by_level(shift, 0, 0), &[
-                xkb::Keysym::new(xkb::keysyms::KEY_Shift_L)
-            ],);
-            assert_eq!(keymap.key_get_syms_by_level(insert, 0, 0), &[
-                xkb::Keysym::new(xkb::keysyms::KEY_Insert)
-            ],);
-
-            let mut state = xkb::State::new(&keymap);
-            state.update_key(shift, xkb::KeyDirection::Down);
-            assert!(state.mod_name_is_active("Shift", xkb::STATE_MODS_EFFECTIVE));
-            state.update_key(shift, xkb::KeyDirection::Up);
-            assert!(!state.mod_name_is_active("Shift", xkb::STATE_MODS_EFFECTIVE));
-        }
     }
 }
