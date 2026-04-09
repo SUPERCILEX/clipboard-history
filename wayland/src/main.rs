@@ -49,11 +49,7 @@ use wayland_client::{
     backend::WaylandError,
     event_created_child,
     protocol::{
-        wl_keyboard::{KeyState, WlKeyboard},
-        wl_registry,
-        wl_registry::WlRegistry,
-        wl_seat,
-        wl_seat::WlSeat,
+        wl_keyboard::WlKeyboard, wl_registry, wl_registry::WlRegistry, wl_seat, wl_seat::WlSeat,
     },
 };
 use wayland_protocols::ext::{
@@ -257,7 +253,8 @@ fn run() -> Result<(), CliError> {
                     &mut ancillary_buf,
                     &qh,
                     app.inner.manager.as_ref(),
-                    &app.inner.seats,
+                    app.inner.virtual_keyboard_manager.as_ref(),
+                    &mut app.inner.seats,
                     auto_paste,
                     &mut app.inner.pending_paste,
                     &mut app.inner.sources,
@@ -1120,7 +1117,8 @@ fn handle_paste_event(
 
     qh: &QueueHandle<App>,
     manager: Option<&AutoDestroy<ExtDataControlManagerV1>>,
-    seats: &Seats,
+    virtual_keyboard_manager: Option<&ZwpVirtualKeyboardManagerV1>,
+    seats: &mut Seats,
     auto_paste: bool,
     pending_paste: &mut bool,
     sources: &mut Sources,
@@ -1182,7 +1180,7 @@ fn handle_paste_event(
         debug!("No manager for paste.");
         return Ok(());
     };
-    let Some((_, device, _, _)) = seats.get(seats.active) else {
+    let Some((seat, device, _, virtual_keyboard)) = seats.get_mut(seats.active) else {
         warn!("Received paste command with no seats to paste into, ignoring.");
         return Ok(());
     };
@@ -1221,6 +1219,15 @@ fn handle_paste_event(
     info!("Claimed selection ownership.");
 
     *pending_paste = auto_paste && trigger_paste;
+
+    if *pending_paste && virtual_keyboard.is_none() {
+        if let Some(virtual_keyboard_manager) = virtual_keyboard_manager {
+            let keyboard = virtual_keyboard::make(virtual_keyboard_manager, seat, qh)?;
+            *virtual_keyboard = Some(AutoDestroy(keyboard));
+        } else {
+            warn!("Virtual keyboard protocol not available: auto-paste will not work.");
+        }
+    }
 
     Ok(())
 }
@@ -1319,25 +1326,9 @@ impl Dispatch<WlKeyboard, u32> for App {
         event: <WlKeyboard as Proxy>::Event,
         &seat: &u32,
         _: &Connection,
-        qh: &QueueHandle<Self>,
+        _: &QueueHandle<Self>,
     ) {
-        use wayland_client::protocol::wl_keyboard::Event;
-
         trace!("Keyboard event: {event:?}");
-        if let Event::Keymap { format, fd, size } = event {
-            let Some((seat, _, _, virtual_keyboard)) = this.inner.seats.get_mut(seat) else {
-                error!("Received keyboard event for seat {seat} that does not exist.");
-                return;
-            };
-            let Some(ref manager) = this.inner.virtual_keyboard_manager else {
-                debug!("Trying to set keymap with no virtual keyboard manager present.");
-                return;
-            };
-
-            let keyboard = virtual_keyboard
-                .get_or_insert_with(|| AutoDestroy(manager.create_virtual_keyboard(seat, qh, ())));
-            keyboard.keymap(format.into(), fd.as_fd(), size);
-        }
         this.inner.seats.active = seat;
     }
 }
@@ -1381,14 +1372,10 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for App {
 
         trace!("Foreign top level handle event: {event:?}");
         if this.inner.pending_paste
-            && matches!(event, Event::Done | Event::Closed)
+            && matches!(event, Event::Done)
             && let Some((_, _, _, Some(keyboard))) = &this.inner.seats.get(this.inner.seats.active)
         {
-            // Shift modifier + Insert key
-            keyboard.modifiers(1, 0, 0, 0);
-            keyboard.key(1, 110, KeyState::Pressed.into());
-            keyboard.key(2, 110, KeyState::Released.into());
-            keyboard.modifiers(0, 0, 0, 0);
+            virtual_keyboard::paste(keyboard);
             info!("Sent paste command.");
 
             this.inner.pending_paste = false;
@@ -1396,5 +1383,85 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for App {
         if matches!(event, Event::Closed) {
             handle.destroy();
         }
+    }
+}
+
+mod virtual_keyboard {
+    use std::{
+        fs::File,
+        io::Write,
+        os::fd::{AsFd, OwnedFd},
+    };
+
+    use ringboard_sdk::core::IoErr;
+    use rustix::fs::{MemfdFlags, memfd_create};
+    use wayland_client::{
+        QueueHandle,
+        protocol::{wl_keyboard::KeyState, wl_seat::WlSeat},
+    };
+    use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
+        zwp_virtual_keyboard_manager_v1::ZwpVirtualKeyboardManagerV1,
+        zwp_virtual_keyboard_v1::ZwpVirtualKeyboardV1,
+    };
+
+    use crate::{App, CliError};
+
+    const PASTE_MOD_SHIFT: u32 = 1;
+    const PASTE_KEY_INSERT: u32 = 110;
+    const PASTE_KEYMAP: &[u8] = cr#"
+    xkb_keymap {
+        xkb_keycodes "ringboard" {
+            minimum = 8;
+            maximum = 118;
+            <LFSH> = 50;
+            <INS> = 118;
+        };
+
+        xkb_types "ringboard" {
+            include "complete"
+        };
+
+        xkb_compatibility "ringboard" {
+            include "complete"
+        };
+
+        xkb_symbols "ringboard" {
+            key <LFSH> {[ Shift_L ]};
+            key <INS> {[ Insert ]};
+            modifier_map Shift { <LFSH> };
+        };
+    };
+    "#
+    .to_bytes_with_nul();
+
+    fn create_virtual_keyboard_keymap() -> Result<OwnedFd, CliError> {
+        let fd = memfd_create(c"ringboard_paste_keymap", MemfdFlags::empty())
+            .map_io_err(|| "Failed to create virtual keyboard keymap file.")?;
+        let mut file = File::from(fd);
+        file.write_all(PASTE_KEYMAP)
+            .map_io_err(|| "Failed to write virtual keyboard keymap file.")?;
+        Ok(file.into())
+    }
+
+    pub fn make(
+        manager: &ZwpVirtualKeyboardManagerV1,
+        seat: &WlSeat,
+        qh: &QueueHandle<App>,
+    ) -> Result<ZwpVirtualKeyboardV1, CliError> {
+        let keymap = create_virtual_keyboard_keymap()?;
+        let keyboard = manager.create_virtual_keyboard(seat, qh, ());
+        keyboard.keymap(
+            1,
+            keymap.as_fd(),
+            u32::try_from(PASTE_KEYMAP.len()).unwrap(),
+        );
+        Ok(keyboard)
+    }
+
+    pub fn paste(keyboard: &ZwpVirtualKeyboardV1) {
+        keyboard.modifiers(PASTE_MOD_SHIFT, 0, 0, 0);
+        keyboard.key(1, PASTE_KEY_INSERT, KeyState::Pressed.into());
+        keyboard.key(2, PASTE_KEY_INSERT, KeyState::Released.into());
+        keyboard.modifiers(0, 0, 0, 0);
     }
 }
