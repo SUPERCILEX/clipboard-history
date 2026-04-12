@@ -1,6 +1,9 @@
 use std::{
+    cell::LazyCell,
     collections::HashMap,
     convert::identity,
+    env,
+    ffi::OsStr,
     fmt::{Debug, Formatter},
     fs::File,
     hash::BuildHasherDefault,
@@ -9,7 +12,10 @@ use std::{
     mem,
     mem::{ManuallyDrop, MaybeUninit},
     ops::Deref,
-    os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
+    os::{
+        fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
+        unix::ffi::OsStrExt,
+    },
     rc::Rc,
 };
 
@@ -182,6 +188,15 @@ fn run() -> Result<(), CliError> {
     let mut app = App {
         inner: AppDefault::default(),
         epoll,
+        de: LazyCell::new(|| {
+            match env::var_os("XDG_CURRENT_DESKTOP")
+                .as_deref()
+                .map(OsStr::as_bytes)
+            {
+                Some(b"COSMIC") => De::Cosmic,
+                _ => De::Other,
+            }
+        }),
     };
 
     let mut event_queue = conn.new_event_queue();
@@ -700,6 +715,12 @@ impl PendingOffers {
     }
 }
 
+#[derive(Debug)]
+enum De {
+    Cosmic,
+    Other,
+}
+
 #[derive(Default, Debug)]
 struct AppDefault {
     manager: Option<AutoDestroy<ExtDataControlManagerV1>>,
@@ -721,6 +742,7 @@ struct AppDefault {
 struct App {
     inner: AppDefault,
     epoll: OwnedFd,
+    de: LazyCell<De>,
 }
 
 impl Dispatch<WlRegistry, ()> for App {
@@ -1372,7 +1394,10 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for App {
 
         trace!("Foreign top level handle event: {event:?}");
         if this.inner.pending_paste
-            && matches!(event, Event::Done)
+            && match *this.de {
+                De::Cosmic => matches!(event, Event::Done),
+                De::Other => matches!(event, Event::Done | Event::Closed),
+            }
             && let Some((_, _, _, Some(keyboard))) = &this.inner.seats.get(this.inner.seats.active)
         {
             virtual_keyboard::paste(keyboard);
