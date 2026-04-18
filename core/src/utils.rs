@@ -237,7 +237,7 @@ pub fn acquire_lock_file<
                     Some(lock_file)
                 }
                 LockAlreadyOwnedActionKind::LeaveBe => match test_kill_process(pid) {
-                    Err(Errno::SRCH) => Some(lock_file),
+                    Err(Errno::SRCH | Errno::PERM) => Some(lock_file),
                     r => {
                         return r
                             .map_io_err(|| {
