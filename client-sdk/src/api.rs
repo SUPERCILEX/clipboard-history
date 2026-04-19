@@ -95,7 +95,7 @@ pub fn connect_to_paste_server(addr: &SocketAddrUnix) -> Result<OwnedFd, ClientE
         None,
     )
     .map_io_err(|| format!("Failed to create socket: {addr:?}"))?;
-    connect(&sock, addr).map_io_err(|| format!("Failed to connect to server: {addr:?}"))?;
+    connect(&sock, addr).map_io_err(|| format!("Failed to connect to paste server: {addr:?}"))?;
     Ok(sock)
 }
 

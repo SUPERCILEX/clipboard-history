@@ -14,7 +14,7 @@ use std::{
     mem::MaybeUninit,
     os::{
         fd::{AsFd, OwnedFd},
-        unix::fs::FileExt,
+        unix::{ffi::OsStrExt, fs::FileExt},
     },
     path::{Path, PathBuf},
     str,
@@ -44,7 +44,7 @@ use ringboard_sdk::{
     core::{
         BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, SendQuitAndWait, acquire_lock_file,
         bucket_to_length, create_tmp_file,
-        dirs::{data_dir, paste_socket_file, socket_file},
+        dirs::{data_dir, paste_socket_name, socket_name},
         protocol::{
             AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
             RemoveResponse, Response, RingKind, SwapResponse, decompose_id,
@@ -509,9 +509,9 @@ fn run() -> Result<(), CliError> {
     let Cli { cmd, help: _ } = Cli::parse();
 
     let server_addr = {
-        let socket_file = socket_file();
-        SocketAddrUnix::new(&socket_file)
-            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
+        let socket_name = socket_name();
+        SocketAddrUnix::new_abstract_name(socket_name.as_bytes())
+            .map_io_err(|| format!("Failed to make socket address: {socket_name:?}"))?
     };
     match cmd {
         Cmd::Get(data) => get(data),
@@ -803,9 +803,9 @@ fn add(
         let entry = unsafe { database.get(id)? };
 
         let paste_server = {
-            let socket_file = paste_socket_file();
-            let addr = SocketAddrUnix::new(&socket_file)
-                .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+            let socket_name = paste_socket_name();
+            let addr = SocketAddrUnix::new_abstract_name(socket_name.as_bytes())
+                .map_io_err(|| format!("Failed to make socket address: {socket_name:?}"))?;
             connect_to_paste_server(&addr)?
         };
 

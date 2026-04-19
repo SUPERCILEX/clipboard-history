@@ -1,13 +1,15 @@
 use std::{
-    ffi::CStr,
+    ffi::{CStr, OsStr},
     fmt::Debug,
-    fs,
     fs::File,
     io,
     io::{BorrowedBuf, BorrowedCursor, ErrorKind, Write},
     mem::{MaybeUninit, size_of},
     num::NonZeroI32,
-    os::fd::{AsFd, OwnedFd, RawFd},
+    os::{
+        fd::{AsFd, OwnedFd, RawFd},
+        unix::ffi::OsStrExt,
+    },
     path::Path,
     ptr, slice,
     str::FromStr,
@@ -414,29 +416,17 @@ pub fn direct_file_name(
     unsafe { CStr::from_ptr(buf.filled_mut().as_ptr().cast()) }
 }
 
-pub fn init_unix_server<P: AsRef<Path>>(socket_file: P, kind: SocketType) -> Result<OwnedFd> {
-    let socket_file = socket_file.as_ref();
-    let addr = {
-        match fs::remove_file(socket_file) {
-            Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
-            r => r,
-        }
-        .map_io_err(|| format!("Failed to remove old socket: {socket_file:?}"))?;
-
-        if let Some(parent) = socket_file.parent() {
-            fs::create_dir_all(parent)
-                .map_io_err(|| format!("Failed to create socket directory: {parent:?}"))?;
-        }
-        SocketAddrUnix::new(socket_file)
-            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?
-    };
+pub fn init_unix_server<P: AsRef<OsStr>>(socket_name: P, kind: SocketType) -> Result<OwnedFd> {
+    let socket_name = socket_name.as_ref();
+    let addr = SocketAddrUnix::new_abstract_name(socket_name.as_bytes())
+        .map_io_err(|| format!("Failed to make socket address: {socket_name:?}"))?;
 
     let socket = socket(AddressFamily::UNIX, kind, None)
-        .map_io_err(|| format!("Failed to create socket: {socket_file:?}"))?;
-    bind(&socket, &addr).map_io_err(|| format!("Failed to bind socket: {socket_file:?}"))?;
+        .map_io_err(|| format!("Failed to create socket: {socket_name:?}"))?;
+    bind(&socket, &addr).map_io_err(|| format!("Failed to bind socket: {socket_name:?}"))?;
     if kind != SocketType::DGRAM {
         listen(&socket, -1)
-            .map_io_err(|| format!("Failed to listen for clients: {socket_file:?}"))?;
+            .map_io_err(|| format!("Failed to listen for clients: {socket_name:?}"))?;
     }
     Ok(socket)
 }

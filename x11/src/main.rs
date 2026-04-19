@@ -7,7 +7,7 @@ use std::{
     mem::MaybeUninit,
     os::{
         fd::{AsFd, OwnedFd},
-        unix::fs::FileExt,
+        unix::{ffi::OsStrExt, fs::FileExt},
     },
     rc::Rc,
     time::Duration,
@@ -21,7 +21,7 @@ use ringboard_sdk::{
     config,
     core::{
         Error, IoErr, create_tmp_file,
-        dirs::{paste_socket_file, socket_file},
+        dirs::{paste_socket_name, socket_name},
         init_unix_server,
         protocol::{
             AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, Response, RingKind,
@@ -270,9 +270,9 @@ fn run() -> Result<(), CliError> {
     info!("Using configuration {config:?}");
 
     let server = {
-        let socket_file = socket_file();
-        let addr = SocketAddrUnix::new(&socket_file)
-            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+        let socket_name = socket_name();
+        let addr = SocketAddrUnix::new_abstract_name(socket_name.as_bytes())
+            .map_io_err(|| format!("Failed to make socket address: {socket_name:?}"))?;
         connect_to_server(&addr)?
     };
     debug!("Ringboard connection established.");
@@ -346,7 +346,7 @@ fn run() -> Result<(), CliError> {
     )?;
     debug!("Selection owner listener registered.");
 
-    let paste_socket = init_unix_server(paste_socket_file(), SocketType::DGRAM)?;
+    let paste_socket = init_unix_server(paste_socket_name(), SocketType::DGRAM)?;
     let paste_timer = if auto_paste {
         Some(
             timerfd_create(TimerfdClockId::Monotonic, TimerfdFlags::empty())

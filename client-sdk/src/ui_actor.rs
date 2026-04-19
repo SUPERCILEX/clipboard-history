@@ -2,19 +2,22 @@ use std::{
     array,
     cmp::{Ordering, min},
     collections::{BinaryHeap, HashMap},
+    ffi::OsString,
     fs::File,
     hash::BuildHasherDefault,
     iter::once,
     mem,
-    os::fd::{AsFd, OwnedFd},
-    path::PathBuf,
+    os::{
+        fd::{AsFd, OwnedFd},
+        unix::ffi::OsStrExt,
+    },
     str,
     sync::Arc,
 };
 
 use image::ImageError;
 use regex::bytes::Regex;
-use ringboard_core::dirs::paste_socket_file;
+use ringboard_core::dirs::paste_socket_name;
 use rustc_hash::FxHasher;
 use rustix::net::SocketAddrUnix;
 use thiserror::Error;
@@ -27,7 +30,7 @@ use crate::{
     },
     core::{
         BucketAndIndex, Error as CoreError, IoErr, RingAndIndex,
-        dirs::{data_dir, socket_file},
+        dirs::{data_dir, socket_name},
         protocol::{IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind, composite_id},
         ring::{MAX_ENTRIES, Ring},
         size_to_bucket,
@@ -167,7 +170,7 @@ pub struct DetailedEntry {
 }
 
 fn maybe_init_server(
-    socket_file: impl FnOnce() -> PathBuf,
+    socket_name: impl FnOnce() -> OsString,
     connect_to_server: impl FnOnce(&SocketAddrUnix) -> Result<OwnedFd, ClientError>,
     cache: &mut Option<OwnedFd>,
 ) -> Result<impl AsFd + '_, ClientError> {
@@ -176,9 +179,9 @@ fn maybe_init_server(
     }
 
     let server = {
-        let socket_file = socket_file();
-        let addr = SocketAddrUnix::new(&socket_file)
-            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+        let socket_name = socket_name();
+        let addr = SocketAddrUnix::new_abstract_name(socket_name.as_bytes())
+            .map_io_err(|| format!("Failed to make socket address: {socket_name:?}"))?;
         connect_to_server(&addr)?
     };
 
@@ -310,7 +313,7 @@ fn handle_command<E>(
         ref c @ (Command::Favorite(id) | Command::Unfavorite(id)) => {
             match {
                 MoveToFrontRequest::response(
-                    maybe_init_server(socket_file, connect_to_server, server)?,
+                    maybe_init_server(socket_name, connect_to_server, server)?,
                     id,
                     Some(match c {
                         Command::Favorite(_) => RingKind::Favorites,
@@ -327,7 +330,7 @@ fn handle_command<E>(
         }
         Command::Delete(id) => match {
             RemoveRequest::response(
-                maybe_init_server(socket_file, connect_to_server, server)?,
+                maybe_init_server(socket_name, connect_to_server, server)?,
                 id,
             )
         }
@@ -368,7 +371,7 @@ fn handle_command<E>(
             let entry = unsafe { database.get(id)? };
             {
                 send_paste_buffer(
-                    maybe_init_server(paste_socket_file, connect_to_paste_server, paste_server)?,
+                    maybe_init_server(paste_socket_name, connect_to_paste_server, paste_server)?,
                     entry,
                     reader,
                     true,

@@ -16,7 +16,7 @@ use io_uring::{
     types::Fixed,
 };
 use log::{debug, info, trace, warn};
-use ringboard_core::{IoErr, dirs::socket_file, init_unix_server};
+use ringboard_core::{IoErr, dirs::socket_name, init_unix_server};
 use rustix::{
     fs::{CWD, Mode, OFlags, openat},
     io::Errno,
@@ -176,7 +176,7 @@ fn setup_uring() -> Result<(IoUring, BuiltInFds), CliError> {
         Some(mem_pressure)
     };
 
-    let socket = init_unix_server(socket_file(), SocketType::SEQPACKET)?;
+    let socket = init_unix_server(socket_name(), SocketType::SEQPACKET)?;
 
     let (built_ins, built_ins_mapping) = {
         let base = u32::from(MAX_NUM_CLIENTS);

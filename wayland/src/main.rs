@@ -27,7 +27,7 @@ use ringboard_sdk::{
     config,
     core::{
         Error, IoErr, create_tmp_file,
-        dirs::{paste_socket_file, socket_file},
+        dirs::{paste_socket_name, socket_name},
         init_unix_server, is_plaintext_mime,
         protocol::{
             AddResponse, IdNotFoundError, MimeType, MoveToFrontResponse, Response, RingKind,
@@ -157,9 +157,9 @@ fn run() -> Result<(), CliError> {
     info!("Using configuration {config:?}");
 
     let server = {
-        let socket_file = socket_file();
-        let addr = SocketAddrUnix::new(&socket_file)
-            .map_io_err(|| format!("Failed to make socket address: {socket_file:?}"))?;
+        let socket_name = socket_name();
+        let addr = SocketAddrUnix::new_abstract_name(socket_name.as_bytes())
+            .map_io_err(|| format!("Failed to make socket address: {socket_name:?}"))?;
         connect_to_server(&addr)?
     };
     debug!("Ringboard connection established.");
@@ -167,7 +167,7 @@ fn run() -> Result<(), CliError> {
     let conn = Connection::connect_to_env()?;
     debug!("Wayland connection established.");
 
-    let paste_socket = init_unix_server(paste_socket_file(), SocketType::DGRAM)?;
+    let paste_socket = init_unix_server(paste_socket_name(), SocketType::DGRAM)?;
     debug!("Initialized paste server");
 
     let mut ancillary_buf = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(1))];
