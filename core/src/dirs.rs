@@ -17,9 +17,9 @@ pub fn socket_file() -> PathBuf {
         return PathBuf::from(s);
     }
 
-    let mut file = PathBuf::with_capacity("/tmp/.ringboard/username.ch".len());
+    let mut file = PathBuf::with_capacity("/tmp/.ringboard/username/server.sock".len());
     push_sockets_prefix(&mut file);
-    file.set_extension("ch");
+    file.push("server.sock");
     file
 }
 
@@ -29,9 +29,9 @@ pub fn paste_socket_file() -> PathBuf {
         return PathBuf::from(s);
     }
 
-    let mut file = PathBuf::with_capacity("/tmp/.ringboard/username.paste".len());
+    let mut file = PathBuf::with_capacity("/tmp/.ringboard/username/paste.sock".len());
     push_sockets_prefix(&mut file);
-    file.set_extension("paste");
+    file.push("paste.sock");
     file
 }
 

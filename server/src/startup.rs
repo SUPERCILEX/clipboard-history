@@ -1,12 +1,15 @@
-use std::{fs, marker::PhantomData, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
-use ringboard_core::{IoErr, LeaveBe, acquire_lock_file};
+use ringboard_core::{IoErr, LeaveBe, OwnedLockFile, acquire_lock_file};
 use rustix::fs::{AtFlags, CWD, unlinkat};
 
 use crate::CliError;
 
 #[must_use]
-pub struct OwnedServer(PhantomData<()>);
+pub struct OwnedServer(#[allow(dead_code)] OwnedLockFile);
 
 impl OwnedServer {
     #[allow(clippy::unused_self)]
@@ -18,19 +21,11 @@ impl OwnedServer {
 }
 
 pub fn claim_server_ownership() -> Result<OwnedServer, CliError> {
-    acquire_lock_file(
-        &mut false,
-        CWD,
-        c".",
-        c".server.lock",
-        c"server.lock",
-        LeaveBe,
-    )?
-    .map_or(Ok(OwnedServer(PhantomData)), |pid| {
-        Err(CliError::ServerAlreadyRunning {
+    acquire_lock_file(Path::new("server.lock"), LeaveBe)?
+        .map(OwnedServer)
+        .map_err(|pid| CliError::ServerAlreadyRunning {
             pid,
             lock_file: fs::canonicalize("server.lock")
                 .unwrap_or_else(|_| PathBuf::from("server.lock")),
         })
-    })
 }

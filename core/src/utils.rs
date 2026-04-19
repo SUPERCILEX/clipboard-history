@@ -6,6 +6,7 @@ use std::{
     io,
     io::{BorrowedBuf, BorrowedCursor, ErrorKind, Write},
     mem::{MaybeUninit, size_of},
+    num::NonZeroI32,
     os::fd::{AsFd, OwnedFd, RawFd},
     path::Path,
     ptr, slice,
@@ -25,7 +26,6 @@ use rustix::{
     path::{Arg, DecInt},
     process::{
         Pid, PidfdFlags, RawPid, Signal, getpid, kill_process, pidfd_open, pidfd_send_signal,
-        test_kill_process,
     },
 };
 
@@ -55,12 +55,7 @@ pub const NUM_BUCKETS: usize = 11;
 // The max composite ID is 2^40 (8 bit ring ID and 32 bit entry ID)
 pub const DIRECT_FILE_NAME_LEN: usize = "1099511627776".len();
 
-pub enum LockFilePid {
-    Valid(Pid),
-    Reset,
-}
-
-pub fn read_lock_file_pid(lock_file: impl Copy + Debug, file: &File) -> Result<LockFilePid> {
+fn read_lock_file_pid(lock_file: impl Copy + Debug, file: &File) -> Result<Pid> {
     let mut pid = [MaybeUninit::uninit(); RawPid::MAX_STR_LEN];
     let mut pid = BorrowedBuf::from(pid.as_mut_slice());
     read_at_to_end(file, pid.unfilled(), 0)
@@ -71,18 +66,16 @@ pub fn read_lock_file_pid(lock_file: impl Copy + Debug, file: &File) -> Result<L
         .as_str()
         .map_io_err(|| format!("Lock file {lock_file:?} corrupted: {pid:?}"))?
         .trim();
-    if pid.is_empty() {
-        Ok(LockFilePid::Reset)
-    } else {
-        let pid = i32::from_str(pid).map_err(|error| Error::InvalidPidError {
-            error,
-            context: format!("Lock file {lock_file:?} contains invalid PID: {pid:?}").into(),
-        })?;
-        Ok(Pid::from_raw(pid).map_or(LockFilePid::Reset, LockFilePid::Valid))
-    }
+    let pid = NonZeroI32::from_str(pid).map_err(|error| Error::InvalidPidError {
+        error,
+        context: format!("Lock file {lock_file:?} contains invalid PID: {pid:?}").into(),
+    })?;
+    Ok(Pid::from_raw(pid.get()).unwrap())
 }
 
 mod lock_owned {
+    use std::os::fd::OwnedFd;
+
     use rustix::process::Pid;
 
     #[derive(Copy, Clone, Debug)]
@@ -92,21 +85,26 @@ mod lock_owned {
         LeaveBe,
     }
 
+    #[must_use]
+    pub struct OwnedLockFile(#[allow(dead_code)] pub(super) OwnedFd);
+
     pub trait LockAlreadyOwnedAction {
         const KIND: LockAlreadyOwnedActionKind;
 
         type Output;
-        const NOTHING: Self::Output;
 
-        fn something(output: Pid) -> Self::Output;
+        fn locked(lock: OwnedLockFile) -> Self::Output;
+        fn exists(output: Pid) -> Self::Output;
     }
 
     pub struct SendQuitAndWait;
     impl LockAlreadyOwnedAction for SendQuitAndWait {
         const KIND: LockAlreadyOwnedActionKind = LockAlreadyOwnedActionKind::SendQuitAndWait;
-        type Output = ();
-        const NOTHING: Self::Output = ();
-        fn something(_: Pid) -> Self::Output {
+        type Output = OwnedLockFile;
+        fn locked(lock: OwnedLockFile) -> Self::Output {
+            lock
+        }
+        fn exists(_: Pid) -> Self::Output {
             unreachable!()
         }
     }
@@ -114,9 +112,11 @@ mod lock_owned {
     pub struct SendKillAndTakeover;
     impl LockAlreadyOwnedAction for SendKillAndTakeover {
         const KIND: LockAlreadyOwnedActionKind = LockAlreadyOwnedActionKind::SendKillAndTakeover;
-        type Output = ();
-        const NOTHING: Self::Output = ();
-        fn something(_: Pid) -> Self::Output {
+        type Output = OwnedLockFile;
+        fn locked(lock: OwnedLockFile) -> Self::Output {
+            lock
+        }
+        fn exists(_: Pid) -> Self::Output {
             unreachable!()
         }
     }
@@ -124,90 +124,107 @@ mod lock_owned {
     pub struct LeaveBe;
     impl LockAlreadyOwnedAction for LeaveBe {
         const KIND: LockAlreadyOwnedActionKind = LockAlreadyOwnedActionKind::LeaveBe;
-        type Output = Option<Pid>;
-        const NOTHING: Self::Output = None;
-
-        fn something(output: Pid) -> Self::Output {
-            Some(output)
+        type Output = Result<OwnedLockFile, Pid>;
+        fn locked(lock: OwnedLockFile) -> Self::Output {
+            Ok(lock)
+        }
+        fn exists(output: Pid) -> Self::Output {
+            Err(output)
         }
     }
 }
-pub use lock_owned::{LeaveBe, SendKillAndTakeover, SendQuitAndWait};
+pub use lock_owned::{LeaveBe, OwnedLockFile, SendKillAndTakeover, SendQuitAndWait};
 use lock_owned::{LockAlreadyOwnedAction, LockAlreadyOwnedActionKind};
 
-pub fn acquire_lock_file<
-    Fd: AsFd + Copy,
-    P1: Arg,
-    P2: Arg + Copy,
-    P3: Arg + Copy + Debug,
-    A: LockAlreadyOwnedAction,
->(
-    tmp_file_unsupported: &mut bool,
-    dirfd: Fd,
-    prepare_path: P1,
-    prepare_fallback_path: P2,
-    path: P3,
-    _: A,
-) -> Result<A::Output> {
-    let mut new_lock_file = File::from(
-        create_tmp_file(
-            tmp_file_unsupported,
-            dirfd,
-            prepare_path,
-            prepare_fallback_path,
-            OFlags::WRONLY,
+pub fn acquire_lock_file<A: LockAlreadyOwnedAction>(path: &Path, _: A) -> Result<A::Output> {
+    let dir_path = path.parent().ok_or_else(|| Error::Io {
+        error: io::Error::new(ErrorKind::IsADirectory, "Invalid lock file path"),
+        context: format!("Path {path:?} is not a file").into(),
+    })?;
+    let dir = openat(
+        CWD,
+        if dir_path == Path::new("") {
+            Path::new(".")
+        } else {
+            dir_path
+        },
+        OFlags::DIRECTORY,
+        Mode::empty(),
+    )
+    .map_io_err(|| format!("Failed to open lock file directory: {dir_path:?}"))?;
+    flock(&dir, FlockOperation::LockExclusive)
+        .map_io_err(|| format!("Failed to acquire lock on lock file directory: {dir_path:?}"))?;
+
+    let create_lock_file = || {
+        openat(
+            &dir,
+            path,
+            OFlags::CREATE | OFlags::EXCL | OFlags::WRONLY,
             Mode::RUSR | Mode::WUSR,
         )
-        .map_io_err(|| "Failed to prepare lock file.")?,
-    );
-
+    };
     let me = getpid();
-    {
+    let init_lock_file = |file: OwnedFd| {
+        let mut file = File::from(file);
         let mut buf = ArrayVec::<_, { RawPid::MAX_STR_LEN + 1 }>::new_const();
         writeln!(buf, "{}", me.as_raw_nonzero()).unwrap();
-        new_lock_file
-            .write_all(&buf)
-            .map_io_err(|| "Failed to write to prepared lock file.")?;
+        file.write_all(&buf)
+            .map_io_err(|| format!("Failed to write to lock file: {path:?}"))?;
+        let file = OwnedFd::from(file);
+
+        flock(&file, FlockOperation::NonBlockingLockShared)
+            .map_io_err(|| format!("Failed to acquire lock on lock file: {path:?}"))?;
+        Ok(A::locked(OwnedLockFile(file)))
+    };
+
+    match create_lock_file() {
+        Err(Errno::EXIST) => {}
+        r => {
+            return r
+                .map_io_err(|| format!("Failed to create lock file: {path:?}"))
+                .and_then(init_lock_file);
+        }
     }
 
-    let mut existing_lock_file;
-    loop {
-        match link_tmp_file(&new_lock_file, dirfd, path) {
-            Err(Errno::EXIST) => {}
+    let prev_lock_file = match openat(&dir, path, OFlags::RDONLY, Mode::empty()) {
+        Err(Errno::NOENT) => {
+            return create_lock_file()
+                .map_io_err(|| format!("Failed to create lock file: {path:?}"))
+                .and_then(init_lock_file);
+        }
+        r => r.map_io_err(|| format!("Failed to open previous lock file: {path:?}"))?,
+    };
+    let prev_lock_file = File::from(prev_lock_file);
+    let pid = {
+        match flock(&prev_lock_file, FlockOperation::NonBlockingLockExclusive) {
+            Err(Errno::WOULDBLOCK) => Some(read_lock_file_pid(path, &prev_lock_file)?),
             r => {
-                return r
-                    .map_io_err(|| format!("Failed to materialize lock file: {path:?}"))
-                    .map(|()| A::NOTHING);
+                r.map_io_err(|| {
+                    format!("Failed to check validity of existing lock file's ownership: {path:?}")
+                })?;
+                None
             }
         }
+    };
 
-        existing_lock_file = 'retry: {
-            let lock_file = match openat(dirfd, path, OFlags::RDWR, Mode::empty()) {
-                Err(Errno::NOENT) => break 'retry None,
-                r => r.map_io_err(|| format!("Failed to open lock file: {path:?}"))?,
-            };
-            flock(&lock_file, FlockOperation::LockExclusive)
-                .map_io_err(|| format!("Failed to acquire lock on lock file: {path:?}"))?;
-            let lock_file = File::from(lock_file);
+    if let Some(pid) = pid {
+        if pid == me {
+            flock(&prev_lock_file, FlockOperation::NonBlockingLockShared).map_io_err(|| {
+                format!("Failed to acquire lock on lock file: {prev_lock_file:?}")
+            })?;
+            return Ok(A::locked(OwnedLockFile(OwnedFd::from(prev_lock_file))));
+        }
 
-            let pid = match read_lock_file_pid(path, &lock_file)? {
-                LockFilePid::Valid(pid) => pid,
-                LockFilePid::Reset => break 'retry Some(lock_file),
-            };
-
-            if pid == me {
-                return Ok(A::NOTHING);
-            }
-
+        'ready: {
             match A::KIND {
                 LockAlreadyOwnedActionKind::SendQuitAndWait => {
                     let fd = match pidfd_open(pid, PidfdFlags::empty()) {
-                        Err(Errno::SRCH) => break 'retry Some(lock_file),
+                        Err(Errno::SRCH) => break 'ready,
                         r => r.map_io_err(|| format!("Failed to open pid file: {pid:?}"))?,
                     };
 
                     match pidfd_send_signal(&fd, Signal::QUIT) {
-                        Err(Errno::SRCH) => break 'retry Some(lock_file),
+                        Err(Errno::SRCH) => break 'ready,
                         r => r.map_io_err(|| {
                             format!("Failed to send quit to lock file {path:?} owner: {pid:?}")
                         })?,
@@ -223,7 +240,6 @@ pub fn acquire_lock_file<
                             context: "Failed to receive PID poll response.".into(),
                         });
                     }
-                    Some(lock_file)
                 }
                 LockAlreadyOwnedActionKind::SendKillAndTakeover => {
                     match kill_process(pid, Signal::TERM) {
@@ -234,50 +250,22 @@ pub fn acquire_lock_file<
                             format!("Failed to kill lock file {path:?} owner: {pid:?}")
                         })?,
                     }
-                    Some(lock_file)
                 }
-                LockAlreadyOwnedActionKind::LeaveBe => match test_kill_process(pid) {
-                    Err(Errno::SRCH) => Some(lock_file),
-                    r => {
-                        return r
-                            .map_io_err(|| {
-                                format!("Failed to check lock file {path:?} owner status: {pid:?}")
-                            })
-                            .map(|()| A::something(pid));
-                    }
-                },
-            }
-        };
-
-        if let Some(lock_file) = &existing_lock_file {
-            lock_file
-                .set_len(0)
-                .map_io_err(|| format!("Failed to truncate previous lock file: {path:?}"))?;
-
-            match statx(dirfd, path, AtFlags::empty(), StatxFlags::INO) {
-                Err(Errno::NOENT) => (),
-                Ok(actual) => {
-                    let actual = actual.stx_ino;
-                    let expected = statx(lock_file, c"", AtFlags::EMPTY_PATH, StatxFlags::INO)
-                        .map_io_err(|| format!("Failed to statx open lock file: {path:?}"))?
-                        .stx_ino;
-                    if expected == actual {
-                        match unlinkat(dirfd, path, AtFlags::empty()) {
-                            Err(Errno::NOENT) => (),
-                            r => {
-                                r.map_io_err(|| {
-                                    format!("Failed to remove previous lock file: {path:?}")
-                                })?;
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    return Err(e).map_io_err(|| format!("Failed to statx lock file: {path:?}"));
-                }
+                LockAlreadyOwnedActionKind::LeaveBe => return Ok(A::exists(pid)),
             }
         }
     }
+
+    match unlinkat(&dir, path, AtFlags::empty()) {
+        Err(Errno::NOENT) => (),
+        r => {
+            r.map_io_err(|| format!("Failed to remove previous lock file: {path:?}"))?;
+        }
+    }
+
+    create_lock_file()
+        .map_io_err(|| format!("Failed to create lock file: {path:?}"))
+        .and_then(init_lock_file)
 }
 
 const PROC_SELF_FD_BUF_LEN: usize = "/proc/self/fd/".len() + RawFd::MAX_STR_LEN + 1;

@@ -878,14 +878,7 @@ fn wipe() -> Result<(), CliError> {
     })?;
 
     data_dir.push("server.lock");
-    acquire_lock_file(
-        &mut false,
-        CWD,
-        data_dir.parent().unwrap(),
-        &extra_buffer,
-        &data_dir,
-        SendQuitAndWait,
-    )?;
+    let _lock = acquire_lock_file(&data_dir, SendQuitAndWait)?;
     data_dir.pop();
 
     extra_buffer.pop();

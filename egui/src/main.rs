@@ -58,11 +58,15 @@ static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
     tracy_client::ProfiledAllocator::new(std::alloc::System, 100);
 
 fn main() -> Result<(), eframe::Error> {
-    if env::args_os().nth(1).as_deref() == Some(OsStr::new("toggle")) {
-        let _ = maybe_open_existing_instance_and_exit().inspect_err(|e| {
-            eprintln!("Failed to check for existing instance: {e}\nDetails: {e:#?}");
-        });
-    }
+    let startup_token = if env::args_os().nth(1).as_deref() == Some(OsStr::new("toggle")) {
+        maybe_open_existing_instance_and_exit()
+            .inspect_err(|e| {
+                eprintln!("Failed to check for existing instance: {e}\nDetails: {e:#?}");
+            })
+            .ok()
+    } else {
+        None
+    };
 
     let stop = Arc::new(AtomicBool::new(false));
     let result = eframe::run_native(
@@ -144,7 +148,7 @@ fn main() -> Result<(), eframe::Error> {
                     )));
 
                     if daemon
-                        && let Err(e) = maintain_single_instance(&stop, || {
+                        && let Err(e) = maintain_single_instance(&stop, startup_token, || {
                             ctx.send_viewport_cmd(ViewportCommand::Visible(true));
                             ctx.send_viewport_cmd(ViewportCommand::Focus);
                         })

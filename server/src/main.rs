@@ -61,8 +61,8 @@ fn into_report(cli_err: CliError) -> Report<[Wrapper]> {
         CliError::ServerAlreadyRunning { pid: _, lock_file } => Report::new(wrapper)
             .attach(
                 "Unable to safely start server: please shut down the existing instance. If \
-                 something has gone terribly wrong, please create an empty server lock file to \
-                 initiate the recovery sequence on the next startup.",
+                 something has gone terribly wrong, please make sure the server is dead and delete \
+                 the lock file to initiate the recovery sequence on the next startup.",
             )
             .attach(format!("Lock file: {lock_file:?}")).expand(),
         CliError::Multiple(errs) => {
