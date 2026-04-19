@@ -741,7 +741,7 @@ fn entry_ui(
                                 leading_space: 0.0,
                                 byte_range: start..end,
                                 format: TextFormat {
-                                    underline: Stroke::new(1., ui.visuals().strong_text_color()),
+                                    underline: Stroke::new(1f32, ui.visuals().strong_text_color()),
                                     ..format.clone()
                                 },
                             },

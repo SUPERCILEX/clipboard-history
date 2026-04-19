@@ -18,7 +18,7 @@ ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path 
 rustix = { version = "1.1.4", features = ["stdio"] }
 thiserror = "2.0.18"
 tracy-client = { version = "0.18.4", optional = true }
-tui-input = "0.15.1"
+tui-input = "0.15.3"
 
 [features]
 trace = ["dep:tracy-client"]
