@@ -25,7 +25,7 @@ rand = { version = "0.10.1", default-features = false, features = ["std"] }
 rand_distr = "0.6.0"
 rand_xoshiro = "0.8.0"
 regex = "1.12.3"
-ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "deduplication", "search", "config"] }
+ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "deduplication", "search"] }
 rustc-hash = "2.1.2"
 rustix = { version = "1.1.4", features = ["stdio", "event"] }
 serde = { version = "1.0.228", features = ["derive"] }

@@ -90,7 +90,7 @@ enum CliError {
         message: &'static str,
         interface: &'static str,
     },
-    #[error("Serde TOML deserialization failed")]
+    #[error("Config deserialization failed")]
     Toml(#[from] toml::de::Error),
 }
 

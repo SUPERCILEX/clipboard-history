@@ -30,14 +30,6 @@ impl RingKind {
             Self::Favorites => c"favorites.ring",
         }
     }
-
-    #[must_use]
-    pub const fn default_max_entries(&self) -> u32 {
-        match self {
-            Self::Main => 131_070,
-            Self::Favorites => 1022,
-        }
-    }
 }
 
 // https://github.com/patrickmccallum/mimetype-io/blob/3a8176e6dd5d183b62a6d78013504128d96e9889/src/mimeData.json

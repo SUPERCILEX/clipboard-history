@@ -181,12 +181,29 @@ Modify app settings
 Usage: clipboard-history configure <COMMAND>
 
 Commands:
+  server   Edit the server settings
   x11      Edit the X11 watcher settings
   wayland  Edit the Wayland watcher settings
   help     Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help  Print help (use `--help` for more detail)
+
+---
+
+Edit the server settings
+
+Usage: clipboard-history configure server [OPTIONS]
+
+Options:
+      --max-main-entries <MAX_MAIN_ENTRIES>
+          The maximum number of entries to keep around before old entries are overwritten [default:
+          131070]
+      --max-favorite-entries <MAX_FAVORITE_ENTRIES>
+          The maximum number of favorited entries to keep around before old entries are overwritten
+          [default: 1022]
+  -h, --help
+          Print help (use `--help` for more detail)
 
 ---
 
@@ -197,10 +214,11 @@ Usage: clipboard-history configure x11 [OPTIONS]
 Options:
       --auto-paste <AUTO_PASTE>
           Instead of simply placing selected items in the clipboard, attempt to automatically paste
-          the selected item into the previously focused application [possible values: true, false]
+          the selected item into the previously focused application [default: true] [possible
+          values: true, false]
       --fast-path-optimizations <FAST_PATH_OPTIMIZATIONS>
           Disable this option to support blocking passwords from password managers that support the
-          `x-kde-passwordManagerHint` mime type [possible values: true, false]
+          `x-kde-passwordManagerHint` mime type [default: true] [possible values: true, false]
   -h, --help
           Print help (use `--help` for more detail)
 
@@ -213,7 +231,7 @@ Usage: clipboard-history configure wayland [OPTIONS]
 Options:
       --auto-paste <AUTO_PASTE>  Instead of simply placing selected items in the clipboard, attempt
                                  to automatically paste the selected item into the previously
-                                 focused application [possible values: true, false]
+                                 focused application [default: true] [possible values: true, false]
   -h, --help                     Print help (use `--help` for more detail)
 
 ---

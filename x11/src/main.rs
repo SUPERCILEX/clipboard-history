@@ -84,7 +84,7 @@ enum CliError {
     X11IdsExhausted,
     #[error("unsupported X11 version: XFixes extension not available")]
     X11NoXfixes,
-    #[error("Serde TOML deserialization failed")]
+    #[error("Config deserialization failed")]
     Toml(#[from] toml::de::Error),
 }
 

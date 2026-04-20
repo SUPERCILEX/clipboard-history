@@ -3,6 +3,7 @@ use std::{
     fmt::{Debug, Formatter},
     fs, io,
     io::ErrorKind,
+    num::NonZeroU32,
     ops::Deref,
     os::{fd::AsFd, unix::ffi::OsStrExt},
     path::{Path, PathBuf},
@@ -244,18 +245,18 @@ impl Drop for Mmap {
 
 impl Ring {
     /// Open a Ringboard database.
-    pub fn open<P: Arg + Copy + Debug>(max_entries: u32, path: P) -> Result<Self> {
+    pub fn open<P: Arg + Copy + Debug>(max_entries: NonZeroU32, path: P) -> Result<Self> {
         let fd = openat(CWD, path, OFlags::RDONLY, Mode::empty())
             .map_io_err(|| format!("Failed to open Ringboard database for reading: {path:?}"))?;
         Self::open_fd(max_entries, fd)
     }
 
-    pub fn open_fd<Fd: AsFd>(max_entries: u32, fd: Fd) -> Result<Self> {
+    pub fn open_fd<Fd: AsFd>(max_entries: NonZeroU32, fd: Fd) -> Result<Self> {
         let len = statx(&fd, c"", AtFlags::EMPTY_PATH, StatxFlags::SIZE)
             .map_io_err(|| "Failed to statx Ringboard database file.")?
             .stx_size;
         let len = usize::try_from(len).unwrap();
-        let max_entries = max_entries.clamp(offset_to_entries(len), MAX_ENTRIES);
+        let max_entries = max_entries.get().clamp(offset_to_entries(len), MAX_ENTRIES);
         let mem = Mmap::new(
             &fd,
             usize::try_from(entries_to_offset(max_entries)).unwrap(),

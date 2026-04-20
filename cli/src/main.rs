@@ -12,6 +12,7 @@ use std::{
     io,
     io::{BorrowedBuf, BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
     mem::MaybeUninit,
+    num::NonZeroU32,
     os::{
         fd::{AsFd, OwnedFd},
         unix::{ffi::OsStrExt, fs::FileExt},
@@ -171,6 +172,13 @@ enum Cmd {
 
 #[derive(Subcommand, Debug)]
 enum Configure {
+    /// Edit the server settings.
+    ///
+    /// All ringboard applications and services must be restarted after making
+    /// changes.
+    #[command(aliases = ["s"])]
+    Server(ConfigureServer),
+
     /// Edit the X11 watcher settings.
     #[command(aliases = ["x"])]
     X11(ConfigureX11),
@@ -181,13 +189,31 @@ enum Configure {
 }
 
 #[derive(Args, Debug)]
+struct ConfigureServer {
+    /// The maximum number of entries to keep around before old entries are
+    /// overwritten.
+    #[clap(long)]
+    #[clap(action = ArgAction::Set)]
+    #[clap(default_value_t = config::server::Config::default().max_entries.main)]
+    max_main_entries: NonZeroU32,
+
+    /// The maximum number of favorited entries to keep around before old
+    /// entries are overwritten.
+    #[clap(long)]
+    #[clap(action = ArgAction::Set)]
+    #[clap(default_value_t = config::server::Config::default().max_entries.favorites)]
+    max_favorite_entries: NonZeroU32,
+}
+
+#[derive(Args, Debug)]
 struct ConfigureX11 {
     /// Instead of simply placing selected items in the clipboard, attempt to
     /// automatically paste the selected item into the previously focused
     /// application.
     #[clap(long)]
     #[clap(action = ArgAction::Set)]
-    auto_paste: Option<bool>,
+    #[clap(default_value_t = config::x11::Config::default().auto_paste)]
+    auto_paste: bool,
 
     /// Disable this option to support blocking passwords from password managers
     /// that support the `x-kde-passwordManagerHint` mime type.
@@ -203,7 +229,8 @@ struct ConfigureX11 {
     /// selection.
     #[clap(long)]
     #[clap(action = ArgAction::Set)]
-    fast_path_optimizations: Option<bool>,
+    #[clap(default_value_t = config::x11::Config::default().fast_path_optimizations)]
+    fast_path_optimizations: bool,
 }
 
 #[derive(Args, Debug)]
@@ -213,7 +240,8 @@ struct ConfigureWayland {
     /// application.
     #[clap(long)]
     #[clap(action = ArgAction::Set)]
-    auto_paste: Option<bool>,
+    #[clap(default_value_t = config::wayland::Config::default().auto_paste)]
+    auto_paste: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -532,6 +560,7 @@ fn run() -> Result<(), CliError> {
         Cmd::Wipe => wipe(),
         Cmd::GarbageCollect(data) => garbage_collect(connect_to_server(&server_addr)?, data),
         Cmd::Import(data) => import(connect_to_server(&server_addr)?, data),
+        Cmd::Configure(Configure::Server(data)) => configure_server(data),
         Cmd::Configure(Configure::X11(data)) => configure_x11(data),
         Cmd::Configure(Configure::Wayland(data)) => configure_wayland(data),
         Cmd::Debug(Dev::Stats) => stats(),
@@ -2219,6 +2248,33 @@ fn fuzz(
 }
 
 #[allow(clippy::needless_pass_by_value)]
+fn configure_server(server: ConfigureServer) -> Result<(), CliError> {
+    let mut path = data_dir();
+    create_dir_all(&path).map_io_err(|| format!("Failed to create dir: {path:?}"))?;
+    path.push(config::server::file_name());
+    let mut file = File::create(&path).map_io_err(|| format!("Failed to open file: {path:?}"))?;
+
+    let config = {
+        let ConfigureServer {
+            max_main_entries,
+            max_favorite_entries,
+        } = server;
+        config::server::Config {
+            max_entries: config::server::MaxEntries {
+                main: max_main_entries,
+                favorites: max_favorite_entries,
+            },
+        }
+    };
+    let config = toml::to_string_pretty(&config::server::Stable::from(config))?;
+    file.write_all(config.as_bytes())
+        .map_io_err(|| format!("Failed to write to config file: {path:?}"))?;
+
+    println!("Saved configuration file to {path:?}.");
+    Ok(())
+}
+
+#[allow(clippy::needless_pass_by_value)]
 fn configure_x11(x11: ConfigureX11) -> Result<(), CliError> {
     let path = config::x11::file();
     {
@@ -2227,23 +2283,16 @@ fn configure_x11(x11: ConfigureX11) -> Result<(), CliError> {
     }
     let mut file = File::create(&path).map_io_err(|| format!("Failed to open file: {path:?}"))?;
 
-    let mut config = config::x11::Config::default();
-    {
+    let config = {
         let ConfigureX11 {
             auto_paste,
             fast_path_optimizations,
         } = x11;
-        let config::x11::Config {
-            auto_paste: ref mut auto_paste_,
-            fast_path_optimizations: ref mut fast_path_optimizations_,
-        } = config;
-        if let Some(auto_paste) = auto_paste {
-            *auto_paste_ = auto_paste;
+        config::x11::Config {
+            auto_paste,
+            fast_path_optimizations,
         }
-        if let Some(fast_path_optimizations) = fast_path_optimizations {
-            *fast_path_optimizations_ = fast_path_optimizations;
-        }
-    }
+    };
     let config = toml::to_string_pretty(&config::x11::Stable::from(config))?;
     file.write_all(config.as_bytes())
         .map_io_err(|| format!("Failed to write to config file: {path:?}"))?;
@@ -2261,16 +2310,10 @@ fn configure_wayland(wayland: ConfigureWayland) -> Result<(), CliError> {
     }
     let mut file = File::create(&path).map_io_err(|| format!("Failed to open file: {path:?}"))?;
 
-    let mut config = config::wayland::Config::default();
-    {
+    let config = {
         let ConfigureWayland { auto_paste } = wayland;
-        let config::wayland::Config {
-            auto_paste: ref mut auto_paste_,
-        } = config;
-        if let Some(auto_paste) = auto_paste {
-            *auto_paste_ = auto_paste;
-        }
-    }
+        config::wayland::Config { auto_paste }
+    };
     let config = toml::to_string_pretty(&config::wayland::Stable::from(config))?;
     file.write_all(config.as_bytes())
         .map_io_err(|| format!("Failed to write to config file: {path:?}"))?;

@@ -29,6 +29,7 @@ use ringboard_core::{
     ring::{Entry, Header, InitializedEntry, RawEntry, Ring, entries_to_offset},
     size_to_bucket,
 };
+use ringboard_sdk::{RingReader, config};
 use rustix::{
     fs::{
         AtFlags, CWD, Mode, OFlags, RenameFlags, XattrFlags, fsetxattr, ftruncate, getxattr, mkdir,
@@ -279,10 +280,12 @@ fn create_scratchpad(tmp_file_unsupported: &mut bool) -> ringboard_core::Result<
 
 impl Allocator {
     pub fn open() -> Result<Self, CliError> {
+        let config = config::server::load(config::server::file_name())?;
+        info!("Using configuration {config:?}");
         let open_ring = |kind: RingKind| -> Result<_, CliError> {
             let writer = RingWriter::open(kind.file_name_cstr())?;
             Ok(WritableRing {
-                ring: Ring::open_fd(kind.default_max_entries(), &writer.ring)?,
+                ring: Ring::open_fd(config.max_entries(kind), &writer.ring)?,
                 writer,
             })
         };
@@ -349,7 +352,7 @@ impl Allocator {
         let mut tmp_file_unsupported = false;
         let scratchpad = create_scratchpad(&mut tmp_file_unsupported)?;
 
-        Ok(Self {
+        let mut me = Self {
             rings,
             data: AllocatorData {
                 buckets: Buckets {
@@ -362,7 +365,120 @@ impl Allocator {
                 scratchpad,
                 tmp_file_unsupported,
             },
-        })
+        };
+        me.check_for_ring_capacity_changes(&config)?;
+        Ok(me)
+    }
+
+    fn check_for_ring_capacity_changes(
+        &mut self,
+        config: &config::server::Config,
+    ) -> Result<(), CliError> {
+        for kind in [RingKind::Main, RingKind::Favorites] {
+            let WritableRing { writer, ring } = &mut self.rings[kind];
+            let max_entries = config.max_entries(kind);
+            let write_head = ring.write_head();
+            if ring.len() < ring.capacity() && write_head != ring.len() {
+                debug_assert!(max_entries.get() > ring.len());
+                debug_assert!(max_entries.get() >= ring.capacity());
+                info!(
+                    "{kind:?} ring capacity grew from {} entries to {} entries, shifting.",
+                    ring.len(),
+                    max_entries.get()
+                );
+
+                ftruncate(&writer.ring, entries_to_offset(max_entries.get())).map_io_err(|| {
+                    format!("Failed to truncate {kind:?} ring to {max_entries} entries.")
+                })?;
+
+                let mut move_ = |from_entry: ringboard_sdk::Entry, to_id| -> Result<(), CliError> {
+                    let from_id = from_entry.index();
+                    let from_entry = ring.get(from_id).unwrap();
+                    writer.write(Entry::Uninitialized, from_id)?;
+                    Self::move_entry_data(from_entry, kind, from_id, kind, to_id, &mut self.data)?;
+                    writer.write(from_entry, to_id)?;
+                    Ok(())
+                };
+                let reader = RingReader::from_id(ring, kind, write_head, 0);
+                if write_head >= ring.len() / 2 {
+                    let mut to_id = max_entries.get() - 1;
+                    for from_entry in reader.rev() {
+                        move_(from_entry, to_id)?;
+                        to_id -= 1;
+                    }
+                } else {
+                    let mut to_id = ring.len();
+                    for from_entry in reader {
+                        move_(from_entry, to_id)?;
+                        to_id += 1;
+                        if to_id >= max_entries.get() {
+                            to_id = 0;
+                        }
+                    }
+                    writer.set_write_head(to_id)?;
+                }
+
+                self.rings[kind].ring = Ring::open_fd(max_entries, &writer.ring)?;
+            } else if ring.capacity() > max_entries.get() {
+                info!(
+                    "{kind:?} ring capacity shrunk from {} entries to {} entries, compacting.",
+                    ring.capacity(),
+                    max_entries.get()
+                );
+                let mut reader = RingReader::from_id(ring, kind, write_head, write_head);
+
+                let mut entries_to_keep =
+                    Vec::with_capacity(usize::try_from(max_entries.get()).unwrap());
+                while let Some(entry) = reader.next_back() {
+                    let from_id = entry.index();
+                    entries_to_keep.push((from_id, ring.get(from_id).unwrap()));
+                    if entries_to_keep.len() >= usize::try_from(max_entries.get()).unwrap() {
+                        break;
+                    }
+                }
+                let num_entries = u32::try_from(entries_to_keep.len()).unwrap();
+                let will_be_overwritten = |from_id: u32| from_id >= max_entries.get() - num_entries;
+
+                while let Some(entry) = reader.next_back() {
+                    let id = entry.index();
+                    let entry = ring.get(id).unwrap();
+                    if !will_be_overwritten(id) {
+                        writer.write(Entry::Uninitialized, id)?;
+                    }
+                    self.data.free(entry, kind, id)?;
+                }
+
+                let mut to_id = max_entries.get();
+                for (from_id, from_entry) in entries_to_keep {
+                    to_id -= 1;
+                    if from_id != to_id {
+                        if !will_be_overwritten(from_id) {
+                            writer.write(Entry::Uninitialized, from_id)?;
+                        }
+                        Self::move_entry_data(
+                            from_entry,
+                            kind,
+                            from_id,
+                            kind,
+                            to_id,
+                            &mut self.data,
+                        )?;
+                        writer.write(from_entry, to_id)?;
+                    }
+                }
+
+                ftruncate(&writer.ring, entries_to_offset(max_entries.get())).map_io_err(|| {
+                    format!("Failed to truncate {kind:?} ring to {max_entries} entries.")
+                })?;
+                writer.set_write_head(0)?;
+                self.rings[kind].ring = Ring::open_fd(max_entries, &writer.ring)?;
+                self.gc_(0)?;
+            } else if write_head >= max_entries.get() {
+                debug_assert_eq!(write_head, max_entries.get());
+                writer.set_write_head(0)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn add(
@@ -430,6 +546,73 @@ impl Allocator {
         Ok((ring, id, entry))
     }
 
+    fn move_entry_data(
+        from_entry: Entry,
+        from: RingKind,
+        from_id: u32,
+        to: RingKind,
+        to_id: u32,
+        &mut AllocatorData {
+            ref direct_dir,
+            ref metadata_dir,
+            ..
+        }: &mut AllocatorData,
+    ) -> Result<(), CliError> {
+        debug!(
+            "Moving entry {from_entry:?} from {from:?} ring at position {from_id} to {to:?} ring \
+             at position {to_id}."
+        );
+
+        match from_entry {
+            Entry::Uninitialized => unreachable!(),
+            Entry::Bucketed(_) => {
+                // Nothing to do, buckets are shared between rings.
+            }
+            Entry::File => {
+                let mut from_file_name = [MaybeUninit::uninit(); 14];
+                let from_file_name = direct_file_name(&mut from_file_name, from, from_id);
+                let mut to_file_name = [MaybeUninit::uninit(); 14];
+                let to_file_name = direct_file_name(&mut to_file_name, to, to_id);
+
+                renameat(direct_dir, from_file_name, direct_dir, to_file_name).map_io_err(
+                    || {
+                        format!(
+                            "Failed to rename direct allocation file from {from_file_name:?} to \
+                             {to_file_name:?}."
+                        )
+                    },
+                )?;
+                if let Some(metadata_dir) = metadata_dir {
+                    renameat(metadata_dir, from_file_name, metadata_dir, to_file_name)
+                        .map_io_err(|| {
+                            format!(
+                                "Failed to rename metadata file from {from_file_name:?} to \
+                                 {to_file_name:?}."
+                            )
+                        })
+                        .map_err(CliError::from)
+                        .map_err(|e| {
+                            if let Err(e2) =
+                                renameat(direct_dir, to_file_name, direct_dir, from_file_name)
+                                    .map_io_err(|| {
+                                        format!(
+                                            "Failed to undo renaming direct allocation file from \
+                                             {to_file_name:?} to {from_file_name:?}."
+                                        )
+                                    })
+                                    .map_err(CliError::from)
+                            {
+                                CliError::Multiple(vec![e, e2])
+                            } else {
+                                e
+                            }
+                        })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn move_to_front(
         &mut self,
         id: u64,
@@ -452,67 +635,10 @@ impl Allocator {
         }
         writer.write(Entry::Uninitialized, from_id)?;
 
-        let run = |to_id,
-                   &mut AllocatorData {
-                       ref direct_dir,
-                       ref metadata_dir,
-                       ..
-                   }: &mut AllocatorData| {
-            debug!(
-                "Moving entry {from_entry:?} from {from:?} ring at position {from_id} to {to:?} \
-                 ring at position {to_id}."
-            );
-
-            match from_entry {
-                Entry::Uninitialized => unreachable!(),
-                Entry::Bucketed(_) => {
-                    // Nothing to do, buckets are shared between rings.
-                }
-                Entry::File => {
-                    let mut from_file_name = [MaybeUninit::uninit(); 14];
-                    let from_file_name = direct_file_name(&mut from_file_name, from, from_id);
-                    let mut to_file_name = [MaybeUninit::uninit(); 14];
-                    let to_file_name = direct_file_name(&mut to_file_name, to, to_id);
-
-                    renameat(direct_dir, from_file_name, direct_dir, to_file_name).map_io_err(
-                        || {
-                            format!(
-                                "Failed to rename direct allocation file from {from_file_name:?} \
-                                 to {to_file_name:?}."
-                            )
-                        },
-                    )?;
-                    if let Some(metadata_dir) = metadata_dir {
-                        renameat(metadata_dir, from_file_name, metadata_dir, to_file_name)
-                            .map_io_err(|| {
-                                format!(
-                                    "Failed to rename metadata file from {from_file_name:?} to \
-                                     {to_file_name:?}."
-                                )
-                            })
-                            .map_err(CliError::from)
-                            .map_err(|e| {
-                                if let Err(e2) =
-                                    renameat(direct_dir, to_file_name, direct_dir, from_file_name)
-                                        .map_io_err(|| {
-                                            format!(
-                                                "Failed to undo renaming direct allocation file \
-                                                 from {to_file_name:?} to {from_file_name:?}."
-                                            )
-                                        })
-                                        .map_err(CliError::from)
-                                {
-                                    CliError::Multiple(vec![e, e2])
-                                } else {
-                                    e
-                                }
-                            })?;
-                    }
-                }
-            }
+        let to_id = self.add_internal(to, |to_id, data| {
+            Self::move_entry_data(from_entry, from, from_id, to, to_id, data)?;
             Ok(from_entry)
-        };
-        let to_id = self.add_internal(to, run)?;
+        })?;
         Ok(MoveToFrontResponse::Success {
             id: composite_id(to, to_id),
         })

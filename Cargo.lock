@@ -771,6 +771,7 @@ dependencies = [
  "stable-type",
  "supercilex-tests",
  "thiserror 2.0.18",
+ "toml 1.1.2+spec-1.1.0",
 ]
 
 [[package]]
@@ -809,6 +810,7 @@ dependencies = [
  "arrayvec",
  "bitcode",
  "bitvec",
+ "clipboard-history-client-sdk",
  "clipboard-history-core",
  "env_logger",
  "error-stack",

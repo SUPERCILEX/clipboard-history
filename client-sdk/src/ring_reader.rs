@@ -15,6 +15,7 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
+use log::debug;
 use ringboard_core::{
     IoErr, NUM_BUCKETS, PathView, RingAndIndex, bucket_to_length, direct_file_name, open_buckets,
     protocol::{IdNotFoundError, MimeType, RingKind, composite_id, decompose_id},
@@ -27,6 +28,8 @@ use rustix::{
     io::Errno,
     path::Arg,
 };
+
+use crate::config;
 
 #[must_use]
 pub fn is_text_mime(mime: &str) -> bool {
@@ -193,8 +196,14 @@ impl<'a> RingReader<'a> {
         database_dir: &mut PathBuf,
         kind: RingKind,
     ) -> Result<Ring, ringboard_core::Error> {
+        let max_entries = {
+            let path = PathView::new(database_dir, config::server::file_name());
+            let config = config::server::load(&path)?;
+            debug!("Using server configuration {config:?}");
+            config.max_entries(kind)
+        };
         let ring = PathView::new(database_dir, kind.file_name());
-        Ring::open(kind.default_max_entries(), &*ring)
+        Ring::open(max_entries, &*ring)
     }
 
     #[must_use]
