@@ -1695,7 +1695,7 @@ pub fn clipboard_history_client_sdk::RingReader<'a>::from_id(ring: &'a clipboard
 pub fn clipboard_history_client_sdk::RingReader<'a>::from_ring(ring: &'a clipboard_history_core::ring::Ring, kind: clipboard_history_core::protocol::RingKind) -> Self
 pub const fn clipboard_history_client_sdk::RingReader<'a>::from_uninit(ring: &'a clipboard_history_core::ring::Ring, kind: clipboard_history_core::protocol::RingKind) -> Self
 pub const fn clipboard_history_client_sdk::RingReader<'a>::kind(&self) -> clipboard_history_core::protocol::RingKind
-pub fn clipboard_history_client_sdk::RingReader<'a>::prepare_ring(database_dir: &mut std::path::PathBuf, kind: clipboard_history_core::protocol::RingKind) -> core::result::Result<clipboard_history_core::ring::Ring, clipboard_history_core::Error>
+pub fn clipboard_history_client_sdk::RingReader<'a>::prepare_ring(database_dir: &mut std::path::PathBuf, kind: clipboard_history_core::protocol::RingKind, config: &clipboard_history_client_sdk::config::server::Config) -> core::result::Result<clipboard_history_core::ring::Ring, clipboard_history_core::Error>
 pub fn clipboard_history_client_sdk::RingReader<'a>::reset_to(&mut self, write_head: u32, start: u32)
 pub const fn clipboard_history_client_sdk::RingReader<'a>::ring(&self) -> &clipboard_history_core::ring::Ring
 impl core::iter::traits::double_ended::DoubleEndedIterator for clipboard_history_client_sdk::RingReader<'_>

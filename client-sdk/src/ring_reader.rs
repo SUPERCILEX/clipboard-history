@@ -101,9 +101,15 @@ pub struct DatabaseReader {
 
 impl DatabaseReader {
     pub fn open(database: &mut PathBuf) -> Result<Self, ringboard_core::Error> {
+        let config = {
+            let path = PathView::new(database, config::server::file_name());
+            let config = config::server::load(&path)?;
+            debug!("Using server configuration {config:?}");
+            config
+        };
         Ok(Self {
-            main: RingReader::prepare_ring(database, RingKind::Main)?,
-            favorites: RingReader::prepare_ring(database, RingKind::Favorites)?,
+            main: RingReader::prepare_ring(database, RingKind::Main, &config)?,
+            favorites: RingReader::prepare_ring(database, RingKind::Favorites, &config)?,
         })
     }
 
@@ -195,15 +201,10 @@ impl<'a> RingReader<'a> {
     pub fn prepare_ring(
         database_dir: &mut PathBuf,
         kind: RingKind,
+        config: &config::server::Config,
     ) -> Result<Ring, ringboard_core::Error> {
-        let max_entries = {
-            let path = PathView::new(database_dir, config::server::file_name());
-            let config = config::server::load(&path)?;
-            debug!("Using server configuration {config:?}");
-            config.max_entries(kind)
-        };
         let ring = PathView::new(database_dir, kind.file_name());
-        Ring::open(max_entries, &*ring)
+        Ring::open(config.max_entries(kind), &*ring)
     }
 
     #[must_use]
