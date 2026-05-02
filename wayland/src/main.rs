@@ -1435,26 +1435,10 @@ mod virtual_keyboard {
     const PASTE_KEY_INSERT: u32 = 110;
     const PASTE_KEYMAP: &[u8] = cr#"
     xkb_keymap {
-        xkb_keycodes "ringboard" {
-            minimum = 8;
-            maximum = 118;
-            <LFSH> = 50;
-            <INS> = 118;
-        };
-
-        xkb_types "ringboard" {
-            include "complete"
-        };
-
-        xkb_compatibility "ringboard" {
-            include "complete"
-        };
-
-        xkb_symbols "ringboard" {
-            key <LFSH> {[ Shift_L ]};
-            key <INS> {[ Insert ]};
-            modifier_map Shift { <LFSH> };
-        };
+        xkb_keycodes "evdev+aliases(qwerty)" { include "evdev+aliases(qwerty)" };
+        xkb_types "complete" { include "complete" };
+        xkb_compatibility "complete" { include "complete" };
+        xkb_symbols "pc+us+inet(evdev)" { include "pc+us+inet(evdev)" };
     };
     "#
     .to_bytes_with_nul();
