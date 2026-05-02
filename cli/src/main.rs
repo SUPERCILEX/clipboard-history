@@ -1034,17 +1034,6 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
                 usize::try_from(gch_id - 1).unwrap()
             }};
         }
-        macro_rules! get_translation {
-            () => {{
-                let gch_id = gch_id!();
-                if translation.len() <= gch_id {
-                    unsafe {
-                        drain_add_requests(&server, Some(&mut translation), &mut pending_adds)?;
-                    }
-                }
-                translation[gch_id]
-            }};
-        }
         macro_rules! api_error {
             ($e:expr) => {
                 println!(
@@ -1080,22 +1069,29 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
                 }
             }
             OP_TYPE_DELETE_TEXT => {
+                unsafe {
+                    drain_add_requests(&server, Some(&mut translation), &mut pending_adds)?;
+                }
                 if let RemoveResponse { error: Some(e) } =
-                    RemoveRequest::response(&server, get_translation!())?
+                    RemoveRequest::response(&server, translation[gch_id!()])?
                 {
                     api_error!(e);
                 }
                 i += 4;
             }
             OP_TYPE_FAVORITE_ITEM | OP_TYPE_UNFAVORITE_ITEM | OP_TYPE_MOVE_ITEM_TO_END => {
-                match MoveToFrontRequest::response(&server, get_translation!(), match op {
+                unsafe {
+                    drain_add_requests(&server, Some(&mut translation), &mut pending_adds)?;
+                }
+                let gch_id = gch_id!();
+                match MoveToFrontRequest::response(&server, translation[gch_id], match op {
                     OP_TYPE_FAVORITE_ITEM => Some(RingKind::Favorites),
                     OP_TYPE_UNFAVORITE_ITEM => Some(RingKind::Main),
                     OP_TYPE_MOVE_ITEM_TO_END => None,
                     _ => unreachable!(),
                 })? {
                     MoveToFrontResponse::Success { id } => {
-                        translation[gch_id!()] = id;
+                        translation[gch_id] = id;
                     }
                     MoveToFrontResponse::Error(e) => {
                         api_error!(e);
