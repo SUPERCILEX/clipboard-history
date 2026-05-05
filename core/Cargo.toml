@@ -18,4 +18,4 @@ rustix = { version = "1.1.4", features = ["fs", "mm", "process", "net", "event",
 thiserror = "2.0.18"
 
 [dev-dependencies]
-supercilex-tests = { version = "0.4.21", default-features = false, features = ["api"] }
+supercilex-tests = { version = "0.4.22", default-features = false, features = ["api"] }

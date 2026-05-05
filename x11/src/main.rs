@@ -635,7 +635,7 @@ fn handle_x11_event(
                 } else {
                     unreachable!()
                 };
-            trace!("Clear selection mask: {clear_selection_mask:#02b}");
+            trace!("Clear selection mask: {clear_selection_mask:#04b}");
 
             if *clear_selection_mask == 3 && last_paste.take().is_some() {
                 info!("Lost selection ownership.");

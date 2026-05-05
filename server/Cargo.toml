@@ -16,7 +16,7 @@ bitvec = "1.0.1"
 env_logger = { version = "0.11.10", default-features = false }
 error-stack = { version = "0.7.0", default-features = false, features = ["std"] }
 io-uring = "0.7.12"
-libc = "0.2.185"
+libc = "0.2.186"
 log = { version = "0.4.29", features = ["release_max_level_info"] }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core", features = ["error-stack"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }

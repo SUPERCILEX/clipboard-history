@@ -9,6 +9,7 @@ pub mod clipboard_history_core::protocol
 pub clipboard_history_core::protocol::AddResponse::Success
 pub clipboard_history_core::protocol::AddResponse::Success::id: u64
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::AddResponse
+pub fn clipboard_history_core::protocol::AddResponse::as_bytes(&self) -> &[u8]
 impl core::clone::Clone for clipboard_history_core::protocol::AddResponse
 pub fn clipboard_history_core::protocol::AddResponse::clone(&self) -> clipboard_history_core::protocol::AddResponse
 impl core::fmt::Debug for clipboard_history_core::protocol::AddResponse
@@ -98,6 +99,7 @@ pub clipboard_history_core::protocol::MoveToFrontResponse::Error(clipboard_histo
 pub clipboard_history_core::protocol::MoveToFrontResponse::Success
 pub clipboard_history_core::protocol::MoveToFrontResponse::Success::id: u64
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::MoveToFrontResponse
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::as_bytes(&self) -> &[u8]
 impl core::clone::Clone for clipboard_history_core::protocol::MoveToFrontResponse
 pub fn clipboard_history_core::protocol::MoveToFrontResponse::clone(&self) -> clipboard_history_core::protocol::MoveToFrontResponse
 impl core::fmt::Debug for clipboard_history_core::protocol::MoveToFrontResponse
@@ -148,6 +150,7 @@ pub clipboard_history_core::protocol::Request::Swap
 pub clipboard_history_core::protocol::Request::Swap::id1: u64
 pub clipboard_history_core::protocol::Request::Swap::id2: u64
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::Request
+pub fn clipboard_history_core::protocol::Request::as_bytes(&self) -> &[u8]
 impl core::clone::Clone for clipboard_history_core::protocol::Request
 pub fn clipboard_history_core::protocol::Request::clone(&self) -> clipboard_history_core::protocol::Request
 impl core::fmt::Debug for clipboard_history_core::protocol::Request
@@ -235,6 +238,7 @@ impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::proto
 #[repr(C)] pub struct clipboard_history_core::protocol::GarbageCollectResponse
 pub clipboard_history_core::protocol::GarbageCollectResponse::bytes_freed: u64
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::GarbageCollectResponse
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::as_bytes(&self) -> &[u8]
 impl core::clone::Clone for clipboard_history_core::protocol::GarbageCollectResponse
 pub fn clipboard_history_core::protocol::GarbageCollectResponse::clone(&self) -> clipboard_history_core::protocol::GarbageCollectResponse
 impl core::fmt::Debug for clipboard_history_core::protocol::GarbageCollectResponse
@@ -273,6 +277,7 @@ impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::proto
 #[repr(C)] pub struct clipboard_history_core::protocol::RemoveResponse
 pub clipboard_history_core::protocol::RemoveResponse::error: core::option::Option<clipboard_history_core::protocol::IdNotFoundError>
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::RemoveResponse
+pub fn clipboard_history_core::protocol::RemoveResponse::as_bytes(&self) -> &[u8]
 impl core::clone::Clone for clipboard_history_core::protocol::RemoveResponse
 pub fn clipboard_history_core::protocol::RemoveResponse::clone(&self) -> clipboard_history_core::protocol::RemoveResponse
 impl core::fmt::Debug for clipboard_history_core::protocol::RemoveResponse
@@ -348,6 +353,7 @@ impl<T> error_stack::context::OpaqueAttachment for clipboard_history_core::proto
 pub clipboard_history_core::protocol::SwapResponse::error1: core::option::Option<clipboard_history_core::protocol::IdNotFoundError>
 pub clipboard_history_core::protocol::SwapResponse::error2: core::option::Option<clipboard_history_core::protocol::IdNotFoundError>
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::SwapResponse
+pub fn clipboard_history_core::protocol::SwapResponse::as_bytes(&self) -> &[u8]
 impl core::clone::Clone for clipboard_history_core::protocol::SwapResponse
 pub fn clipboard_history_core::protocol::SwapResponse::clone(&self) -> clipboard_history_core::protocol::SwapResponse
 impl core::fmt::Debug for clipboard_history_core::protocol::SwapResponse
@@ -971,11 +977,17 @@ pub const clipboard_history_core::NUM_BUCKETS: usize
 pub trait clipboard_history_core::AsBytes: core::marker::Sized
 pub fn clipboard_history_core::AsBytes::as_bytes(&self) -> &[u8]
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::AddResponse
+pub fn clipboard_history_core::protocol::AddResponse::as_bytes(&self) -> &[u8]
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::GarbageCollectResponse
+pub fn clipboard_history_core::protocol::GarbageCollectResponse::as_bytes(&self) -> &[u8]
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::MoveToFrontResponse
+pub fn clipboard_history_core::protocol::MoveToFrontResponse::as_bytes(&self) -> &[u8]
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::RemoveResponse
+pub fn clipboard_history_core::protocol::RemoveResponse::as_bytes(&self) -> &[u8]
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::Request
+pub fn clipboard_history_core::protocol::Request::as_bytes(&self) -> &[u8]
 impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::SwapResponse
+pub fn clipboard_history_core::protocol::SwapResponse::as_bytes(&self) -> &[u8]
 pub trait clipboard_history_core::IoErr<Out>
 pub fn clipboard_history_core::IoErr::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, f: impl core::ops::function::FnOnce() -> I) -> Out
 impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_core::Error>> for core::result::Result<T, std::io::error::Error>

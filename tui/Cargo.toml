@@ -13,7 +13,7 @@ license.workspace = true
 error-stack = { version = "0.7.0", default-features = false, features = ["std"] }
 image = "0.25.10"
 ratatui = { version = "0.30.0", features = ["unstable-rendered-line-info"] }
-ratatui-image = { version = "10.0.6", default-features = false, features = ["image-defaults", "crossterm"] }
+ratatui-image = { version = "10.0.8", default-features = false, features = ["image-defaults", "crossterm"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["error-stack", "ui"] }
 rustix = { version = "1.1.4", features = ["stdio"] }
 thiserror = "2.0.18"
