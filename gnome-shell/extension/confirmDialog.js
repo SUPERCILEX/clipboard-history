@@ -13,6 +13,7 @@ export function openConfirmDialog(
   ok_label,
   cancel_label,
   callback,
+  cancel_callback,
 ) {
   if (!_openDialog) {
     _openDialog = new ConfirmDialog(
@@ -21,13 +22,18 @@ export function openConfirmDialog(
       ok_label,
       cancel_label,
       callback,
+      cancel_callback,
     ).open();
+  } else if (typeof cancel_callback === 'function') {
+    // A dialog is already showing; treat this duplicate request as cancelled
+    // so the caller's Promise can settle instead of leaking forever.
+    cancel_callback();
   }
 }
 
 const ConfirmDialog = GObject.registerClass(
   class ConfirmDialog extends ModalDialog.ModalDialog {
-    _init(title, desc, ok_label, cancel_label, callback) {
+    _init(title, desc, ok_label, cancel_label, callback, cancel_callback) {
       super._init();
 
       let main_box = new St.BoxLayout({
@@ -59,6 +65,7 @@ const ConfirmDialog = GObject.registerClass(
           label: cancel_label,
           action: () => {
             this.close();
+            if (typeof cancel_callback === 'function') cancel_callback();
             _openDialog = null;
           },
           key: Clutter.Escape,
