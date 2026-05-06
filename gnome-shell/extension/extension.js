@@ -65,23 +65,25 @@ class ClipboardIndicator extends PanelMenu.Button {
     // Search entry
     this._searchEntry = new St.Entry({
       name: 'searchEntry',
-      style_class: 'search-entry',
+      style_class: 'search-entry ci-history-search-entry',
       can_focus: true,
       hint_text: 'Search…',
       track_hover: true,
       x_expand: true,
     });
     const searchItem = new PopupMenu.PopupBaseMenuItem({
+      style_class: 'ci-history-search-section',
       reactive: false,
       can_focus: false,
     });
     searchItem.add_child(this._searchEntry);
     this.menu.addMenuItem(searchItem);
 
-    // History section inside a scroll view
+    // History section inside a scroll view. The CSS class
+    // `ci-history-menu-section` carries the max-height: 450px clamp.
     this._historySection = new PopupMenu.PopupMenuSection();
     this._scrollView = new St.ScrollView({
-      style_class: 'ci-history-scroll',
+      style_class: 'ci-history-menu-section',
       overlay_scrollbars: true,
     });
     this._scrollView.add_child(this._historySection.actor);
@@ -95,11 +97,11 @@ class ClipboardIndicator extends PanelMenu.Button {
     // non-reactive PopupBaseMenuItem prevents the menu from auto-closing on
     // click — that's what makes pagination work without dismissing the menu.
     const actionsItem = new PopupMenu.PopupBaseMenuItem({
+      style_class: 'ci-history-actions-section',
       reactive: false,
       can_focus: false,
     });
     const actionsBox = new St.BoxLayout({
-      style_class: 'ci-history-actions-section',
       vertical: false,
       x_expand: true,
     });
@@ -138,9 +140,20 @@ class ClipboardIndicator extends PanelMenu.Button {
     actionsBox.add_child(clearButton);
   }
 
+  // Set the menu width to a fixed fraction of the primary monitor, matching
+  // the upstream gnome-clipboard-history default. Without this the menu grows
+  // to whatever its widest entry needs, which for long clipboard items is
+  // unusable.
+  _setMenuWidth() {
+    const display = global.display;
+    const geom = display.get_monitor_geometry(display.get_primary_monitor());
+    this.menu.actor.width = Math.floor(geom.width * 0.35);
+  }
+
   _wireMenuLifecycle() {
     this.menu.connect('open-state-changed', (_, open) => {
       if (open) {
+        this._setMenuWidth();
         this._controller.onMenuOpen().catch(e => {
           console.warn(`ringboard: onMenuOpen failed: ${e.message}`);
         });

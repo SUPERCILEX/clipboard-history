@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -208,6 +209,11 @@ export class MenuController {
         ? truncateLabel(entry.data, MAX_VISIBLE_CHARS)
         : `[${entry.kind || 'binary'}]`;
       item.label.set_text(labelText);
+      // Force single-line display: ellipsize at the end if the menu width
+      // can't fit the (already whitespace-collapsed, char-truncated) text.
+      const ct = item.label.get_clutter_text();
+      ct.set_single_line_mode(true);
+      ct.set_ellipsize(Pango.EllipsizeMode.END);
       if (!isText) {
         item.setSensitive(false);
       } else {
