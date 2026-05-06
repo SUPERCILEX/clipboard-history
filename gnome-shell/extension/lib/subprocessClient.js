@@ -87,9 +87,64 @@ export class SubprocessClient {
     return Number.isFinite(id) ? id : null;
   }
 
-  // Stubs filled in by the next task.
-  async search(_query) { throw new Error('SubprocessClient.search: not implemented yet'); }
-  async moveToFront(_id) { throw new Error('not implemented'); }
-  async remove(_id) { throw new Error('not implemented'); }
-  async wipe() { throw new Error('not implemented'); }
+  // Search for entries. Empty query returns all entries newest-first.
+  // Returns an array of { id, kind, data } objects.
+  async search(query) {
+    const q = typeof query === 'string' ? query : '';
+    let r;
+    try {
+      r = await this._run(['search', '--json', q]);
+    } catch (_) {
+      return [];
+    }
+    if (!r.ok) {
+      return [];
+    }
+    const text = r.stdout.trim();
+    if (text.length === 0) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(e =>
+        e && typeof e.id === 'number' && typeof e.data === 'string'
+      );
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Move an entry to the front of the ring. Returns true on success.
+  async moveToFront(id) {
+    if (!Number.isFinite(id)) return false;
+    try {
+      const r = await this._run(['move-to-front', String(id)]);
+      return r.ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Remove an entry by id. Returns true on success.
+  async remove(id) {
+    if (!Number.isFinite(id)) return false;
+    try {
+      const r = await this._run(['remove', String(id)]);
+      return r.ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Wipe the entire history. Returns true on success.
+  // DO NOT call this from automated tests; it is destructive.
+  async wipe() {
+    try {
+      const r = await this._run(['wipe']);
+      return r.ok;
+    } catch (_) {
+      return false;
+    }
+  }
 }

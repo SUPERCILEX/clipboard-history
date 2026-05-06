@@ -9,7 +9,6 @@
 // Exit code 0 = pass, 1 = fail.
 
 import GLib from 'gi://GLib';
-import Gio from 'gi://Gio';
 import { findBinary, SubprocessClient } from '../lib/subprocessClient.js';
 
 let failures = 0;
@@ -37,18 +36,32 @@ async function main() {
   assert(typeof addedId === 'number' && addedId >= 0,
     `add() returned numeric id (got ${addedId})`);
 
-  // Cleanup: ensure the sentinel does not pollute the live history. We
-  // shell out directly rather than through the client because remove() is
-  // not implemented in this task — it lands in the next one.
-  if (typeof addedId === 'number' && addedId >= 0) {
-    const proc = Gio.Subprocess.new(
-      [binary, 'remove', String(addedId)],
-      Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
-    );
-    proc.wait(null);
-    assert(proc.get_successful(),
-      `cleanup remove(${addedId}) succeeded via CLI`);
+  // Search must find the entry we just added.
+  const matches = await client.search(sentinel);
+  assert(Array.isArray(matches) && matches.length >= 1,
+    `search(sentinel) returned >= 1 result (got ${matches?.length})`);
+  assert(matches.some(e => e.id === addedId),
+    'search result includes the added entry id');
+  if (matches.length > 0) {
+    const e0 = matches[0];
+    assert(typeof e0.id === 'number' && typeof e0.data === 'string',
+      'search entries have numeric id and string data');
   }
+
+  // moveToFront should succeed.
+  const moveOk = await client.moveToFront(addedId);
+  assert(moveOk === true, `moveToFront(${addedId}) returned true (got ${moveOk})`);
+
+  // remove cleans up; verify no pollution remains.
+  const removeOk = await client.remove(addedId);
+  assert(removeOk === true, `remove(${addedId}) returned true (got ${removeOk})`);
+
+  const afterRemove = await client.search(sentinel);
+  assert(Array.isArray(afterRemove) && !afterRemove.some(e => e.id === addedId),
+    'removed entry no longer present in search results');
+
+  // wipe is destructive: do NOT call it. Just confirm the method exists.
+  assert(typeof client.wipe === 'function', 'wipe is a function (not invoked)');
 }
 
 const loop = GLib.MainLoop.new(null, false);
