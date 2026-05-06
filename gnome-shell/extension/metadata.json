@@ -1,0 +1,10 @@
+{
+  "name": "Ringboard Clipboard History",
+  "version": 1,
+  "uuid": "ringboard@clipboard-history",
+  "gettext-domain": "ringboard@clipboard-history",
+  "description": "Ringboard clipboard history extension for GNOME Wayland. Captures clipboard content via St.Clipboard and submits entries to the Ringboard server via FFI bindings to the Rust client-sdk.",
+  "url": "https://github.com/SUPERCILEX/clipboard-history",
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "ffi-library": "libringboard_gnome_ffi.so"
+}
