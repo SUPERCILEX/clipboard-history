@@ -91,22 +91,51 @@ class ClipboardIndicator extends PanelMenu.Button {
 
     this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-    // Action row: prev | next | clear
-    this._prevItem = new PopupMenu.PopupMenuItem('« Previous page');
-    this._prevItem.connect('activate', () => this._controller.prevPage());
-    this.menu.addMenuItem(this._prevItem);
+    // Action row: prev | next | (spacer) | clear. Embedding St.Buttons in a
+    // non-reactive PopupBaseMenuItem prevents the menu from auto-closing on
+    // click — that's what makes pagination work without dismissing the menu.
+    const actionsItem = new PopupMenu.PopupBaseMenuItem({
+      reactive: false,
+      can_focus: false,
+    });
+    const actionsBox = new St.BoxLayout({
+      style_class: 'ci-history-actions-section',
+      vertical: false,
+      x_expand: true,
+    });
+    actionsItem.add_child(actionsBox);
+    this.menu.addMenuItem(actionsItem);
 
-    this._nextItem = new PopupMenu.PopupMenuItem('Next page »');
-    this._nextItem.connect('activate', () => this._controller.nextPage());
-    this.menu.addMenuItem(this._nextItem);
+    const makeIconButton = (iconName, onClick) => {
+      const btn = new St.Button({
+        style_class: 'ci-action-btn',
+        can_focus: true,
+        x_expand: false,
+      });
+      btn.set_child(new St.Icon({
+        icon_name: iconName,
+        style_class: 'popup-menu-icon',
+      }));
+      btn.connect('clicked', onClick);
+      return btn;
+    };
 
-    const clearItem = new PopupMenu.PopupMenuItem('Clear history');
-    clearItem.connect('activate', () => {
+    this._prevButton = makeIconButton('go-previous-symbolic',
+      () => this._controller.prevPage());
+    actionsBox.add_child(this._prevButton);
+
+    this._nextButton = makeIconButton('go-next-symbolic',
+      () => this._controller.nextPage());
+    actionsBox.add_child(this._nextButton);
+
+    actionsBox.add_child(new St.BoxLayout({ x_expand: true }));
+
+    const clearButton = makeIconButton('edit-delete-symbolic', () => {
       this._controller.clearAll(() => this._confirmClear()).catch(e => {
         console.warn(`ringboard: clearAll failed: ${e.message}`);
       });
     });
-    this.menu.addMenuItem(clearItem);
+    actionsBox.add_child(clearButton);
   }
 
   _wireMenuLifecycle() {
@@ -125,8 +154,10 @@ class ClipboardIndicator extends PanelMenu.Button {
     });
 
     this._controller.setOnPageChanged(({ hasPrev, hasNext }) => {
-      this._prevItem.setSensitive(hasPrev);
-      this._nextItem.setSensitive(hasNext);
+      this._prevButton.reactive = hasPrev;
+      this._prevButton.opacity = hasPrev ? 255 : 128;
+      this._nextButton.reactive = hasNext;
+      this._nextButton.opacity = hasNext ? 255 : 128;
     });
   }
 

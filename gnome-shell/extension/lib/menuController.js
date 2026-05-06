@@ -187,9 +187,15 @@ export class MenuController {
   // ---- rendering ----
 
   _renderPage() {
+    // The menu may have been closed (which clears _resultEntries via _reset)
+    // between an action firing and this render call; bail rather than touch a
+    // historySection whose owning menu is being torn down.
+    if (this._resultEntries === null) {
+      return;
+    }
     this._historySection.removeAll();
 
-    const entries = this._resultEntries ?? [];
+    const entries = this._resultEntries;
     const start = this._currentOffset;
     const slice = entries.slice(start, start + PAGE_SIZE);
 
