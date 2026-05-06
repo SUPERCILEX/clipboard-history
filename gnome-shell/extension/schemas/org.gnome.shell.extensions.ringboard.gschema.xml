@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.ringboard"
+          path="/org/gnome/shell/extensions/ringboard/">
+    <key name="paste-on-selection" type="b">
+      <default>true</default>
+      <summary>Paste on selection</summary>
+      <description>Click an entry to also send Ctrl-V to the focused window. When false, only the clipboard is set.</description>
+    </key>
+    <key name="move-item-first" type="b">
+      <default>true</default>
+      <summary>Move selected item to front</summary>
+      <description>Click an entry to also call ringboard move-to-front, so the entry becomes the most recent on the server.</description>
+    </key>
+    <key name="confirm-clear" type="b">
+      <default>true</default>
+      <summary>Confirm before clearing</summary>
+      <description>Show a confirmation dialog before wiping the entire history.</description>
+    </key>
+    <key name="private-mode" type="b">
+      <default>false</default>
+      <summary>Private mode</summary>
+      <description>Pause clipboard intake. New copies are not submitted to the server.</description>
+    </key>
+    <key name="enable-keybindings" type="b">
+      <default>true</default>
+      <summary>Enable keybindings</summary>
+      <description>Bind the toggle-menu shortcut.</description>
+    </key>
+    <key name="process-primary-selection" type="b">
+      <default>false</default>
+      <summary>Capture PRIMARY selection</summary>
+      <description>Also intake text from the PRIMARY (text-highlight) selection. Off by default.</description>
+    </key>
+    <key name="strip-text" type="b">
+      <default>false</default>
+      <summary>Strip whitespace from new entries</summary>
+      <description>Trim leading and trailing whitespace before submitting to the server.</description>
+    </key>
+    <key name="enable-typeahead-search" type="b">
+      <default>true</default>
+      <summary>Type-ahead search</summary>
+      <description>Letters typed while the dropdown is open jump into the search box.</description>
+    </key>
+    <key name="toggle-menu" type="as">
+      <default><![CDATA[['<Super><Shift>v']]]></default>
+      <summary>Toggle the panel menu</summary>
+      <description>Keyboard accelerator to open or close the clipboard history dropdown.</description>
+    </key>
+  </schema>
+</schemalist>
