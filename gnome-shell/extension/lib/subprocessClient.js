@@ -1,0 +1,95 @@
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+
+// Locate the `ringboard` CLI by walking $PATH. Returns the absolute path of
+// the first executable match, or null if nothing is found.
+export function findBinary(name = 'ringboard') {
+  const pathEnv = GLib.getenv('PATH') || '';
+  for (const dir of pathEnv.split(':')) {
+    if (!dir) continue;
+    const candidate = GLib.build_filenamev([dir, name]);
+    if (GLib.file_test(candidate, GLib.FileTest.IS_EXECUTABLE)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+// Async wrapper around `ringboard` CLI. All methods return Promises and rely
+// on Gio.Subprocess.communicate_utf8_async, which dispatches I/O on a worker
+// thread. The GNOME Shell main loop is never blocked.
+export class SubprocessClient {
+  constructor(binaryPath) {
+    if (!binaryPath) {
+      throw new Error('SubprocessClient: binary path required');
+    }
+    this._binary = binaryPath;
+  }
+
+  // Run a subprocess that does not need stdin. Resolves with
+  // { ok: bool, stdout: string, stderr: string, exit: number }.
+  _run(argv, stdin) {
+    return new Promise((resolve, reject) => {
+      let proc;
+      try {
+        const flags =
+          Gio.SubprocessFlags.STDOUT_PIPE |
+          Gio.SubprocessFlags.STDERR_PIPE |
+          (stdin != null ? Gio.SubprocessFlags.STDIN_PIPE : 0);
+        proc = Gio.Subprocess.new([this._binary, ...argv], flags);
+      } catch (e) {
+        reject(e);
+        return;
+      }
+      proc.communicate_utf8_async(stdin ?? null, null, (p, res) => {
+        try {
+          const [, stdout, stderr] = p.communicate_utf8_finish(res);
+          const ok = p.get_successful();
+          const exit = p.get_exit_status();
+          resolve({ ok, stdout: stdout ?? '', stderr: stderr ?? '', exit });
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+  }
+
+  // Connectivity check. `ringboard last` reads from the server socket; if the
+  // server is down it exits non-zero.
+  async probe() {
+    try {
+      const r = await this._run(['last']);
+      return r.ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Submit a text entry. Returns the numeric id assigned by the server, or
+  // null on failure. The CLI prints the id to stdout on success.
+  async add(text) {
+    if (typeof text !== 'string' || text.length === 0) {
+      return null;
+    }
+    let r;
+    try {
+      r = await this._run(['add', '-'], text);
+    } catch (_) {
+      return null;
+    }
+    if (!r.ok) {
+      return null;
+    }
+    // CLI outputs e.g. "Entry added: 4294979852"
+    const match = r.stdout.match(/:\s*(\d+)/);
+    if (!match) return null;
+    const id = Number.parseInt(match[1], 10);
+    return Number.isFinite(id) ? id : null;
+  }
+
+  // Stubs filled in by the next task.
+  async search(_query) { throw new Error('SubprocessClient.search: not implemented yet'); }
+  async moveToFront(_id) { throw new Error('not implemented'); }
+  async remove(_id) { throw new Error('not implemented'); }
+  async wipe() { throw new Error('not implemented'); }
+}
