@@ -55,14 +55,30 @@ export class SubprocessClient {
   }
 
   // Connectivity check. `ringboard last` reads from the server socket; if the
-  // server is down it exits non-zero.
+  // server is down it exits non-zero. We deliberately silence stdout because
+  // `last` returns the raw bytes of the newest entry, which may be a binary
+  // payload (image, etc.) that would fail UTF-8 decoding in _run.
   async probe() {
-    try {
-      const r = await this._run(['last']);
-      return r.ok;
-    } catch (_) {
-      return false;
-    }
+    return new Promise(resolve => {
+      let proc;
+      try {
+        proc = Gio.Subprocess.new(
+          [this._binary, 'last'],
+          Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE,
+        );
+      } catch (_) {
+        resolve(false);
+        return;
+      }
+      proc.wait_async(null, (p, res) => {
+        try {
+          p.wait_finish(res);
+          resolve(p.get_successful());
+        } catch (_) {
+          resolve(false);
+        }
+      });
+    });
   }
 
   // Submit a text entry. Returns the numeric id assigned by the server, or
