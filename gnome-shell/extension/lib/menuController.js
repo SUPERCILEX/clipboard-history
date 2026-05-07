@@ -31,14 +31,20 @@ function mimeToExt(mime) {
   return ext || 'bin';
 }
 
-// True for entries that came from `ringboard debug dump` and represent an
-// image clipboard payload (mime_type starts with "image/", data is base64).
+// True for entries that came from `ringboard debug dump` and carry a binary
+// payload. Their `data` field is a base64-encoded string and `mime_type`
+// describes the bytes.
+function isBinaryEntry(entry) {
+  return entry.kind === 'Bytes' && typeof entry.data === 'string';
+}
+
+// True specifically for binary entries whose payload is an image (PNG, WebP,
+// etc.) so we can render a thumbnail instead of a generic placeholder.
 function isImageEntry(entry) {
   return (
-    entry.kind === 'Bytes' &&
+    isBinaryEntry(entry) &&
     typeof entry.mime_type === 'string' &&
-    entry.mime_type.startsWith('image/') &&
-    typeof entry.data === 'string'
+    entry.mime_type.startsWith('image/')
   );
 }
 
@@ -186,15 +192,16 @@ export class MenuController {
 
   async selectAndPaste(entry) {
     const Clipboard = St.Clipboard.get_default();
-    if (isImageEntry(entry)) {
+    if (isBinaryEntry(entry)) {
       const bytes = this._decodeBase64(entry.data);
       if (!bytes) {
-        console.warn(`ringboard: failed to decode image entry ${entry.id}`);
+        console.warn(`ringboard: failed to decode binary entry ${entry.id}`);
         return;
       }
+      const mime = entry.mime_type || 'application/octet-stream';
       Clipboard.set_content(
         St.ClipboardType.CLIPBOARD,
-        entry.mime_type,
+        mime,
         new GLib.Bytes(bytes),
       );
     } else {
@@ -208,10 +215,10 @@ export class MenuController {
       });
     }
 
-    // Virtual Ctrl-V is text-oriented; for images we set the clipboard but
-    // don't simulate a paste keystroke (apps that accept image paste can use
-    // their own paste action).
-    if (this._settings.get_boolean('paste-on-selection') && !isImageEntry(entry)) {
+    // Virtual Ctrl-V is text-oriented; for binary entries we set the
+    // clipboard with the correct MIME type but don't simulate a paste
+    // keystroke (apps that accept binary paste can use their own action).
+    if (this._settings.get_boolean('paste-on-selection') && !isBinaryEntry(entry)) {
       this._fireVirtualPaste();
     }
   }
@@ -305,15 +312,21 @@ export class MenuController {
     if (isImageEntry(entry)) {
       return this._buildImageItem(entry);
     }
+    if (isBinaryEntry(entry)) {
+      return this._buildBinaryItem(entry);
+    }
     return this._buildTextItem(entry);
   }
 
   _buildTextItem(entry) {
     const item = new PopupMenu.PopupMenuItem('');
-    const isText = typeof entry.data === 'string' && entry.data.length > 0;
+    const isText =
+      entry.kind === 'Human' &&
+      typeof entry.data === 'string' &&
+      entry.data.length > 0;
     const labelText = isText
       ? truncateLabel(entry.data, MAX_VISIBLE_CHARS)
-      : `[${entry.kind || 'binary'}${entry.mime_type ? ` ${entry.mime_type}` : ''}]`;
+      : `[${entry.kind || 'unknown'}]`;
     item.label.set_text(labelText);
     const ct = item.label.get_clutter_text();
     ct.set_single_line_mode(true);
@@ -327,6 +340,26 @@ export class MenuController {
         });
       });
     }
+    return item;
+  }
+
+  // Non-image binary entry (PDF, audio, archive, application/octet-stream,
+  // etc.). We can't preview the bytes, so render a textual placeholder with
+  // the MIME type and approximate size, and route activation through
+  // selectAndPaste which will set_content with the correct MIME.
+  _buildBinaryItem(entry) {
+    const item = new PopupMenu.PopupMenuItem('');
+    const mime = entry.mime_type || 'application/octet-stream';
+    const sizeKB = Math.max(1, Math.round((entry.data.length * 3) / 4 / 1024));
+    item.label.set_text(`[${mime} · ~${sizeKB} KB]`);
+    const ct = item.label.get_clutter_text();
+    ct.set_single_line_mode(true);
+    ct.set_ellipsize(Pango.EllipsizeMode.END);
+    item.connect('activate', () => {
+      this.selectAndPaste(entry).catch(e => {
+        console.warn(`ringboard: binary paste failed: ${e.message}`);
+      });
+    });
     return item;
   }
 
