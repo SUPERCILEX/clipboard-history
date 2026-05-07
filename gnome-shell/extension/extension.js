@@ -227,6 +227,7 @@ class ClipboardIndicator extends PanelMenu.Button {
     }
     if (this._controller) {
       this._controller.onMenuClose();
+      this._controller.dispose();
       this._controller = null;
     }
     super.destroy();

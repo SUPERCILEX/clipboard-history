@@ -87,7 +87,9 @@ export class SubprocessClient {
     return Number.isFinite(id) ? id : null;
   }
 
-  // Search for entries. Empty query returns all entries newest-first.
+  // Search for entries. Empty query returns all *text* entries newest-first
+  // (the CLI's search command is text-only). For unfiltered listing including
+  // binary/image entries, use dump().
   // Returns an array of { id, kind, data } objects.
   async search(query) {
     const q = typeof query === 'string' ? query : '';
@@ -110,6 +112,38 @@ export class SubprocessClient {
       return parsed.filter(e =>
         e && typeof e.id === 'number' && typeof e.data === 'string'
       );
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Dump every entry (text + binary) via `ringboard debug dump`. Returns an
+  // array of { id, kind, mime_type, data } objects where data is UTF-8 text
+  // for kind === "Human" and base64-encoded bytes for kind === "Bytes".
+  // Used by the menu's empty-query path so image entries are visible.
+  async dump() {
+    let r;
+    try {
+      r = await this._run(['debug', 'dump']);
+    } catch (_) {
+      return [];
+    }
+    if (!r.ok) {
+      return [];
+    }
+    const text = r.stdout.trim();
+    if (text.length === 0) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) return [];
+      const filtered = parsed.filter(e =>
+        e && typeof e.id === 'number' && typeof e.kind === 'string'
+      );
+      // dump emits oldest-first; the menu wants newest-first to match search.
+      filtered.reverse();
+      return filtered;
     } catch (_) {
       return [];
     }

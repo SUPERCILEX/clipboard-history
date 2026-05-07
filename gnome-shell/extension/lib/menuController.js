@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
@@ -9,6 +10,37 @@ import { MAX_VISIBLE_CHARS, truncateLabel } from '../dataStructures.js';
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 150;
+const THUMB_SIZE = 64;
+
+// Cache directory for image thumbnails. Files are written lazily on first
+// render and reused across menu opens. Cleared on disable() to avoid
+// indefinite growth.
+const THUMB_CACHE_DIR = GLib.build_filenamev([
+  GLib.get_user_cache_dir(),
+  'ringboard-gnome-extension',
+  'thumbs',
+]);
+
+// Map a MIME type like "image/png" to the file extension we want to use for
+// the on-disk thumbnail copy. Falls back to "bin".
+function mimeToExt(mime) {
+  if (typeof mime !== 'string') return 'bin';
+  const slash = mime.indexOf('/');
+  if (slash < 0) return 'bin';
+  const ext = mime.slice(slash + 1).split(';')[0].trim().toLowerCase();
+  return ext || 'bin';
+}
+
+// True for entries that came from `ringboard debug dump` and represent an
+// image clipboard payload (mime_type starts with "image/", data is base64).
+function isImageEntry(entry) {
+  return (
+    entry.kind === 'Bytes' &&
+    typeof entry.mime_type === 'string' &&
+    entry.mime_type.startsWith('image/') &&
+    typeof entry.data === 'string'
+  );
+}
 
 // Owns the state of the dropdown for the duration of a single menu-open
 // lifetime. State is dropped on close. The MenuController does not own the
@@ -25,6 +57,12 @@ export class MenuController {
     this._fetchGen = 0;
     this._debounceSourceId = 0;
     this._onPageChanged = null;
+
+    try {
+      GLib.mkdir_with_parents(THUMB_CACHE_DIR, 0o700);
+    } catch (e) {
+      console.warn(`ringboard: thumb cache mkdir failed: ${e.message}`);
+    }
   }
 
   _reset() {
@@ -38,13 +76,36 @@ export class MenuController {
     this._onPageChanged = cb;
   }
 
+  // Best-effort cleanup of the thumbnail cache. Called from the extension's
+  // disable() so we don't leave decoded image bytes on disk after teardown.
+  dispose() {
+    this._cancelDebounce();
+    try {
+      const dir = Gio.File.new_for_path(THUMB_CACHE_DIR);
+      const enumerator = dir.enumerate_children(
+        'standard::name',
+        Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
+        null,
+      );
+      let info;
+      while ((info = enumerator.next_file(null)) !== null) {
+        const child = dir.get_child(info.get_name());
+        try { child.delete(null); } catch (_) {}
+      }
+      enumerator.close(null);
+    } catch (_) {
+      // Cache may not exist yet; ignore.
+    }
+  }
+
   // ---- lifecycle ----
 
   async onMenuOpen() {
     this._reset();
     this._fetchGen += 1;
     const myGen = this._fetchGen;
-    const entries = await this._client.search('');
+    // Empty query → dump (text + binary). Image entries only surface here.
+    const entries = await this._client.dump();
     if (myGen !== this._fetchGen) return; // newer fetch supersedes
     this._resultEntries = entries;
     this._renderPage();
@@ -83,7 +144,11 @@ export class MenuController {
   async _fetchAndRender(query) {
     this._fetchGen += 1;
     const myGen = this._fetchGen;
-    const entries = await this._client.search(query);
+    // Empty query goes through dump so image entries appear; non-empty uses
+    // the text-only search command.
+    const entries = query
+      ? await this._client.search(query)
+      : await this._client.dump();
     if (myGen !== this._fetchGen) return;
     this._currentQuery = query;
     this._currentOffset = 0;
@@ -121,7 +186,20 @@ export class MenuController {
 
   async selectAndPaste(entry) {
     const Clipboard = St.Clipboard.get_default();
-    Clipboard.set_text(St.ClipboardType.CLIPBOARD, entry.data);
+    if (isImageEntry(entry)) {
+      const bytes = this._decodeBase64(entry.data);
+      if (!bytes) {
+        console.warn(`ringboard: failed to decode image entry ${entry.id}`);
+        return;
+      }
+      Clipboard.set_content(
+        St.ClipboardType.CLIPBOARD,
+        entry.mime_type,
+        new GLib.Bytes(bytes),
+      );
+    } else {
+      Clipboard.set_text(St.ClipboardType.CLIPBOARD, entry.data);
+    }
     if (this._intake) this._intake.expectOwnWrite();
 
     if (this._settings.get_boolean('move-item-first')) {
@@ -130,7 +208,10 @@ export class MenuController {
       });
     }
 
-    if (this._settings.get_boolean('paste-on-selection')) {
+    // Virtual Ctrl-V is text-oriented; for images we set the clipboard but
+    // don't simulate a paste keystroke (apps that accept image paste can use
+    // their own paste action).
+    if (this._settings.get_boolean('paste-on-selection') && !isImageEntry(entry)) {
       this._fireVirtualPaste();
     }
   }
@@ -201,36 +282,12 @@ export class MenuController {
     const slice = entries.slice(start, start + PAGE_SIZE);
 
     for (const entry of slice) {
-      const item = new PopupMenu.PopupMenuItem('');
-      // Image and other non-text kinds get a placeholder; text data is
-      // truncated for display.
-      const isText = typeof entry.data === 'string' && entry.data.length > 0;
-      const labelText = isText
-        ? truncateLabel(entry.data, MAX_VISIBLE_CHARS)
-        : `[${entry.kind || 'binary'}]`;
-      item.label.set_text(labelText);
-      // Force single-line display: ellipsize at the end if the menu width
-      // can't fit the (already whitespace-collapsed, char-truncated) text.
-      const ct = item.label.get_clutter_text();
-      ct.set_single_line_mode(true);
-      ct.set_ellipsize(Pango.EllipsizeMode.END);
-      if (!isText) {
-        item.setSensitive(false);
-      } else {
-        item.connect('activate', () => {
-          this.selectAndPaste(entry).catch(e => {
-            console.warn(`ringboard: paste failed: ${e.message}`);
-          });
-        });
-      }
-      this._historySection.addMenuItem(item);
+      this._historySection.addMenuItem(this._buildItem(entry));
     }
 
     if (slice.length === 0) {
       const empty = new PopupMenu.PopupMenuItem(
-        this._currentQuery
-          ? 'No matches'
-          : 'No clipboard history',
+        this._currentQuery ? 'No matches' : 'No clipboard history',
       );
       empty.setSensitive(false);
       this._historySection.addMenuItem(empty);
@@ -241,6 +298,97 @@ export class MenuController {
         hasPrev: this.hasPrevPage(),
         hasNext: this.hasNextPage(),
       });
+    }
+  }
+
+  _buildItem(entry) {
+    if (isImageEntry(entry)) {
+      return this._buildImageItem(entry);
+    }
+    return this._buildTextItem(entry);
+  }
+
+  _buildTextItem(entry) {
+    const item = new PopupMenu.PopupMenuItem('');
+    const isText = typeof entry.data === 'string' && entry.data.length > 0;
+    const labelText = isText
+      ? truncateLabel(entry.data, MAX_VISIBLE_CHARS)
+      : `[${entry.kind || 'binary'}${entry.mime_type ? ` ${entry.mime_type}` : ''}]`;
+    item.label.set_text(labelText);
+    const ct = item.label.get_clutter_text();
+    ct.set_single_line_mode(true);
+    ct.set_ellipsize(Pango.EllipsizeMode.END);
+    if (!isText) {
+      item.setSensitive(false);
+    } else {
+      item.connect('activate', () => {
+        this.selectAndPaste(entry).catch(e => {
+          console.warn(`ringboard: paste failed: ${e.message}`);
+        });
+      });
+    }
+    return item;
+  }
+
+  _buildImageItem(entry) {
+    const path = this._writeImageThumb(entry);
+    const item = new PopupMenu.PopupMenuItem('');
+    if (path) {
+      const icon = new St.Icon({
+        gicon: Gio.FileIcon.new(Gio.File.new_for_path(path)),
+        icon_size: THUMB_SIZE,
+        style_class: 'ci-image-thumb',
+      });
+      // PopupMenuItem already has a label as its first child; insert the icon
+      // before it so the layout is [thumb][label].
+      item.insert_child_at_index(icon, 0);
+    }
+    const sizeKB = Math.max(1, Math.round((entry.data.length * 3) / 4 / 1024));
+    item.label.set_text(`${entry.mime_type} · ~${sizeKB} KB`);
+    const ct = item.label.get_clutter_text();
+    ct.set_single_line_mode(true);
+    ct.set_ellipsize(Pango.EllipsizeMode.END);
+    item.connect('activate', () => {
+      this.selectAndPaste(entry).catch(e => {
+        console.warn(`ringboard: image paste failed: ${e.message}`);
+      });
+    });
+    return item;
+  }
+
+  // Decode an entry's base64 payload to a Uint8Array. Returns null on failure.
+  _decodeBase64(b64) {
+    try {
+      return GLib.base64_decode(b64);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Write `entry.data` (base64) to the thumb cache under {id}.{ext}. Returns
+  // the absolute path or null on failure. Existing files are reused.
+  _writeImageThumb(entry) {
+    try {
+      const ext = mimeToExt(entry.mime_type);
+      const path = GLib.build_filenamev([THUMB_CACHE_DIR, `${entry.id}.${ext}`]);
+      if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
+        return path;
+      }
+      const bytes = this._decodeBase64(entry.data);
+      if (!bytes) return null;
+      const file = Gio.File.new_for_path(path);
+      const stream = file.replace(
+        null,
+        false,
+        Gio.FileCreateFlags.REPLACE_DESTINATION,
+        null,
+      );
+      stream.write_bytes(new GLib.Bytes(bytes), null);
+      stream.close(null);
+      return path;
+    } catch (e) {
+      console.warn(`ringboard: thumb write failed for ${entry.id}: ${e.message}`);
+      return null;
     }
   }
 }
