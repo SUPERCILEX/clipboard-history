@@ -309,13 +309,39 @@ export class MenuController {
   }
 
   _buildItem(entry) {
+    let item;
     if (isImageEntry(entry)) {
-      return this._buildImageItem(entry);
+      item = this._buildImageItem(entry);
+    } else if (isBinaryEntry(entry)) {
+      item = this._buildBinaryItem(entry);
+    } else {
+      item = this._buildTextItem(entry);
     }
-    if (isBinaryEntry(entry)) {
-      return this._buildBinaryItem(entry);
-    }
-    return this._buildTextItem(entry);
+    this._appendDeleteButton(item, entry);
+    return item;
+  }
+
+  // Per-entry trash button on the right edge. Clicking it removes the entry
+  // from the server and re-renders without dismissing the menu.
+  _appendDeleteButton(item, entry) {
+    const icon = new St.Icon({
+      icon_name: 'edit-delete-symbolic',
+      style_class: 'popup-menu-icon',
+    });
+    const btn = new St.Button({
+      style_class: 'ci-action-btn',
+      can_focus: true,
+      child: icon,
+      x_align: Clutter.ActorAlign.END,
+      x_expand: false,
+      y_expand: true,
+    });
+    btn.connect('clicked', () => {
+      this.removeEntry(entry).catch(e => {
+        console.warn(`ringboard: remove failed: ${e.message}`);
+      });
+    });
+    item.actor.add_child(btn);
   }
 
   _buildTextItem(entry) {
