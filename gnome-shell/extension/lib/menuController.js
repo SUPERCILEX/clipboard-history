@@ -192,6 +192,10 @@ export class MenuController {
 
   async selectAndPaste(entry) {
     const Clipboard = St.Clipboard.get_default();
+    // Mark the impending write as our own BEFORE issuing it: the
+    // owner-changed signal can be dispatched before this method returns,
+    // and an unincremented counter would let intake re-add the entry.
+    if (this._intake) this._intake.expectOwnWrite();
     if (isBinaryEntry(entry)) {
       const bytes = this._decodeBase64(entry.data);
       if (!bytes) {
@@ -207,7 +211,6 @@ export class MenuController {
     } else {
       Clipboard.set_text(St.ClipboardType.CLIPBOARD, entry.data);
     }
-    if (this._intake) this._intake.expectOwnWrite();
 
     if (this._settings.get_boolean('move-item-first')) {
       this._client.moveToFront(entry.id).catch(e => {
