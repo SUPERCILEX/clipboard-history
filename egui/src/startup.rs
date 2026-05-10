@@ -6,13 +6,14 @@ use std::{
         fd::AsFd,
         unix::ffi::{OsStrExt, OsStringExt},
     },
-    path::{MAIN_SEPARATOR, PathBuf},
+    path::PathBuf,
     process::ExitCode,
     sync::atomic::{AtomicBool, Ordering},
 };
 
 use ringboard_sdk::core::{
     Error as CoreError, IoErr, LeaveBe, OwnedLockFile, SendKillAndTakeover, acquire_lock_file,
+    dirs::push_sockets_prefix,
 };
 use rustix::fs::{AtFlags, CWD, inotify, inotify::ReadFlags, unlinkat};
 
@@ -22,16 +23,7 @@ pub fn sleep_file_name() -> CString {
 
 fn sleep_file_name_() -> PathBuf {
     let mut path = PathBuf::with_capacity("/tmp/.ringboard/username/egui/sleep.lock".len());
-    #[allow(clippy::path_buf_push_overwrite)]
-    path.push("/tmp/.ringboard");
-    path.push(
-        dirs::home_dir()
-            .as_deref()
-            .map(|p| p.to_string_lossy())
-            .as_deref()
-            .and_then(|p| p.rsplit(MAIN_SEPARATOR).next())
-            .unwrap_or("default"),
-    );
+    push_sockets_prefix(&mut path);
     path.push("egui/sleep.lock");
     path
 }

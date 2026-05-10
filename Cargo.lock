@@ -793,7 +793,6 @@ version = "0.16.1"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
- "dirs",
  "eframe",
  "font-kit",
  "image",

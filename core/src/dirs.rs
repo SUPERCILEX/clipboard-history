@@ -1,4 +1,7 @@
-use std::{env, ffi::OsString, path::PathBuf};
+use std::{
+    env,
+    path::{MAIN_SEPARATOR, PathBuf},
+};
 
 #[must_use]
 pub fn data_dir() -> PathBuf {
@@ -9,31 +12,40 @@ pub fn data_dir() -> PathBuf {
 }
 
 #[must_use]
-pub fn socket_name() -> OsString {
+pub fn socket_file() -> PathBuf {
     if let Some(s) = env::var_os("RINGBOARD_SOCK") {
-        return s;
+        return PathBuf::from(s);
     }
 
-    let mut name = OsString::with_capacity(
-        "ringboard-server:/home/username/.local/share/clipboard-history".len(),
-    );
-    name.push("ringboard-server:");
-    name.push(data_dir());
-    name
+    let mut file = PathBuf::with_capacity("/tmp/.ringboard/username/server.sock".len());
+    push_sockets_prefix(&mut file);
+    file.push("server.sock");
+    file
 }
 
 #[must_use]
-pub fn paste_socket_name() -> OsString {
+pub fn paste_socket_file() -> PathBuf {
     if let Some(s) = env::var_os("PASTE_SOCK") {
-        return s;
+        return PathBuf::from(s);
     }
 
-    let mut name = OsString::with_capacity(
-        "ringboard-paste:/home/username/.local/share/clipboard-history".len(),
+    let mut file = PathBuf::with_capacity("/tmp/.ringboard/username/paste.sock".len());
+    push_sockets_prefix(&mut file);
+    file.push("paste.sock");
+    file
+}
+
+pub fn push_sockets_prefix(file: &mut PathBuf) {
+    #[allow(clippy::path_buf_push_overwrite)]
+    file.push("/tmp/.ringboard");
+    file.push(
+        dirs::home_dir()
+            .as_deref()
+            .map(|p| p.to_string_lossy())
+            .as_deref()
+            .and_then(|p| p.rsplit(MAIN_SEPARATOR).next())
+            .unwrap_or("default"),
     );
-    name.push("ringboard-paste:");
-    name.push(data_dir());
-    name
 }
 
 #[must_use]
