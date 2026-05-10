@@ -30,11 +30,12 @@ cargo +nightly install clipboard-history-$XDG_SESSION_TYPE --no-default-features
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/$XDG_SESSION_TYPE/ringboard-$XDG_SESSION_TYPE.service -O --output-dir ~/.config/systemd/user/
 sed -i "s|ExecStart=ringboard-$XDG_SESSION_TYPE|ExecStart=$(which ringboard-$XDG_SESSION_TYPE)|g" ~/.config/systemd/user/ringboard-$XDG_SESSION_TYPE.service
 
-systemctl --user daemon-reload
-systemctl --user enable ringboard-$XDG_SESSION_TYPE --now
-
 killall ringboard-egui ringboard-tui 2> /dev/null || true
-systemctl --user restart ringboard-server
+
+systemctl --user stop ringboard-server
+systemctl --user daemon-reload
+systemctl --user start ringboard-server
+systemctl --user enable ringboard-$XDG_SESSION_TYPE --now
 
 echo
 echo "--- DONE ---"
