@@ -3,7 +3,7 @@
 use std::{
     borrow::Cow,
     cmp::{max, min},
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     fmt,
     fmt::{Debug, Display, Formatter},
     fs,
@@ -769,7 +769,7 @@ fn search(
         }
 
         // Find which entries matched
-        let mut matched_indices = BTreeMap::new();
+        let mut matched_indices = BTreeSet::new();
         for (idx, entry) in all_entries.iter().enumerate() {
             let Kind::Bucket(bucket) = entry.kind() else {
                 continue;
@@ -778,13 +778,13 @@ fn search(
                 size_to_bucket(bucket.size()),
                 bucket.index(),
             )) {
-                matched_indices.insert(idx, ());
+                matched_indices.insert(idx);
             }
         }
 
         // Collect all indices to show (matches + context)
-        let mut indices_to_show = std::collections::BTreeSet::new();
-        for &match_idx in matched_indices.keys() {
+        let mut indices_to_show = BTreeSet::new();
+        for &match_idx in &matched_indices {
             let start_idx = match_idx.saturating_sub(context_size);
             let end_idx = (match_idx + context_size + 1).min(all_entries.len());
             for idx in start_idx..end_idx {
