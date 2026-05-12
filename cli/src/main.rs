@@ -3,7 +3,7 @@
 use std::{
     borrow::Cow,
     cmp::{max, min},
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     fmt,
     fmt::{Debug, Display, Formatter},
     fs,
@@ -348,6 +348,10 @@ struct Search {
     #[clap(default_value_t = false)]
     json: bool,
 
+    /// Print NUM entries of context before and after each match.
+    #[arg(short = 'C', long)]
+    context: Option<usize>,
+
     /// The query string to search for.
     #[arg(required = true)]
     query: String,
@@ -620,6 +624,7 @@ fn search(
         regex,
         ignore_case,
         json,
+        context,
         query,
     }: Search,
 ) -> Result<(), CliError> {
@@ -752,31 +757,119 @@ fn search(
     }
     let mut reader = Arc::into_inner(reader).unwrap();
 
-    for entry in database.favorites().chain(database.main()) {
-        let Kind::Bucket(bucket) = entry.kind() else {
-            continue;
-        };
-        let Some(&(start, end)) = results.get(&BucketAndIndex::new(
-            size_to_bucket(bucket.size()),
-            bucket.index(),
-        )) else {
-            continue;
-        };
-        let (start, end) = (usize::from(start), usize::from(end));
+    if let Some(context_size) = context {
+        // With context flag: collect all entries with their positions, find matches, and show context
+        let mut all_entries = Vec::new();
+        for entry in database.favorites().chain(database.main()) {
+            all_entries.push(entry);
+        }
 
-        let bytes = entry.to_slice(&mut reader)?;
-        let mime_type = bytes.mime_type()?;
-        if json {
-            emit_entry(entry.id(), &bytes, mime_type, start, end)?;
-        } else {
-            let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
-            emit_entry(
-                entry.id(),
-                &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
-                mime_type,
-                start,
-                end,
-            )?;
+        // Find which entries matched
+        let mut matched_indices = BTreeMap::new();
+        for (idx, entry) in all_entries.iter().enumerate() {
+            let has_match = match entry.kind() {
+                Kind::Bucket(bucket) => results.contains_key(&BucketAndIndex::new(
+                    size_to_bucket(bucket.size()),
+                    bucket.index(),
+                )),
+                Kind::File => results.iter().any(|(_, &(start, end))| {
+                    // For file entries, check if this entry was in the search results
+                    all_entries[idx].id() == entry.id() && start != end
+                }),
+            };
+            if has_match {
+                matched_indices.insert(idx, ());
+            }
+        }
+
+        // Collect all indices to show (matches + context)
+        let mut indices_to_show = std::collections::HashSet::new();
+        for &match_idx in matched_indices.keys() {
+            let start_idx = match_idx.saturating_sub(context_size);
+            let end_idx = (match_idx + context_size + 1).min(all_entries.len());
+            for idx in start_idx..end_idx {
+                indices_to_show.insert(idx);
+            }
+        }
+
+        // Output entries in order with context separators
+        let mut last_idx = None;
+        let mut sorted_indices: Vec<_> = indices_to_show.into_iter().collect();
+        sorted_indices.sort_unstable();
+
+        for &idx in &sorted_indices {
+            // Print separator if there's a gap
+            if let Some(last) = last_idx {
+                if idx > last + 1 {
+                    match &mut output {
+                        Output::Text(output) => {
+                            writeln!(output, "--")
+                                .map_io_err(|| "Failed to write to stdout.")?;
+                        }
+                        Output::Json(_) => {}
+                    }
+                }
+            }
+            last_idx = Some(idx);
+
+            let entry = &all_entries[idx];
+            match entry.kind() {
+                Kind::Bucket(bucket) => {
+                    let (start, end) = results
+                        .get(&BucketAndIndex::new(size_to_bucket(bucket.size()), bucket.index()))
+                        .map(|&(s, e)| (usize::from(s), usize::from(e)))
+                        .unwrap_or((0, 0));
+
+                    let bytes = entry.to_slice(&mut reader)?;
+                    let mime_type = bytes.mime_type()?;
+                    if json {
+                        emit_entry(entry.id(), &bytes, mime_type, start, end)?;
+                    } else {
+                        let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
+                        emit_entry(
+                            entry.id(),
+                            &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
+                            mime_type,
+                            start,
+                            end,
+                        )?;
+                    }
+                }
+                Kind::File => {
+                    let bytes = entry.to_slice(&mut reader)?;
+                    let mime_type = bytes.mime_type()?;
+                    emit_entry(entry.id(), &bytes, mime_type, 0, 0)?;
+                }
+            }
+        }
+    } else {
+        // Original behavior without context flag
+        for entry in database.favorites().chain(database.main()) {
+            let Kind::Bucket(bucket) = entry.kind() else {
+                continue;
+            };
+            let Some(&(start, end)) = results.get(&BucketAndIndex::new(
+                size_to_bucket(bucket.size()),
+                bucket.index(),
+            )) else {
+                continue;
+            };
+            let (start, end) = (usize::from(start), usize::from(end));
+
+            let bytes = entry.to_slice(&mut reader)?;
+            let mime_type = bytes.mime_type()?;
+            if json {
+                emit_entry(entry.id(), &bytes, mime_type, start, end)?;
+            } else {
+                let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
+                emit_entry(
+                    entry.id(),
+                    &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
+                    mime_type,
+                    start,
+                    end,
+                )?;
+            }
         }
     }
 
