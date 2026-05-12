@@ -94,6 +94,8 @@ export class SubprocessClient {
       return null;
     }
     if (!r.ok) {
+      const tail = (r.stderr || '').trim().split('\n').slice(-2).join(' | ');
+      console.warn(`ringboard: add exit=${r.exit} ${tail}`);
       return null;
     }
     // CLI outputs e.g. "Entry added: 4294979852"

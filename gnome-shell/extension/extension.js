@@ -47,12 +47,21 @@ class ClipboardIndicator extends PanelMenu.Button {
     }
 
     this._intake = new ClipboardIntake(client, settings);
+    this._intake.setOnAddResult(ok => this._setConnected(ok));
     this._intake.enable();
 
     this._buildMenu();
     this._controller = new MenuController(client, settings, this._intake, this._historySection);
     this._wireMenuLifecycle();
     this._wireSettings();
+  }
+
+  // Flip the panel icon between the regular paste glyph and a
+  // network-offline glyph based on the latest intake submit result.
+  _setConnected(ok) {
+    if (this._connected === ok) return;
+    this._connected = ok;
+    this._icon.set_icon_name(ok ? INDICATOR_ICON : DISCONNECTED_ICON);
   }
 
   _buildDisconnectedMenu() {

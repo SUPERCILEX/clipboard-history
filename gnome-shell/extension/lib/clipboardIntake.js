@@ -44,6 +44,7 @@ export class ClipboardIntake {
       'owner-changed',
       (_sel, type, _source) => this._onSelectionChanged(type),
     );
+    console.debug('ringboard: intake enabled, listening for owner-changed');
 
     this._processPrimary = this._settings.get_boolean('process-primary-selection');
     this._settingsChangedId = this._settings.connect(
@@ -81,6 +82,13 @@ export class ClipboardIntake {
       text,
       expiresUs: GLib.get_monotonic_time() + ClipboardIntake.SELF_WRITE_TTL_US,
     };
+  }
+
+  // Register a callback that fires after every server-add attempt with the
+  // result (boolean ok). Used by the indicator to flip its icon between
+  // connected and disconnected states when intake silently fails.
+  setOnAddResult(cb) {
+    this._onAddResult = cb;
   }
 
   _onSelectionChanged(selectionType) {
@@ -123,8 +131,13 @@ export class ClipboardIntake {
         payload = payload.trim();
       }
       if (payload.length === 0) return;
-      this._client.add(payload).catch(e => {
+      this._client.add(payload).then(id => {
+        const ok = id !== null;
+        if (!ok) console.warn('ringboard: client.add returned null (server down?)');
+        if (typeof this._onAddResult === 'function') this._onAddResult(ok);
+      }).catch(e => {
         console.warn(`ringboard: client.add failed: ${e.message}`);
+        if (typeof this._onAddResult === 'function') this._onAddResult(false);
       });
     });
   }
