@@ -3,7 +3,7 @@
 use std::{
     borrow::Cow,
     cmp::{max, min},
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashMap, VecDeque},
     fmt,
     fmt::{Debug, Display, Formatter},
     fs,
@@ -758,32 +758,32 @@ fn search(
     let mut reader = Arc::into_inner(reader).unwrap();
 
     if let Some(context_size) = context {
-        // With context flag: collect all entries with their positions, find matches, and show context
+        // With context flag: collect bucket entries with their positions, find matches,
+        // and show context. File entries are already emitted during streaming above.
         let mut all_entries = Vec::new();
         for entry in database.favorites().chain(database.main()) {
+            let Kind::Bucket(_) = entry.kind() else {
+                continue;
+            };
             all_entries.push(entry);
         }
 
         // Find which entries matched
         let mut matched_indices = BTreeMap::new();
         for (idx, entry) in all_entries.iter().enumerate() {
-            let has_match = match entry.kind() {
-                Kind::Bucket(bucket) => results.contains_key(&BucketAndIndex::new(
-                    size_to_bucket(bucket.size()),
-                    bucket.index(),
-                )),
-                Kind::File => results.iter().any(|(_, &(start, end))| {
-                    // For file entries, check if this entry was in the search results
-                    all_entries[idx].id() == entry.id() && start != end
-                }),
+            let Kind::Bucket(bucket) = entry.kind() else {
+                continue;
             };
-            if has_match {
+            if results.contains_key(&BucketAndIndex::new(
+                size_to_bucket(bucket.size()),
+                bucket.index(),
+            )) {
                 matched_indices.insert(idx, ());
             }
         }
 
         // Collect all indices to show (matches + context)
-        let mut indices_to_show = std::collections::HashSet::new();
+        let mut indices_to_show = std::collections::BTreeSet::new();
         for &match_idx in matched_indices.keys() {
             let start_idx = match_idx.saturating_sub(context_size);
             let end_idx = (match_idx + context_size + 1).min(all_entries.len());
@@ -794,17 +794,13 @@ fn search(
 
         // Output entries in order with context separators
         let mut last_idx = None;
-        let mut sorted_indices: Vec<_> = indices_to_show.into_iter().collect();
-        sorted_indices.sort_unstable();
-
-        for &idx in &sorted_indices {
+        for &idx in &indices_to_show {
             // Print separator if there's a gap
             if let Some(last) = last_idx {
                 if idx > last + 1 {
                     match &mut output {
                         Output::Text(output) => {
-                            writeln!(output, "--")
-                                .map_io_err(|| "Failed to write to stdout.")?;
+                            writeln!(output, "--").map_io_err(|| "Failed to write to stdout.")?;
                         }
                         Output::Json(_) => {}
                     }
@@ -813,33 +809,30 @@ fn search(
             last_idx = Some(idx);
 
             let entry = &all_entries[idx];
-            match entry.kind() {
-                Kind::Bucket(bucket) => {
-                    let (start, end) = results
-                        .get(&BucketAndIndex::new(size_to_bucket(bucket.size()), bucket.index()))
-                        .map(|&(s, e)| (usize::from(s), usize::from(e)))
-                        .unwrap_or((0, 0));
+            let Kind::Bucket(bucket) = entry.kind() else {
+                continue;
+            };
+            let (start, end) = results
+                .get(&BucketAndIndex::new(
+                    size_to_bucket(bucket.size()),
+                    bucket.index(),
+                ))
+                .map(|&(s, e)| (usize::from(s), usize::from(e)))
+                .unwrap_or((0, 0));
 
-                    let bytes = entry.to_slice(&mut reader)?;
-                    let mime_type = bytes.mime_type()?;
-                    if json {
-                        emit_entry(entry.id(), &bytes, mime_type, start, end)?;
-                    } else {
-                        let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
-                        emit_entry(
-                            entry.id(),
-                            &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
-                            mime_type,
-                            start,
-                            end,
-                        )?;
-                    }
-                }
-                Kind::File => {
-                    let bytes = entry.to_slice(&mut reader)?;
-                    let mime_type = bytes.mime_type()?;
-                    emit_entry(entry.id(), &bytes, mime_type, 0, 0)?;
-                }
+            let bytes = entry.to_slice(&mut reader)?;
+            let mime_type = bytes.mime_type()?;
+            if json {
+                emit_entry(entry.id(), &bytes, mime_type, start, end)?;
+            } else {
+                let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
+                emit_entry(
+                    entry.id(),
+                    &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
+                    mime_type,
+                    start,
+                    end,
+                )?;
             }
         }
     } else {
@@ -1177,12 +1170,16 @@ fn migrate_from_gch(server: OwnedFd, database: Option<PathBuf>) -> Result<(), Cl
                     drain_add_requests(&server, Some(&mut translation), &mut pending_adds)?;
                 }
                 let gch_id = gch_id!();
-                match MoveToFrontRequest::response(&server, translation[gch_id], match op {
-                    OP_TYPE_FAVORITE_ITEM => Some(RingKind::Favorites),
-                    OP_TYPE_UNFAVORITE_ITEM => Some(RingKind::Main),
-                    OP_TYPE_MOVE_ITEM_TO_END => None,
-                    _ => unreachable!(),
-                })? {
+                match MoveToFrontRequest::response(
+                    &server,
+                    translation[gch_id],
+                    match op {
+                        OP_TYPE_FAVORITE_ITEM => Some(RingKind::Favorites),
+                        OP_TYPE_UNFAVORITE_ITEM => Some(RingKind::Main),
+                        OP_TYPE_MOVE_ITEM_TO_END => None,
+                        _ => unreachable!(),
+                    },
+                )? {
                     MoveToFrontResponse::Success { id } => {
                         translation[gch_id] = id;
                     }
@@ -1775,10 +1772,13 @@ fn migrate_from_ringboard_export(server: OwnedFd, dump_file: PathBuf) -> Result<
                            mime_type,
                        }|
      -> Result<(), CliError> {
-        let data = generate_entry_file(&mut cache, match &data {
-            ExportData::Human(str) => str.as_bytes(),
-            ExportData::Bytes(bytes) => bytes,
-        })?;
+        let data = generate_entry_file(
+            &mut cache,
+            match &data {
+                ExportData::Human(str) => str.as_bytes(),
+                ExportData::Bytes(bytes) => bytes,
+            },
+        )?;
 
         let (to, _) = decompose_id(id).unwrap_or_default();
         unsafe { pipeline_add_request(&server, data, to, &mime_type, None, &mut pending_adds) }
