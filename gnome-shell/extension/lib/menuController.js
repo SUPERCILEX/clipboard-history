@@ -193,9 +193,9 @@ export class MenuController {
   async selectAndPaste(entry) {
     const Clipboard = St.Clipboard.get_default();
     // Mark the impending write as our own BEFORE issuing it: the
-    // owner-changed signal can be dispatched before this method returns,
-    // and an unincremented counter would let intake re-add the entry.
-    if (this._intake) this._intake.expectOwnWrite();
+    // owner-changed signal can be dispatched before this method returns.
+    // Binary writes don't need marking — intake's get_text returns empty
+    // for them and drops the event naturally.
     if (isBinaryEntry(entry)) {
       const bytes = this._decodeBase64(entry.data);
       if (!bytes) {
@@ -209,6 +209,7 @@ export class MenuController {
         new GLib.Bytes(bytes),
       );
     } else {
+      if (this._intake) this._intake.expectOwnWrite(entry.data);
       Clipboard.set_text(St.ClipboardType.CLIPBOARD, entry.data);
     }
 
@@ -336,7 +337,8 @@ export class MenuController {
       can_focus: true,
       child: icon,
       x_align: Clutter.ActorAlign.END,
-      x_expand: false,
+      y_align: Clutter.ActorAlign.CENTER,
+      x_expand: true,
       y_expand: true,
     });
     btn.connect('clicked', () => {
