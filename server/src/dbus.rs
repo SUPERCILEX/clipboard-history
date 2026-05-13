@@ -83,6 +83,11 @@ fn open_db() -> zbus::fdo::Result<(DatabaseReader, EntryReader)> {
 }
 
 fn search_text(query: &str, db: &DatabaseReader) -> zbus::fdo::Result<Vec<Entry>> {
+    // Open a *second* EntryReader here even though the caller already holds
+    // one: ringboard_sdk::search takes Arc<EntryReader> and shares it with
+    // worker threads, while the caller's reader is used afterwards with
+    // exclusive &mut access via load_row. Collapsing them would require a
+    // mutex around the reader and would deadlock the worker pool.
     let mut search_dir = data_dir();
     let search_reader = EntryReader::open(&mut search_dir)
         .map_err(|e| zbus::fdo::Error::Failed(format!("EntryReader::open: {e}")))?;
