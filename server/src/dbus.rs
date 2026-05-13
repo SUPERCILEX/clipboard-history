@@ -15,6 +15,14 @@ pub const BUS_NAME: &str = "com.github.SUPERCILEX.Ringboard";
 pub const OBJECT_PATH: &str = "/com/github/SUPERCILEX/Ringboard";
 pub const INTERFACE_NAME: &str = "com.github.SUPERCILEX.Ringboard1";
 
+// Convention for interface methods:
+//
+// The SDK is synchronous (rustix syscalls, blocking socket I/O), and the
+// tokio runtime hosting zbus is single-threaded. To avoid blocking the
+// dispatcher (and timing out heartbeats), interface methods must wrap
+// their SDK work inside `tokio::task::spawn_blocking(...).await`. Don't
+// .await SDK calls directly inside the method body.
+
 pub fn spawn() -> JoinHandle<()> {
     thread::Builder::new()
         .name("ringboard-dbus".into())
@@ -47,23 +55,28 @@ struct Iface;
 impl Iface {
     /// Drop every entry from the server.
     async fn wipe(&self) -> zbus::fdo::Result<()> {
-        let server = open_server()?;
+        tokio::task::spawn_blocking(|| -> zbus::fdo::Result<()> {
+            let server = open_server()?;
 
-        let mut database = data_dir();
-        let db = DatabaseReader::open(&mut database)
-            .map_err(|e| zbus::fdo::Error::Failed(format!("open database: {e}")))?;
+            let mut database = data_dir();
+            let db = DatabaseReader::open(&mut database)
+                .map_err(|e| zbus::fdo::Error::Failed(format!("open database: {e}")))?;
 
-        let ids: Vec<u64> = db
-            .favorites()
-            .chain(db.main())
-            .map(|e| e.id())
-            .collect();
+            let ids: Vec<u64> = db
+                .favorites()
+                .chain(db.main())
+                .map(|e| e.id())
+                .collect();
 
-        for id in ids {
-            let _resp = RemoveRequest::response(&server, id)
-                .map_err(|e| zbus::fdo::Error::Failed(format!("remove {id}: {e}")))?;
-        }
+            for id in ids {
+                let _resp = RemoveRequest::response(&server, id)
+                    .map_err(|e| zbus::fdo::Error::Failed(format!("remove {id}: {e}")))?;
+            }
 
+            Ok(())
+        })
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(format!("wipe join: {e}")))??;
         Ok(())
     }
 }
