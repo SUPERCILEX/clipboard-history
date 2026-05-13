@@ -4,9 +4,10 @@ use std::{os::fd::OwnedFd, thread::{self, JoinHandle}};
 
 use log::{info, warn};
 use ringboard_core::dirs::{data_dir, socket_file};
+use ringboard_core::protocol::RingKind;
 use ringboard_sdk::{
     DatabaseReader,
-    api::{RemoveRequest, connect_to_server},
+    api::{MoveToFrontRequest, RemoveRequest, connect_to_server},
 };
 use rustix::net::SocketAddrUnix;
 use zbus::connection::Builder;
@@ -93,6 +94,24 @@ impl Iface {
         })
         .await
         .map_err(|e| zbus::fdo::Error::Failed(format!("remove join: {e}")))??;
+        Ok(())
+    }
+
+    /// Move the entry with the given id to the front of the main ring.
+    async fn move_to_front(&self, id: u64) -> zbus::fdo::Result<()> {
+        tokio::task::spawn_blocking(move || -> zbus::fdo::Result<()> {
+            let server = open_server()?;
+            let resp = MoveToFrontRequest::response(&server, id, Some(RingKind::Main))
+                .map_err(|e| zbus::fdo::Error::Failed(format!("move_to_front {id}: {e}")))?;
+            match resp {
+                ringboard_core::protocol::MoveToFrontResponse::Success { id: _ } => Ok(()),
+                ringboard_core::protocol::MoveToFrontResponse::Error(e) => {
+                    Err(zbus::fdo::Error::Failed(format!("move_to_front {id}: {e:?}")))
+                }
+            }
+        })
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(format!("move_to_front join: {e}")))??;
         Ok(())
     }
 }
