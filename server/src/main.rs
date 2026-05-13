@@ -17,6 +17,8 @@ mod reactor;
 mod requests;
 mod send_msg_bufs;
 mod startup;
+#[cfg(feature = "dbus")]
+mod dbus;
 
 #[cfg(feature = "trace")]
 #[global_allocator]
