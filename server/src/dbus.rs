@@ -79,6 +79,22 @@ impl Iface {
         .map_err(|e| zbus::fdo::Error::Failed(format!("wipe join: {e}")))??;
         Ok(())
     }
+
+    /// Drop the entry with the given id.
+    async fn remove(&self, id: u64) -> zbus::fdo::Result<()> {
+        tokio::task::spawn_blocking(move || -> zbus::fdo::Result<()> {
+            let server = open_server()?;
+            let resp = RemoveRequest::response(&server, id)
+                .map_err(|e| zbus::fdo::Error::Failed(format!("remove {id}: {e}")))?;
+            if let Some(err) = resp.error {
+                return Err(zbus::fdo::Error::Failed(format!("remove {id}: {err:?}")));
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(format!("remove join: {e}")))??;
+        Ok(())
+    }
 }
 
 async fn serve() -> zbus::Result<()> {
