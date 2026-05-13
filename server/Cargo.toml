@@ -38,3 +38,9 @@ trace = ["dep:tracy-client"]
 [[bin]]
 name = "ringboard-server"
 path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3.13"
+tokio = { version = "1.47", features = ["macros", "rt", "time"] }
+which = "7.0"
+zbus = { version = "5.5", default-features = false, features = ["tokio"] }
