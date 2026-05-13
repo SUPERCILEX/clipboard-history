@@ -105,6 +105,9 @@ fn run() -> Result<(), CliError> {
     let server_guard = claim_server_ownership()?;
     info!("Acquired server lock.");
 
+    #[cfg(feature = "dbus")]
+    let _dbus_handle = dbus::spawn();
+
     let mut allocator = Allocator::open()?;
     into_result(
         [

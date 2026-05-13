@@ -1,24 +1,39 @@
-// DBus front-end for ringboard-server.
-//
-// The interface is hosted by a worker thread that runs a tokio
-// current-thread runtime and a zbus connection. Mutations are issued
-// through the server's Unix socket via the client-sdk; read queries open
-// the ring files directly. The io_uring reactor in reactor.rs is not
-// touched.
-
 #![cfg(feature = "dbus")]
 
 use std::thread::{self, JoinHandle};
 
-/// Spawn the DBus worker. The returned `JoinHandle` is intentionally
-/// dropped on shutdown — the thread is a daemon, and the process exiting
-/// tears down the zbus connection cleanly.
-#[allow(clippy::missing_errors_doc)]
+use log::{info, warn};
+use zbus::connection::Builder;
+
+pub const BUS_NAME: &str = "com.github.SUPERCILEX.Ringboard";
+pub const OBJECT_PATH: &str = "/com/github/SUPERCILEX/Ringboard";
+pub const INTERFACE_NAME: &str = "com.github.SUPERCILEX.Ringboard1";
+
 pub fn spawn() -> JoinHandle<()> {
     thread::Builder::new()
         .name("ringboard-dbus".into())
-        .spawn(|| {
-            // Real worker arrives in Task 2.
-        })
+        .spawn(run)
         .expect("failed to spawn ringboard-dbus thread")
+}
+
+fn run() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("failed to build tokio runtime for ringboard-dbus");
+
+    if let Err(e) = rt.block_on(serve()) {
+        warn!("ringboard-dbus exiting: {e}");
+    }
+}
+
+async fn serve() -> zbus::Result<()> {
+    let _conn = Builder::session()?
+        .name(BUS_NAME)?
+        .build()
+        .await?;
+    info!("DBus interface registered on session bus as {BUS_NAME}");
+    // Park forever; zbus dispatches in the background.
+    std::future::pending::<()>().await;
+    Ok(())
 }
