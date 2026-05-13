@@ -1,9 +1,11 @@
 #![cfg(feature = "dbus")]
 
 use std::{
+    collections::{BTreeSet, HashSet},
     fs::File,
     io::{Seek, SeekFrom, Write},
     os::fd::OwnedFd,
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 
@@ -11,8 +13,10 @@ use log::{info, warn};
 use ringboard_core::dirs::{data_dir, socket_file};
 use ringboard_core::protocol::{AddResponse, RingKind};
 use ringboard_sdk::{
-    DatabaseReader,
+    DatabaseReader, Entry, EntryReader, Kind,
     api::{AddRequest, MoveToFrontRequest, RemoveRequest, connect_to_server},
+    core::{BucketAndIndex, size_to_bucket},
+    search::{EntryLocation, Query, QueryResult, cancellation_token},
 };
 use rustix::fs::{MemfdFlags, memfd_create};
 use rustix::net::SocketAddrUnix;
@@ -21,6 +25,8 @@ use zbus::connection::Builder;
 pub const BUS_NAME: &str = "com.github.SUPERCILEX.Ringboard";
 pub const OBJECT_PATH: &str = "/com/github/SUPERCILEX/Ringboard";
 pub const INTERFACE_NAME: &str = "com.github.SUPERCILEX.Ringboard1";
+
+pub const MAX_PAGE_LIMIT: u64 = 500;
 
 // Convention for interface methods:
 //
@@ -65,6 +71,74 @@ fn payload_memfd(bytes: &[u8]) -> zbus::fdo::Result<File> {
     file.seek(SeekFrom::Start(0))
         .map_err(|e| zbus::fdo::Error::Failed(format!("seek payload: {e}")))?;
     Ok(file)
+}
+
+fn open_db() -> zbus::fdo::Result<(DatabaseReader, EntryReader)> {
+    let mut dir = data_dir();
+    let db = DatabaseReader::open(&mut dir)
+        .map_err(|e| zbus::fdo::Error::Failed(format!("DatabaseReader::open: {e}")))?;
+    let reader = EntryReader::open(&mut dir)
+        .map_err(|e| zbus::fdo::Error::Failed(format!("EntryReader::open: {e}")))?;
+    Ok((db, reader))
+}
+
+fn search_text(query: &str, db: &DatabaseReader) -> zbus::fdo::Result<Vec<Entry>> {
+    let mut search_dir = data_dir();
+    let search_reader = EntryReader::open(&mut search_dir)
+        .map_err(|e| zbus::fdo::Error::Failed(format!("EntryReader::open: {e}")))?;
+    let search_reader = Arc::new(search_reader);
+
+    let (token_src, _token_sink) = cancellation_token();
+    let (results, threads) =
+        ringboard_sdk::search(Query::Plain(query.as_bytes()), search_reader, token_src);
+
+    let mut file_ids: HashSet<u64> = HashSet::new();
+    let mut bucket_hits: BTreeSet<BucketAndIndex> = BTreeSet::new();
+    for r in results {
+        let QueryResult { location, .. } =
+            r.map_err(|e| zbus::fdo::Error::Failed(format!("search: {e}")))?;
+        match location {
+            EntryLocation::File { entry_id } => {
+                file_ids.insert(entry_id);
+            }
+            EntryLocation::Bucketed { bucket, index } => {
+                bucket_hits.insert(BucketAndIndex::new(bucket, index));
+            }
+        }
+    }
+    for t in threads {
+        t.join()
+            .map_err(|_| zbus::fdo::Error::Failed("search thread panicked".into()))?;
+    }
+
+    let mut out: Vec<Entry> = Vec::new();
+    for entry in db.favorites().chain(db.main()) {
+        let hit = match entry.kind() {
+            Kind::File => file_ids.contains(&entry.id()),
+            Kind::Bucket(b) => bucket_hits.contains(&BucketAndIndex::new(
+                size_to_bucket(b.size()),
+                b.index(),
+            )),
+        };
+        if hit {
+            out.push(entry);
+        }
+    }
+    Ok(out)
+}
+
+fn load_row(
+    entry: &Entry,
+    reader: &mut EntryReader,
+) -> zbus::fdo::Result<(u64, String, Vec<u8>)> {
+    let bytes = entry
+        .to_slice(reader)
+        .map_err(|e| zbus::fdo::Error::Failed(format!("load entry: {e}")))?;
+    let mime = bytes
+        .mime_type()
+        .map_err(|e| zbus::fdo::Error::Failed(format!("mime: {e}")))?
+        .to_string();
+    Ok((entry.id(), mime, bytes.to_vec()))
 }
 
 struct Iface;
@@ -150,6 +224,42 @@ impl Iface {
         })
         .await
         .map_err(|e| zbus::fdo::Error::Failed(format!("add join: {e}")))?
+    }
+
+    /// Paginated search. Empty query lists every entry (favorites then main);
+    /// non-empty query runs a plaintext search. Returns `(page, total)`.
+    /// `limit` is clamped to `MAX_PAGE_LIMIT`; `limit == 0` returns an empty
+    /// page along with the true total.
+    async fn search(
+        &self,
+        query: &str,
+        offset: u64,
+        limit: u64,
+    ) -> zbus::fdo::Result<(Vec<(u64, String, Vec<u8>)>, u64)> {
+        let limit = limit.min(MAX_PAGE_LIMIT);
+        let query = query.to_owned();
+
+        tokio::task::spawn_blocking(
+            move || -> zbus::fdo::Result<(Vec<(u64, String, Vec<u8>)>, u64)> {
+                let (db, mut reader) = open_db()?;
+                let entries: Vec<Entry> = if query.is_empty() {
+                    db.favorites().chain(db.main()).collect()
+                } else {
+                    search_text(&query, &db)?
+                };
+                let total = entries.len() as u64;
+                let start = offset.min(total) as usize;
+                let end = offset.saturating_add(limit).min(total) as usize;
+
+                let mut page = Vec::with_capacity(end.saturating_sub(start));
+                for entry in &entries[start..end] {
+                    page.push(load_row(entry, &mut reader)?);
+                }
+                Ok((page, total))
+            },
+        )
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(format!("search join: {e}")))?
     }
 }
 
