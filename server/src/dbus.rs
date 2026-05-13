@@ -1,14 +1,20 @@
 #![cfg(feature = "dbus")]
 
-use std::{os::fd::OwnedFd, thread::{self, JoinHandle}};
+use std::{
+    fs::File,
+    io::{Seek, SeekFrom, Write},
+    os::fd::OwnedFd,
+    thread::{self, JoinHandle},
+};
 
 use log::{info, warn};
 use ringboard_core::dirs::{data_dir, socket_file};
-use ringboard_core::protocol::RingKind;
+use ringboard_core::protocol::{AddResponse, RingKind};
 use ringboard_sdk::{
     DatabaseReader,
-    api::{MoveToFrontRequest, RemoveRequest, connect_to_server},
+    api::{AddRequest, MoveToFrontRequest, RemoveRequest, connect_to_server},
 };
+use rustix::fs::{MemfdFlags, memfd_create};
 use rustix::net::SocketAddrUnix;
 use zbus::connection::Builder;
 
@@ -48,6 +54,17 @@ fn open_server() -> zbus::fdo::Result<OwnedFd> {
         .map_err(|e| zbus::fdo::Error::Failed(format!("invalid socket path: {e}")))?;
     connect_to_server(&addr)
         .map_err(|e| zbus::fdo::Error::Failed(format!("connect to server: {e}")))
+}
+
+fn payload_memfd(bytes: &[u8]) -> zbus::fdo::Result<File> {
+    let fd = memfd_create(c"ringboard-dbus-add", MemfdFlags::CLOEXEC)
+        .map_err(|e| zbus::fdo::Error::Failed(format!("memfd_create: {e}")))?;
+    let mut file = File::from(fd);
+    file.write_all(bytes)
+        .map_err(|e| zbus::fdo::Error::Failed(format!("write payload: {e}")))?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| zbus::fdo::Error::Failed(format!("seek payload: {e}")))?;
+    Ok(file)
 }
 
 struct Iface;
@@ -113,6 +130,26 @@ impl Iface {
         .await
         .map_err(|e| zbus::fdo::Error::Failed(format!("move_to_front join: {e}")))??;
         Ok(())
+    }
+
+    /// Append a new entry to the main ring. Returns the assigned id.
+    async fn add(&self, payload: Vec<u8>, mime: &str) -> zbus::fdo::Result<u64> {
+        if payload.is_empty() {
+            return Err(zbus::fdo::Error::InvalidArgs("empty payload".into()));
+        }
+        let mime = mime.to_owned();
+        tokio::task::spawn_blocking(move || -> zbus::fdo::Result<u64> {
+            let mime_type = ringboard_core::protocol::MimeType::from(&mime)
+                .map_err(|e| zbus::fdo::Error::InvalidArgs(format!("invalid mime: {e}")))?;
+            let file = payload_memfd(&payload)?;
+            let server = open_server()?;
+            let resp = AddRequest::response(&server, RingKind::Main, &mime_type, &file)
+                .map_err(|e| zbus::fdo::Error::Failed(format!("add: {e}")))?;
+            let AddResponse::Success { id } = resp;
+            Ok(id)
+        })
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(format!("add join: {e}")))?
     }
 }
 
