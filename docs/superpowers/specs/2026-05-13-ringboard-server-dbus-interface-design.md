@@ -103,7 +103,7 @@ extra dependencies — same binary as today.
 | Method | Signature (in → out) | Maps to SDK |
 |---|---|---|
 | `Add` | `(ay payload, s mime) → t id` | `AddRequest` |
-| `Search` | `(s query, u limit) → a(tsay)` (id, mime, payload) | `SearchRequest` |
+| `Search` | `(s query, t offset, t limit) → (a(tsay) page, t total)` | `SearchRequest` + slicing |
 | `MoveToFront` | `(t id) → ()` | `MoveToFrontRequest` |
 | `Remove` | `(t id) → ()` | `RemoveRequest` |
 | `Wipe` | `() → ()` | `WipeRequest` |
@@ -112,8 +112,26 @@ Notes:
 - `Add` takes raw bytes (`ay`) plus an explicit MIME so the GNOME extension
   can push images and arbitrary binary payloads without base64 round-trips
   (the CLI today only accepts text on stdin).
-- `Search` returns the same `(id, mime, payload)` tuple shape for text and
-  binary entries — clients branch on MIME.
+- `Search` is the single listing entry point:
+  - **Empty query** lists **every** entry (text + binary) newest-first,
+    replacing the current `ringboard debug dump` path used by the
+    GNOME extension for unfiltered browsing.
+  - **Non-empty query** runs a text search (matches today's
+    `ringboard search` semantics; binary entries are not matched).
+  - The return tuple is `(page, total)`. `page` is the slice
+    `[offset, offset+limit)`; `total` is the full result-set size so
+    clients can decide whether more pages exist. If `offset >= total`
+    the page is empty.
+  - Pagination drifts under concurrent inserts (rows shift by one when
+    a new entry lands at the front). This is the same trade-off the
+    current JS code accepts; durable cursor support is explicitly
+    out-of-scope for v1.
+  - `limit` is capped server-side at **500** rows per page; larger
+    values are silently clamped. `limit = 0` returns an empty page and
+    the live total (useful as a count probe).
+- Tuples carry `(id, mime, payload)` for text and binary alike — clients
+  branch on MIME. Text payloads are UTF-8 in the `ay` field; binary
+  payloads are the raw bytes.
 - IDs are `u64` (DBus `t`) to match the SDK's `EntryId`.
 
 ## Error handling
