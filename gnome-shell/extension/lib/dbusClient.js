@@ -28,17 +28,27 @@ const TEXT_ENCODER = new TextEncoder();
 // non-text entries get `kind: 'Bytes'` with base64-encoded data so the menu
 // can render thumbnails by GLib.base64_decode-ing the field, the same path it
 // took when consuming `ringboard debug dump --json` output.
+// Mirror ringboard-sdk's is_text_mime: empty / "text" / text/* / a handful
+// of JSON+XML application subtypes count as human-readable. Old watchers
+// stored entries with empty mime, so without the empty-string case we'd
+// render every existing entry as binary.
+function isTextMime(mime) {
+  if (typeof mime !== 'string') return false;
+  if (mime.length === 0) return true;
+  if (mime === 'text' || mime.startsWith('text/')) return true;
+  return mime === 'application/json' || mime === 'application/xml';
+}
+
 function rowToEntry([id, mime, payloadBytes]) {
   const bytes = payloadBytes instanceof Uint8Array
     ? payloadBytes
     : new Uint8Array(payloadBytes);
-  const isText = typeof mime === 'string' && mime.startsWith('text/');
-  if (isText) {
+  if (isTextMime(mime)) {
     return {
       id: Number(id),
       kind: 'Human',
       data: TEXT_DECODER.decode(bytes),
-      mime_type: mime,
+      mime_type: mime || 'text/plain',
     };
   }
   return {
