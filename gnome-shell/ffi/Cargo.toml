@@ -1,0 +1,17 @@
+[package]
+name = "ringboard-gnome-ffi"
+version = "0.1.0"
+edition = "2024"
+description = "C-compatible FFI bindings to the Ringboard client-sdk for the GNOME Shell extension."
+repository = "https://github.com/SUPERCILEX/clipboard-history"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+name = "ringboard_gnome_ffi"
+crate-type = ["cdylib"]
+
+[dependencies]
+clipboard-history-client-sdk = { path = "../../client-sdk" }
+ringboard-core = { package = "clipboard-history-core", path = "../../core" }
+rustix = { version = "1.1.4", features = ["net", "fs"] }
