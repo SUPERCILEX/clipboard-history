@@ -12,8 +12,8 @@ const Clipboard = St.Clipboard.get_default();
 //     GSetting is true.
 //
 // Each observed event reads the new text and submits it to the ringboard
-// server via SubprocessClient.add. UI state is not touched: the menu fetches
-// fresh from the server when opened.
+// server via DbusClient.add. UI state is not touched: the menu fetches fresh
+// from the server when opened.
 export class ClipboardIntake {
   constructor(client, settings) {
     this._client = client;

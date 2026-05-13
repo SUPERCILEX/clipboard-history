@@ -9,7 +9,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import { findBinary, SubprocessClient } from './lib/subprocessClient.js';
+import { DbusClient } from './lib/dbusClient.js';
 import { ClipboardIntake } from './lib/clipboardIntake.js';
 import { MenuController } from './lib/menuController.js';
 import { openConfirmDialog } from './confirmDialog.js';
@@ -249,13 +249,14 @@ export default class RingboardExtension extends Extension {
     this._enableGen = (this._enableGen ?? 0) + 1;
     const myGen = this._enableGen;
 
-    const binary = findBinary();
-    if (!binary) {
+    let client;
+    try {
+      client = new DbusClient();
+    } catch (e) {
       this._installIndicator(null, settings, false, myGen);
-      console.warn('ringboard: CLI binary not found on $PATH');
+      console.warn(`ringboard: failed to open session bus: ${e.message}`);
       return;
     }
-    const client = new SubprocessClient(binary);
     client.probe().then(connected => {
       this._installIndicator(client, settings, connected, myGen);
     }).catch(() => {
@@ -265,7 +266,7 @@ export default class RingboardExtension extends Extension {
 
   _installIndicator(client, settings, connected, gen) {
     // The extension may have been disabled (and possibly re-enabled) between
-    // findBinary/probe and this callback; only mount if we still own this
+    // the bus probe and this callback; only mount if we still own this
     // enable generation.
     if (gen !== this._enableGen) return;
     if (this._indicator) return;
