@@ -117,7 +117,7 @@ fn search_text(query: &str, db: &DatabaseReader) -> zbus::fdo::Result<Vec<Entry>
     }
 
     let mut out: Vec<Entry> = Vec::new();
-    for entry in db.favorites().chain(db.main()) {
+    for entry in db.favorites().rev().chain(db.main().rev()) {
         let hit = match entry.kind() {
             Kind::File => file_ids.contains(&entry.id()),
             Kind::Bucket(b) => bucket_hits.contains(&BucketAndIndex::new(
@@ -248,7 +248,7 @@ impl Iface {
             move || -> zbus::fdo::Result<(Vec<(u64, String, Vec<u8>)>, u64)> {
                 let (db, mut reader) = open_db()?;
                 let entries: Vec<Entry> = if query.is_empty() {
-                    db.favorites().chain(db.main()).collect()
+                    db.favorites().rev().chain(db.main().rev()).collect()
                 } else {
                     search_text(&query, &db)?
                 };
