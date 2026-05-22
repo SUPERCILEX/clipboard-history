@@ -4,12 +4,7 @@
 
 Images copied to the clipboard never appear in the ringboard menu. The extension's intake reads only text, so non-text payloads (images, custom formats, URI lists) are dropped at the source. The menu's image-rendering path already exists and works — it just never receives any image entries.
 
-Two reasons we can't rely on the existing `ringboard-wayland` watcher to fill this gap on GNOME Shell:
-
-1. GNOME Shell is the Wayland compositor. The Wayland data-control protocol (which `ringboard-wayland` uses) is only exposed to non-compositor clients, so the watcher can't read the clipboard inside GNOME.
-2. Even where it could run, having two intakes (watcher + extension) racing on the same selection produces duplicate entries.
-
-The extension must become a complete intake on its own.
+`ringboard-wayland` can't fill this gap on GNOME: it relies on the `wlr-data-control` / `ext-data-control` Wayland protocol, and Mutter (GNOME's compositor) doesn't implement either. The watcher works on KWin and wlroots-based compositors (Sway, river, …); on GNOME it has nothing to talk to. The extension is the only process inside the session that can read the selection, so it must do the full intake itself.
 
 ## What ringboard does upstream
 
