@@ -3,7 +3,12 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
+import { selectBestMime } from './mimePriority.js';
+
 const Clipboard = St.Clipboard.get_default();
+
+const TEXT_ENCODER = new TextEncoder();
+const PLAIN_TEXT_MIME = 'text/plain;charset=utf-8';
 
 // Listens for clipboard owner-changed events on the GNOME display selection.
 //
@@ -11,9 +16,12 @@ const Clipboard = St.Clipboard.get_default();
 //   - SELECTION_PRIMARY is observed only when the `process-primary-selection`
 //     GSetting is true.
 //
-// Each observed event reads the new text and submits it to the ringboard
-// server via DbusClient.add. UI state is not touched: the menu fetches fresh
-// from the server when opened.
+// For each observed event the intake enumerates the offered MIME types via
+// St.Clipboard.get_mimetypes, picks one through selectBestMime (a JS port
+// of ringboard-wayland's BestMimeTypeFinder), reads the bytes for that
+// MIME, and submits a single entry to ringboard-server via DbusClient.add.
+// UI state is not touched: the menu fetches fresh from the server when
+// opened.
 export class ClipboardIntake {
   constructor(client, settings) {
     this._client = client;
@@ -25,11 +33,14 @@ export class ClipboardIntake {
     this._processPrimary = false;
 
     // Content-match suppression: when the extension writes to the clipboard
-    // itself, it records the payload and monotonic timestamp here. The next
-    // owner-changed signal whose read matches this payload (within TTL) is
-    // skipped. Counting signals is unreliable because set_text on identical
-    // content doesn't always trigger owner-changed.
-    this._lastSelfWrite = null; // { text: string, expiresUs: number }
+    // itself, it records the MIME, payload, and monotonic timestamp here.
+    // The next owner-changed signal whose read matches this MIME + payload
+    // (within TTL) is skipped. Counting signals is unreliable because
+    // set_text / set_content on identical content doesn't always trigger
+    // owner-changed.
+    //
+    // `payload` is a string for text writes, Uint8Array for binary writes.
+    this._lastSelfWrite = null; // { mime, payload: string|Uint8Array, expiresUs }
   }
 
   // TTL (microseconds) for the self-write match window.
@@ -70,18 +81,26 @@ export class ClipboardIntake {
     this._settingsChangedId = 0;
   }
 
-  // Record an impending self-write so the matching owner-changed signal can
-  // be skipped. `text` is the exact string we'll set on the clipboard, or
-  // null for binary writes (which intake already ignores via get_text).
-  expectOwnWrite(text) {
-    if (typeof text !== 'string' || text.length === 0) {
-      this._lastSelfWrite = null;
+  // Record an impending self-write so the matching owner-changed signal
+  // can be skipped. Accepts either a string (text path) or
+  // { mime, bytes } (binary path).
+  expectOwnWrite(arg) {
+    const expiresUs = GLib.get_monotonic_time() + ClipboardIntake.SELF_WRITE_TTL_US;
+    if (typeof arg === 'string') {
+      if (arg.length === 0) {
+        this._lastSelfWrite = null;
+        return;
+      }
+      this._lastSelfWrite = { mime: PLAIN_TEXT_MIME, payload: arg, expiresUs };
       return;
     }
-    this._lastSelfWrite = {
-      text,
-      expiresUs: GLib.get_monotonic_time() + ClipboardIntake.SELF_WRITE_TTL_US,
-    };
+    if (arg && typeof arg === 'object' &&
+        typeof arg.mime === 'string' && arg.mime.length > 0 &&
+        arg.bytes instanceof Uint8Array && arg.bytes.length > 0) {
+      this._lastSelfWrite = { mime: arg.mime, payload: arg.bytes, expiresUs };
+      return;
+    }
+    this._lastSelfWrite = null;
   }
 
   // Register a callback that fires after every server-add attempt with the
@@ -111,34 +130,88 @@ export class ClipboardIntake {
         ? St.ClipboardType.PRIMARY
         : St.ClipboardType.CLIPBOARD;
 
+    const mimes = Clipboard.get_mimetypes(stType);
+    const choice = selectBestMime(mimes);
+    if (!choice) return;
+
+    if (choice.isText) {
+      this._readText(stType);
+    } else {
+      this._readBinary(stType, choice.mime);
+    }
+  }
+
+  _readText(stType) {
     Clipboard.get_text(stType, (_clip, text) => {
       if (typeof text !== 'string' || text.length === 0) return;
-
-      // Drop expired self-write marker, then skip if this read matches one
-      // we just made ourselves.
-      const sw = this._lastSelfWrite;
-      if (sw) {
-        if (GLib.get_monotonic_time() > sw.expiresUs) {
-          this._lastSelfWrite = null;
-        } else if (sw.text === text) {
-          this._lastSelfWrite = null;
-          return;
-        }
-      }
+      if (this._matchesSelfWrite(PLAIN_TEXT_MIME, text)) return;
 
       let payload = text;
       if (this._settings.get_boolean('strip-text')) {
         payload = payload.trim();
       }
       if (payload.length === 0) return;
-      this._client.add(payload).then(id => {
-        const ok = id !== null;
-        if (!ok) console.warn('ringboard: client.add returned null (server down?)');
-        if (typeof this._onAddResult === 'function') this._onAddResult(ok);
-      }).catch(e => {
-        console.warn(`ringboard: client.add failed: ${e.message}`);
-        if (typeof this._onAddResult === 'function') this._onAddResult(false);
-      });
+
+      const bytes = TEXT_ENCODER.encode(payload);
+      this._submit(bytes, PLAIN_TEXT_MIME);
     });
   }
+
+  _readBinary(stType, mime) {
+    Clipboard.get_content(stType, mime, (_clip, gbytes) => {
+      const bytes = unwrapBytes(gbytes);
+      if (!bytes || bytes.length === 0) return;
+      if (this._matchesSelfWrite(mime, bytes)) return;
+      this._submit(bytes, mime);
+    });
+  }
+
+  // Returns true and consumes the marker if (mime, payload) matches the
+  // last self-write within its TTL. Expired markers are also cleared.
+  _matchesSelfWrite(mime, payload) {
+    const sw = this._lastSelfWrite;
+    if (!sw) return false;
+    if (GLib.get_monotonic_time() > sw.expiresUs) {
+      this._lastSelfWrite = null;
+      return false;
+    }
+    if (sw.mime !== mime) return false;
+    if (typeof sw.payload === 'string' && typeof payload === 'string') {
+      if (sw.payload !== payload) return false;
+    } else if (sw.payload instanceof Uint8Array && payload instanceof Uint8Array) {
+      if (!bytesEqual(sw.payload, payload)) return false;
+    } else {
+      return false;
+    }
+    this._lastSelfWrite = null;
+    return true;
+  }
+
+  _submit(bytes, mime) {
+    this._client.add(bytes, mime).then(id => {
+      const ok = id !== null;
+      if (!ok) console.warn('ringboard: client.add returned null (server down?)');
+      if (typeof this._onAddResult === 'function') this._onAddResult(ok);
+    }).catch(e => {
+      console.warn(`ringboard: client.add failed: ${e.message}`);
+      if (typeof this._onAddResult === 'function') this._onAddResult(false);
+    });
+  }
+}
+
+// Coerce the GBytes returned by St.Clipboard.get_content into a
+// Uint8Array. GJS exposes GBytes#toArray returning a Uint8Array view.
+function unwrapBytes(gbytes) {
+  if (!gbytes) return null;
+  if (gbytes instanceof Uint8Array) return gbytes;
+  if (typeof gbytes.toArray === 'function') return gbytes.toArray();
+  return null;
+}
+
+function bytesEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }

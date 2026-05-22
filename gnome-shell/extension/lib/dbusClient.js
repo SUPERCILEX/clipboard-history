@@ -21,7 +21,6 @@ const IFACE = 'com.github.SUPERCILEX.Ringboard1';
 const PAGE_LIMIT = 500;
 
 const TEXT_DECODER = new TextDecoder('utf-8', { fatal: false });
-const TEXT_ENCODER = new TextEncoder();
 
 // Convert raw entry bytes + MIME into the legacy `{id, kind, data, mime_type}`
 // shape the menu consumes. Text entries get `kind: 'Human'` with utf-8 data;
@@ -117,15 +116,16 @@ export class DbusClient {
     }
   }
 
-  // Submit a text entry. Returns the numeric id assigned by the server, or
-  // null on failure.
-  async add(text) {
-    if (typeof text !== 'string' || text.length === 0) return null;
-    const bytes = TEXT_ENCODER.encode(text);
+  // Submit an entry. Returns the numeric id assigned by the server, or
+  // null on failure. `payloadBytes` is a Uint8Array; `mime` is the MIME
+  // type to record (e.g. 'text/plain;charset=utf-8' or 'image/png').
+  async add(payloadBytes, mime) {
+    if (!(payloadBytes instanceof Uint8Array) || payloadBytes.length === 0) return null;
+    if (typeof mime !== 'string' || mime.length === 0) return null;
     try {
       const reply = await this._call(
         'Add',
-        new GLib.Variant('(ays)', [bytes, 'text/plain;charset=utf-8']),
+        new GLib.Variant('(ays)', [payloadBytes, mime]),
         new GLib.VariantType('(t)'),
       );
       const [id] = reply.deep_unpack();
