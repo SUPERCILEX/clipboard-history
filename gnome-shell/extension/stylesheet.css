@@ -1,0 +1,24 @@
+.clipboard-indicator-icon.private-mode {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.popup-menu-item .ci-action-btn StIcon {
+  icon-size: 16px;
+}
+
+.ci-history-menu-section {
+  max-height: 450px;
+}
+
+.ci-history-search-section {
+  padding-top: 0;
+}
+
+.ci-history-search-section .popup-menu-ornament,
+.ci-history-actions-section .popup-menu-ornament {
+  width: auto;
+}
+
+.ci-history-search-entry {
+  width: 5em;
+}

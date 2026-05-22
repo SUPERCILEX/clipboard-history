@@ -1,0 +1,5 @@
+{
+  "name": "ringboard-extension",
+  "private": true,
+  "type": "module"
+}

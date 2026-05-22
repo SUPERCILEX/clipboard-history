@@ -1,0 +1,41 @@
+# Ringboard Clipboard History GNOME Extension
+# Copyright (C) 2024 Alex Saveau
+# This file is distributed under the same license as the ringboard package.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: ringboard-gnome\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-05-02 00:00+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: extension.js
+msgid "Search clipboard history…"
+msgstr ""
+
+#: extension.js
+msgid "Clear all?"
+msgstr ""
+
+#: extension.js
+msgid "Are you sure you want to delete all clipboard items?"
+msgstr ""
+
+#: extension.js
+msgid "This operation cannot be undone."
+msgstr ""
+
+#: extension.js
+msgid "Clear"
+msgstr ""
+
+#: extension.js
+msgid "Cancel"
+msgstr ""
