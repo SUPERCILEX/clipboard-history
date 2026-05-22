@@ -194,8 +194,6 @@ export class MenuController {
     const Clipboard = St.Clipboard.get_default();
     // Mark the impending write as our own BEFORE issuing it: the
     // owner-changed signal can be dispatched before this method returns.
-    // Binary writes don't need marking — intake's get_text returns empty
-    // for them and drops the event naturally.
     if (isBinaryEntry(entry)) {
       const bytes = this._decodeBase64(entry.data);
       if (!bytes) {
@@ -203,6 +201,10 @@ export class MenuController {
         return;
       }
       const mime = entry.mime_type || 'application/octet-stream';
+      // Mark the impending write so intake skips the matching
+      // owner-changed signal. Must happen before set_content because
+      // the signal can be dispatched before this call returns.
+      if (this._intake) this._intake.expectOwnWrite({ mime, bytes });
       Clipboard.set_content(
         St.ClipboardType.CLIPBOARD,
         mime,
