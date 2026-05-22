@@ -92,3 +92,46 @@ test('only filtered MIMEs → null', () => {
     null,
   );
 });
+
+test('prefer image without params over image with params', () => {
+  // Order with params first, no-params second: should pick no-params.
+  assert.deepEqual(
+    selectBestMime(['image/png;qualifier=foo', 'image/png']),
+    { mime: 'image/png', isText: false },
+  );
+});
+
+test('keep the first image when both lack params', () => {
+  assert.deepEqual(
+    selectBestMime(['image/png', 'image/bmp']),
+    { mime: 'image/png', isText: false },
+  );
+});
+
+test('keep the first image when both have params', () => {
+  assert.deepEqual(
+    selectBestMime(['image/png;a=1', 'image/png;b=2']),
+    { mime: 'image/png;a=1', isText: false },
+  );
+});
+
+test('application/* lands in other slot', () => {
+  assert.deepEqual(
+    selectBestMime(['application/pdf']),
+    { mime: 'application/pdf', isText: false },
+  );
+});
+
+test('image beats application (other slot)', () => {
+  assert.deepEqual(
+    selectBestMime(['application/pdf', 'image/png']),
+    { mime: 'image/png', isText: false },
+  );
+});
+
+test('non-string entries are ignored', () => {
+  assert.deepEqual(
+    selectBestMime([null, 42, 'text/plain', undefined]),
+    { mime: 'text/plain', isText: true },
+  );
+});
