@@ -61,3 +61,34 @@ test('plain text beats text/html', () => {
     { mime: 'text/plain', isText: true },
   );
 });
+
+test('chromium/x-internal-* is filtered out', () => {
+  assert.equal(selectBestMime(['chromium/x-internal-foo']), null);
+});
+
+test('uppercase-leading MIME is filtered out', () => {
+  assert.equal(selectBestMime(['SomeAppFoo']), null);
+});
+
+test('uppercase filter does not affect plaintext aliases', () => {
+  // STRING is a plain-text alias even though it starts uppercase.
+  assert.deepEqual(selectBestMime(['STRING']), { mime: 'STRING', isText: true });
+});
+
+test('x-kde-passwordManagerHint alone returns null', () => {
+  assert.equal(selectBestMime(['x-kde-passwordManagerHint']), null);
+});
+
+test('password hint suppresses an otherwise-valid offer', () => {
+  assert.equal(
+    selectBestMime(['image/png', 'text/plain', 'x-kde-passwordManagerHint']),
+    null,
+  );
+});
+
+test('only filtered MIMEs → null', () => {
+  assert.equal(
+    selectBestMime(['chromium/x-internal-a', 'SomeApp', 'OtherApp']),
+    null,
+  );
+});
