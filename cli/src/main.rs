@@ -43,8 +43,8 @@ use ringboard_sdk::{
     },
     config,
     core::{
-        BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, SendQuitAndWait, acquire_lock_file,
-        bucket_to_length, create_tmp_file,
+        BucketAndIndex, Error as CoreError, IoErr, NUM_BUCKETS, RingAndIndex, SendQuitAndWait,
+        acquire_lock_file, bucket_to_length, create_tmp_file,
         dirs::{data_dir, paste_socket_file, socket_file},
         protocol::{
             AddResponse, GarbageCollectResponse, IdNotFoundError, MimeType, MoveToFrontResponse,
@@ -692,7 +692,7 @@ fn search(
         }
     };
 
-    let (mut database, reader) = open_db()?;
+    let (database, reader) = open_db()?;
     let reader = Arc::new(reader);
     let (source_token, _sink_token) = cancellation_token();
     let (result_stream, threads) = {
@@ -711,7 +711,8 @@ fn search(
             source_token,
         )
     };
-    let mut results = BTreeMap::<BucketAndIndex, (u16, u16)>::new();
+    let mut bucket_results = BTreeMap::<BucketAndIndex, (u16, u16)>::new();
+    let mut file_results = BTreeMap::<RingAndIndex, (usize, usize)>::new();
     for result in result_stream {
         let QueryResult {
             location,
@@ -720,30 +721,14 @@ fn search(
         } = result?;
         match location {
             EntryLocation::Bucketed { bucket, index } => {
-                results.insert(
-                    BucketAndIndex::new(bucket, index),
-                    (u16::try_from(start).unwrap(), u16::try_from(end).unwrap()),
-                );
+                let range = (u16::try_from(start).unwrap(), u16::try_from(end).unwrap());
+                bucket_results.insert(BucketAndIndex::new(bucket, index), range);
             }
             EntryLocation::File { entry_id } => {
-                let entry = unsafe { database.get(entry_id)? };
-                if json {
-                    let bytes = entry.to_slice_raw(&reader)?.unwrap();
-                    emit_entry(entry_id, &bytes, bytes.mime_type()?, start, end)?;
-                } else {
-                    let file = entry.to_file_raw(&reader)?.unwrap();
-
-                    let mut buf = [MaybeUninit::uninit(); CONTEXT_WINDOW];
-                    let mut buf = BorrowedBuf::from(buf.as_mut_slice());
-                    read_at_to_end(
-                        &*file,
-                        buf.unfilled(),
-                        u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap(),
-                    )
-                    .map_io_err(|| format!("failed to read from direct entry {entry_id}."))?;
-
-                    emit_entry(entry_id, buf.filled(), file.mime_type()?, start, end)?;
-                }
+                file_results.insert(
+                    RingAndIndex::from_id(entry_id).map_err(CoreError::IdNotFound)?,
+                    (start, end),
+                );
             }
         }
     }
@@ -753,31 +738,60 @@ fn search(
     let mut reader = Arc::into_inner(reader).unwrap();
 
     for entry in database.favorites().chain(database.main()) {
-        let Kind::Bucket(bucket) = entry.kind() else {
+        let Some((start, end)) = (match entry.kind() {
+            Kind::Bucket(bucket) => bucket_results
+                .get(&BucketAndIndex::new(
+                    size_to_bucket(bucket.size()),
+                    bucket.index(),
+                ))
+                .map(|&(start, end)| (usize::from(start), usize::from(end))),
+            Kind::File => file_results.get(&entry.rai()).copied(),
+        }) else {
             continue;
         };
-        let Some(&(start, end)) = results.get(&BucketAndIndex::new(
-            size_to_bucket(bucket.size()),
-            bucket.index(),
-        )) else {
-            continue;
-        };
-        let (start, end) = (usize::from(start), usize::from(end));
 
-        let bytes = entry.to_slice(&mut reader)?;
-        let mime_type = bytes.mime_type()?;
-        if json {
-            emit_entry(entry.id(), &bytes, mime_type, start, end)?;
-        } else {
-            let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
-            emit_entry(
-                entry.id(),
-                &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
-                mime_type,
-                start,
-                end,
-            )?;
-        }
+        let bytes;
+        let mut buf;
+        let (bytes, mime_type) = match entry.kind() {
+            Kind::Bucket(_) => {
+                bytes = Some(entry.to_slice(&mut reader)?);
+                let bytes = bytes.as_ref().unwrap();
+                let mime_type = bytes.mime_type()?;
+                if json {
+                    (&***bytes, mime_type)
+                } else {
+                    let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
+                    (
+                        &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
+                        mime_type,
+                    )
+                }
+            }
+            Kind::File => {
+                if json {
+                    bytes = Some(entry.to_slice(&mut reader)?);
+                    let bytes = bytes.as_ref().unwrap();
+                    let mime_type = bytes.mime_type()?;
+                    (&***bytes, mime_type)
+                } else {
+                    let file = entry.to_file_raw(&reader)?.unwrap();
+
+                    buf = [MaybeUninit::uninit(); CONTEXT_WINDOW];
+                    let mut buf = BorrowedBuf::from(buf.as_mut_slice());
+                    read_at_to_end(
+                        &*file,
+                        buf.unfilled(),
+                        u64::try_from(start.saturating_sub(PREFIX_CONTEXT)).unwrap(),
+                    )
+                    .map_io_err(|| format!("failed to read from direct entry {}.", entry.id()))?;
+
+                    let mime_type = file.mime_type()?;
+                    (buf.into_filled(), mime_type)
+                }
+            }
+        };
+
+        emit_entry(entry.id(), bytes, mime_type, start, end)?;
     }
 
     match output {
