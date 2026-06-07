@@ -10,7 +10,7 @@ use std::{
     fs::{File, create_dir_all},
     hash::BuildHasherDefault,
     io,
-    io::{BorrowedBuf, BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
+    io::{BorrowedBuf, BufReader, ErrorKind, IsTerminal, Read, Seek, SeekFrom, Write},
     mem::MaybeUninit,
     num::NonZeroU32,
     os::{
@@ -632,6 +632,7 @@ fn search(
     }
 
     let output = io::stdout().lock();
+    let is_terminal = output.is_terminal();
     let mut seq = serde_json::Serializer::new(output);
     let mut output = if json {
         Output::Json(seq.serialize_seq(None)?)
@@ -670,9 +671,13 @@ fn search(
                 };
 
                 no_empty_write(prefix)?;
-                no_empty_write(b"\x1b[1m")?;
+                if is_terminal {
+                    no_empty_write(b"\x1b[1m")?;
+                }
                 no_empty_write(middle)?;
-                no_empty_write(b"\x1b[0m")?;
+                if is_terminal {
+                    no_empty_write(b"\x1b[0m")?;
+                }
                 no_empty_write(suffix)?;
                 no_empty_write(b"\n\n")?;
 
