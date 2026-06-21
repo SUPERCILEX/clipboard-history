@@ -79,6 +79,7 @@ use thiserror::Error;
 /// For a technical breakdown of the project, see <https://alexsaveau.dev/blog/ringboard>.
 #[derive(Parser, Debug)]
 #[command(version, author = "Alex Saveau (@SUPERCILEX)")]
+#[command(name = env!("CARGO_BIN_NAME"))]
 #[command(infer_subcommands = true, infer_long_args = true)]
 #[command(disable_help_flag = true)]
 #[command(arg_required_else_help = true)]

@@ -1,6 +1,6 @@
 The Ringboard (clipboard history) CLI
 
-Usage: clipboard-history <COMMAND>
+Usage: ringboard <COMMAND>
 
 Commands:
   get              Get an entry from the database
@@ -27,7 +27,7 @@ Options:
 
 Get an entry from the database
 
-Usage: clipboard-history get <ID>
+Usage: ringboard get <ID>
 
 Arguments:
   <ID>  The entry ID
@@ -39,7 +39,7 @@ Options:
 
 Get an entry from the database by position (rather than by ID in [get])
 
-Usage: clipboard-history last [OPTIONS] [N]
+Usage: ringboard last [OPTIONS] [N]
 
 Arguments:
   [N]  The entry position [default: 0]
@@ -52,7 +52,7 @@ Options:
 
 Searches the Ringboard database for entries matching a query
 
-Usage: clipboard-history search [OPTIONS] <QUERY>
+Usage: ringboard search [OPTIONS] <QUERY>
 
 Arguments:
   <QUERY>  The query string to search for
@@ -77,7 +77,7 @@ Options:
 
 Add an entry to the database
 
-Usage: clipboard-history add [OPTIONS] [DATA_FILE]
+Usage: ringboard add [OPTIONS] [DATA_FILE]
 
 Arguments:
   [DATA_FILE]  A file containing the data to be added to the entry [default: -]
@@ -92,7 +92,7 @@ Options:
 
 Favorite an entry
 
-Usage: clipboard-history favorite <ID>
+Usage: ringboard favorite <ID>
 
 Arguments:
   <ID>  The entry ID
@@ -104,7 +104,7 @@ Options:
 
 Unfavorite an entry
 
-Usage: clipboard-history unfavorite <ID>
+Usage: ringboard unfavorite <ID>
 
 Arguments:
   <ID>  The entry ID
@@ -116,7 +116,7 @@ Options:
 
 Move an entry to the front, making it the most recent entry
 
-Usage: clipboard-history move-to-front <ID>
+Usage: ringboard move-to-front <ID>
 
 Arguments:
   <ID>  The entry ID
@@ -128,7 +128,7 @@ Options:
 
 Swap the positions of two entries
 
-Usage: clipboard-history swap <ID1> <ID2>
+Usage: ringboard swap <ID1> <ID2>
 
 Arguments:
   <ID1>  The first entry ID
@@ -141,7 +141,7 @@ Options:
 
 Delete an entry from the database
 
-Usage: clipboard-history remove <ID>
+Usage: ringboard remove <ID>
 
 Arguments:
   <ID>  The entry ID
@@ -153,7 +153,7 @@ Options:
 
 Wipe the entire database
 
-Usage: clipboard-history wipe
+Usage: ringboard wipe
 
 Options:
   -h, --help  Print help (use `--help` for more detail)
@@ -162,7 +162,7 @@ Options:
 
 Migrate from other clipboard managers to Ringboard
 
-Usage: clipboard-history import <FROM> [DATABASE]
+Usage: ringboard import <FROM> [DATABASE]
 
 Arguments:
   <FROM>      The existing clipboard to import [possible values: gnome-clipboard-history,
@@ -176,7 +176,7 @@ Options:
 
 Run garbage collection on the database
 
-Usage: clipboard-history garbage-collect [OPTIONS]
+Usage: ringboard garbage-collect [OPTIONS]
 
 Options:
   -m, --max-wasted-bytes <MAX_WASTED_BYTES>
@@ -188,7 +188,7 @@ Options:
 
 Modify app settings
 
-Usage: clipboard-history configure <COMMAND>
+Usage: ringboard configure <COMMAND>
 
 Commands:
   server   Edit the server settings
@@ -203,7 +203,7 @@ Options:
 
 Edit the server settings
 
-Usage: clipboard-history configure server [OPTIONS]
+Usage: ringboard configure server [OPTIONS]
 
 Options:
       --max-main-entries <MAX_MAIN_ENTRIES>
@@ -219,7 +219,7 @@ Options:
 
 Edit the X11 watcher settings
 
-Usage: clipboard-history configure x11 [OPTIONS]
+Usage: ringboard configure x11 [OPTIONS]
 
 Options:
       --auto-paste <AUTO_PASTE>
@@ -236,7 +236,7 @@ Options:
 
 Edit the Wayland watcher settings
 
-Usage: clipboard-history configure wayland [OPTIONS]
+Usage: ringboard configure wayland [OPTIONS]
 
 Options:
       --auto-paste <AUTO_PASTE>  Instead of simply placing selected items in the clipboard, attempt
@@ -248,7 +248,7 @@ Options:
 
 Debugging tools for developers
 
-Usage: clipboard-history debug <COMMAND>
+Usage: ringboard debug <COMMAND>
 
 Commands:
   stats     Print statistics about the Ringboard database
@@ -265,7 +265,7 @@ Options:
 
 Print statistics about the Ringboard database
 
-Usage: clipboard-history debug stats
+Usage: ringboard debug stats
 
 Options:
   -h, --help  Print help (use `--help` for more detail)
@@ -274,7 +274,7 @@ Options:
 
 Dump the database contents for analysis
 
-Usage: clipboard-history debug dump
+Usage: ringboard debug dump
 
 Options:
   -h, --help  Print help (use `--help` for more detail)
@@ -283,7 +283,7 @@ Options:
 
 Generate a pseudo-random database for testing and performance tuning purposes
 
-Usage: clipboard-history debug generate [OPTIONS]
+Usage: ringboard debug generate [OPTIONS]
 
 Options:
   -n, --entries <NUM_ENTRIES>  The number of random entries to generate [default: 100_000]
@@ -295,7 +295,7 @@ Options:
 
 Generate the demo clipboard entries
 
-Usage: clipboard-history debug demo
+Usage: ringboard debug demo
 
 Options:
   -h, --help  Print help (use `--help` for more detail)
@@ -304,7 +304,7 @@ Options:
 
 Spam the server with random commands
 
-Usage: clipboard-history debug fuzz [OPTIONS]
+Usage: ringboard debug fuzz [OPTIONS]
 
 Options:
   -s, --seed <SEED>            The RNG seed [default: 42]

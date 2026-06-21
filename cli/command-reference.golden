@@ -6,7 +6,7 @@ This CLI is a non-interactive client and a debugging tool.
 
 For a technical breakdown of the project, see <https://alexsaveau.dev/blog/ringboard>.
 
-Usage: clipboard-history <COMMAND>
+Usage: ringboard <COMMAND>
 
 Commands:
   get              Get an entry from the database
@@ -38,7 +38,7 @@ Get an entry from the database.
 
 The entry bytes will be outputted to stdout.
 
-Usage: clipboard-history get <ID>
+Usage: ringboard get <ID>
 
 Arguments:
   <ID>
@@ -54,7 +54,7 @@ Get an entry from the database by position (rather than by ID in [get]).
 
 The entry bytes will be outputted to stdout.
 
-Usage: clipboard-history last [OPTIONS] [N]
+Usage: ringboard last [OPTIONS] [N]
 
 Arguments:
   [N]
@@ -77,7 +77,7 @@ Options:
 
 Searches the Ringboard database for entries matching a query
 
-Usage: clipboard-history search [OPTIONS] <QUERY>
+Usage: ringboard search [OPTIONS] <QUERY>
 
 Arguments:
   <QUERY>
@@ -111,7 +111,7 @@ Add an entry to the database.
 
 Prints the ID of the newly added entry.
 
-Usage: clipboard-history add [OPTIONS] [DATA_FILE]
+Usage: ringboard add [OPTIONS] [DATA_FILE]
 
 Arguments:
   [DATA_FILE]
@@ -138,7 +138,7 @@ Options:
 
 Favorite an entry
 
-Usage: clipboard-history favorite <ID>
+Usage: ringboard favorite <ID>
 
 Arguments:
   <ID>
@@ -152,7 +152,7 @@ Options:
 
 Unfavorite an entry
 
-Usage: clipboard-history unfavorite <ID>
+Usage: ringboard unfavorite <ID>
 
 Arguments:
   <ID>
@@ -166,7 +166,7 @@ Options:
 
 Move an entry to the front, making it the most recent entry
 
-Usage: clipboard-history move-to-front <ID>
+Usage: ringboard move-to-front <ID>
 
 Arguments:
   <ID>
@@ -186,7 +186,7 @@ adding it and swapping the new entry into position.
 A set operation may also be implemented via swap by adding an entry, swapping it into place, and
 deleting the swapped out entry.
 
-Usage: clipboard-history swap <ID1> <ID2>
+Usage: ringboard swap <ID1> <ID2>
 
 Arguments:
   <ID1>
@@ -203,7 +203,7 @@ Options:
 
 Delete an entry from the database
 
-Usage: clipboard-history remove <ID>
+Usage: ringboard remove <ID>
 
 Arguments:
   <ID>
@@ -219,7 +219,7 @@ Wipe the entire database.
 
 WARNING: this operation is irreversible. ALL DATA WILL BE LOST.
 
-Usage: clipboard-history wipe
+Usage: ringboard wipe
 
 Options:
   -h, --help
@@ -229,7 +229,7 @@ Options:
 
 Migrate from other clipboard managers to Ringboard
 
-Usage: clipboard-history import <FROM> [DATABASE]
+Usage: ringboard import <FROM> [DATABASE]
 
 Arguments:
   <FROM>
@@ -259,7 +259,7 @@ Run garbage collection on the database.
 
 Prints the amount of freed space.
 
-Usage: clipboard-history garbage-collect [OPTIONS]
+Usage: ringboard garbage-collect [OPTIONS]
 
 Options:
   -m, --max-wasted-bytes <MAX_WASTED_BYTES>
@@ -276,7 +276,7 @@ Options:
 
 Modify app settings
 
-Usage: clipboard-history configure <COMMAND>
+Usage: ringboard configure <COMMAND>
 
 Commands:
   server   Edit the server settings
@@ -294,7 +294,7 @@ Edit the server settings.
 
 All ringboard applications and services must be restarted after making changes.
 
-Usage: clipboard-history configure server [OPTIONS]
+Usage: ringboard configure server [OPTIONS]
 
 Options:
       --max-main-entries <MAX_MAIN_ENTRIES>
@@ -314,7 +314,7 @@ Options:
 
 Edit the X11 watcher settings
 
-Usage: clipboard-history configure x11 [OPTIONS]
+Usage: ringboard configure x11 [OPTIONS]
 
 Options:
       --auto-paste <AUTO_PASTE>
@@ -346,7 +346,7 @@ Options:
 
 Edit the Wayland watcher settings
 
-Usage: clipboard-history configure wayland [OPTIONS]
+Usage: ringboard configure wayland [OPTIONS]
 
 Options:
       --auto-paste <AUTO_PASTE>
@@ -363,7 +363,7 @@ Options:
 
 Debugging tools for developers
 
-Usage: clipboard-history debug <COMMAND>
+Usage: ringboard debug <COMMAND>
 
 Commands:
   stats     Print statistics about the Ringboard database
@@ -381,7 +381,7 @@ Options:
 
 Print statistics about the Ringboard database
 
-Usage: clipboard-history debug stats
+Usage: ringboard debug stats
 
 Options:
   -h, --help
@@ -405,7 +405,7 @@ Note that `$ ringboard import json` expects a JSON stream (wherein each object a
 line instead of being in a list). To import an export, you can convert the JSON array to a stream
 with `$ ... | jq -c .[]`.
 
-Usage: clipboard-history debug dump
+Usage: ringboard debug dump
 
 Options:
   -h, --help
@@ -415,7 +415,7 @@ Options:
 
 Generate a pseudo-random database for testing and performance tuning purposes
 
-Usage: clipboard-history debug generate [OPTIONS]
+Usage: ringboard debug generate [OPTIONS]
 
 Options:
   -n, --entries <NUM_ENTRIES>
@@ -440,7 +440,7 @@ Options:
 
 Generate the demo clipboard entries
 
-Usage: clipboard-history debug demo
+Usage: ringboard debug demo
 
 Options:
   -h, --help
@@ -450,7 +450,7 @@ Options:
 
 Spam the server with random commands
 
-Usage: clipboard-history debug fuzz [OPTIONS]
+Usage: ringboard debug fuzz [OPTIONS]
 
 Options:
   -s, --seed <SEED>
