@@ -3,13 +3,13 @@ set -e
 
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/ringboard.slice --create-dirs -O --output-dir ~/.config/systemd/user/
 
-cargo +nightly install clipboard-history-server --no-default-features --features systemd
+cargo install clipboard-history-server --no-default-features --features systemd
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/server/ringboard-server.service --create-dirs -O --output-dir ~/.config/systemd/user/
 sed -i "s|ExecStart=ringboard-server|ExecStart=$(which ringboard-server)|g" ~/.config/systemd/user/ringboard-server.service
 
-cargo +nightly install clipboard-history
+cargo install clipboard-history
 
-cargo +nightly install clipboard-history-egui --no-default-features --features $XDG_SESSION_TYPE,avif || cargo +nightly install clipboard-history-egui --no-default-features --features $XDG_SESSION_TYPE
+cargo install clipboard-history-egui --no-default-features --features $XDG_SESSION_TYPE,avif || cargo install clipboard-history-egui --no-default-features --features $XDG_SESSION_TYPE
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/egui/ringboard-egui.desktop --create-dirs -O --output-dir ~/.local/share/applications/
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/logo.jpeg -o ringboard.jpeg --create-dirs -O --output-dir ~/.local/share/icons/hicolor/1024x1024/
 sed -i "s|Exec=ringboard-egui|Exec=$(echo $(which ringboard-egui) toggle)|g" ~/.local/share/applications/ringboard-egui.desktop
@@ -20,13 +20,13 @@ systemctl --user disable ringboard-x11 --now 2> /dev/null || true
 systemctl --user disable ringboard-wayland --now 2> /dev/null || true
 
 if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
-  cargo +nightly install wayland-interface-check
+  cargo install wayland-interface-check
   if [ "$XDG_CURRENT_DESKTOP" != "COSMIC" ] && ! wayland-interface-check ext_data_control_manager_v1; then
     export XDG_SESSION_TYPE=x11
   fi
 fi
 
-cargo +nightly install clipboard-history-$XDG_SESSION_TYPE --no-default-features
+cargo install clipboard-history-$XDG_SESSION_TYPE --no-default-features
 curl -s https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/$XDG_SESSION_TYPE/ringboard-$XDG_SESSION_TYPE.service -O --output-dir ~/.config/systemd/user/
 sed -i "s|ExecStart=ringboard-$XDG_SESSION_TYPE|ExecStart=$(which ringboard-$XDG_SESSION_TYPE)|g" ~/.config/systemd/user/ringboard-$XDG_SESSION_TYPE.service
 
