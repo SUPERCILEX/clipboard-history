@@ -36,7 +36,7 @@ pub fn is_text_mime(mime: &str) -> bool {
     mime.is_empty() || mime.starts_with("text/") || mime == "application/xml"
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct RingIter {
     kind: RingKind,
 
@@ -163,7 +163,7 @@ impl DatabaseReader {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RingReader<'a> {
     ring: &'a Ring,
     iter: RingIter,

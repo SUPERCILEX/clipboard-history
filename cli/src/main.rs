@@ -36,7 +36,7 @@ use rand_distr::{Distribution, LogNormal, weighted::WeightedAliasIndex};
 use rand_xoshiro::{Xoshiro256PlusPlus, rand_core::SeedableRng};
 use regex::bytes::Regex;
 use ringboard_sdk::{
-    ClientError, DatabaseReader, EntryReader, Kind,
+    ClientError, DatabaseReader, Entry, EntryReader, Kind, RingReader,
     api::{
         AddRequest, GarbageCollectRequest, MoveToFrontRequest, RemoveRequest, SwapRequest,
         connect_to_paste_server, connect_to_server, connect_to_server_with, send_paste_buffer,
@@ -343,6 +343,18 @@ struct Search {
     #[arg(conflicts_with = "regex")]
     ignore_case: bool,
 
+    /// Show NUM entries before each match.
+    #[arg(short = 'B', long)]
+    before_context: Option<usize>,
+
+    /// Show NUM entries before and after each match.
+    #[arg(short = 'C', long)]
+    context: Option<usize>,
+
+    /// Show NUM entries after each match.
+    #[arg(short = 'A', long)]
+    after_context: Option<usize>,
+
     /// Output JSON
     #[arg(long)]
     #[clap(default_value_t = false)]
@@ -619,6 +631,9 @@ fn search(
     Search {
         regex,
         ignore_case,
+        before_context,
+        context,
+        after_context,
         json,
         query,
     }: Search,
@@ -631,6 +646,9 @@ fn search(
         Json(Json),
     }
 
+    let before_context = before_context.or(context).unwrap_or(0);
+    let after_context = after_context.or(context).unwrap_or(0);
+
     let output = io::stdout().lock();
     let is_terminal = output.is_terminal();
     let mut seq = serde_json::Serializer::new(output);
@@ -642,8 +660,7 @@ fn search(
     let mut emit_entry = |entry_id,
                           buf: &[u8],
                           mime_type: MimeType,
-                          start: usize,
-                          end: usize|
+                          highlight: Option<(usize, usize)>|
      -> Result<(), CliError> {
         match &mut output {
             Output::Text(output) => {
@@ -658,9 +675,6 @@ fn search(
                 )
                 .map_io_err(|| "Failed to write to stdout.")?;
 
-                let bold_start = start.min(PREFIX_CONTEXT);
-                let (prefix, suffix) = buf.split_at(bold_start);
-                let (middle, suffix) = suffix.split_at((end - start).min(suffix.len()));
                 let mut no_empty_write = |buf: &[u8]| -> Result<(), CoreError> {
                     if !buf.is_empty() {
                         output
@@ -669,16 +683,23 @@ fn search(
                     }
                     Ok(())
                 };
+                if let Some((start, end)) = highlight {
+                    let bold_start = start.min(PREFIX_CONTEXT);
+                    let (prefix, suffix) = buf.split_at(bold_start);
+                    let (middle, suffix) = suffix.split_at((end - start).min(suffix.len()));
 
-                no_empty_write(prefix)?;
-                if is_terminal {
-                    no_empty_write(b"\x1b[1m")?;
+                    no_empty_write(prefix)?;
+                    if is_terminal {
+                        no_empty_write(b"\x1b[1m")?;
+                    }
+                    no_empty_write(middle)?;
+                    if is_terminal {
+                        no_empty_write(b"\x1b[0m")?;
+                    }
+                    no_empty_write(suffix)?;
+                } else {
+                    no_empty_write(buf)?;
                 }
-                no_empty_write(middle)?;
-                if is_terminal {
-                    no_empty_write(b"\x1b[0m")?;
-                }
-                no_empty_write(suffix)?;
                 no_empty_write(b"\n\n")?;
 
                 Ok(())
@@ -726,8 +747,8 @@ fn search(
         } = result?;
         match location {
             EntryLocation::Bucketed { bucket, index } => {
-                let range = (u16::try_from(start).unwrap(), u16::try_from(end).unwrap());
-                bucket_results.insert(BucketAndIndex::new(bucket, index), range);
+                let highlight = (u16::try_from(start).unwrap(), u16::try_from(end).unwrap());
+                bucket_results.insert(BucketAndIndex::new(bucket, index), highlight);
             }
             EntryLocation::File { entry_id } => {
                 file_results.insert(
@@ -742,19 +763,7 @@ fn search(
     }
     let mut reader = Arc::into_inner(reader).unwrap();
 
-    for entry in database.favorites().chain(database.main()) {
-        let Some((start, end)) = (match entry.kind() {
-            Kind::Bucket(bucket) => bucket_results
-                .get(&BucketAndIndex::new(
-                    size_to_bucket(bucket.size()),
-                    bucket.index(),
-                ))
-                .map(|&(start, end)| (usize::from(start), usize::from(end))),
-            Kind::File => file_results.get(&entry.rai()).copied(),
-        }) else {
-            continue;
-        };
-
+    let mut emit_entry = |entry: Entry, highlight: Option<(usize, usize)>| -> Result<_, CliError> {
         let bytes;
         let mut buf;
         let (bytes, mime_type) = match entry.kind() {
@@ -762,23 +771,18 @@ fn search(
                 bytes = Some(entry.to_slice(&mut reader)?);
                 let bytes = bytes.as_ref().unwrap();
                 let mime_type = bytes.mime_type()?;
-                if json {
-                    (&***bytes, mime_type)
-                } else {
+                if !json && let Some((start, _)) = highlight {
                     let prefix_start = start.saturating_sub(PREFIX_CONTEXT);
                     (
                         &bytes[prefix_start..(prefix_start + CONTEXT_WINDOW).min(bytes.len())],
                         mime_type,
                     )
+                } else {
+                    (&***bytes, mime_type)
                 }
             }
             Kind::File => {
-                if json {
-                    bytes = Some(entry.to_slice(&mut reader)?);
-                    let bytes = bytes.as_ref().unwrap();
-                    let mime_type = bytes.mime_type()?;
-                    (&***bytes, mime_type)
-                } else {
+                if !json && let Some((start, _)) = highlight {
                     let file = entry.to_file_raw(&reader)?.unwrap();
 
                     buf = [MaybeUninit::uninit(); CONTEXT_WINDOW];
@@ -792,12 +796,61 @@ fn search(
 
                     let mime_type = file.mime_type()?;
                     (buf.into_filled(), mime_type)
+                } else {
+                    bytes = Some(entry.to_slice(&mut reader)?);
+                    let bytes = bytes.as_ref().unwrap();
+                    let mime_type = bytes.mime_type()?;
+                    (&***bytes, mime_type)
                 }
             }
         };
 
-        emit_entry(entry.id(), bytes, mime_type, start, end)?;
-    }
+        emit_entry(entry.id(), bytes, mime_type, highlight)
+    };
+
+    let mut run = |mut ring: RingReader| -> Result<_, CliError> {
+        let mut trailing_context = ring.clone();
+        let mut trailing_distance = 0;
+        let mut pending_distance = 0;
+        while let Some(entry) = ring.next() {
+            let highlight = match entry.kind() {
+                Kind::Bucket(bucket) => bucket_results
+                    .get(&BucketAndIndex::new(
+                        size_to_bucket(bucket.size()),
+                        bucket.index(),
+                    ))
+                    .map(|&(start, end)| (usize::from(start), usize::from(end))),
+                Kind::File => file_results.get(&entry.rai()).copied(),
+            };
+
+            if highlight.is_some() {
+                for _ in 0..trailing_distance {
+                    let entry = trailing_context.next().unwrap();
+                    emit_entry(entry, None)?;
+                }
+                trailing_context = ring.clone();
+                trailing_distance = 0;
+                pending_distance = after_context;
+            } else if pending_distance > 0 {
+                trailing_context = ring.clone();
+                pending_distance -= 1;
+            } else {
+                if before_context > 0 {
+                    trailing_distance += 1;
+                }
+                if trailing_distance > before_context {
+                    trailing_context.next();
+                    trailing_distance -= 1;
+                }
+                continue;
+            }
+
+            emit_entry(entry, highlight)?;
+        }
+        Ok(())
+    };
+    run(database.favorites())?;
+    run(database.main())?;
 
     match output {
         Output::Text(_) => (),

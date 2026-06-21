@@ -58,10 +58,20 @@ Arguments:
   <QUERY>  The query string to search for
 
 Options:
-  -r, --regex        Interpret the query string as regex instead of a plain-text match
-  -i, --ignore-case  Ignore ASCII casing when searching
-      --json         Output JSON
-  -h, --help         Print help (use `--help` for more detail)
+  -r, --regex
+          Interpret the query string as regex instead of a plain-text match
+  -i, --ignore-case
+          Ignore ASCII casing when searching
+  -B, --before-context <BEFORE_CONTEXT>
+          Show NUM entries before each match
+  -C, --context <CONTEXT>
+          Show NUM entries before and after each match
+  -A, --after-context <AFTER_CONTEXT>
+          Show NUM entries after each match
+      --json
+          Output JSON
+  -h, --help
+          Print help (use `--help` for more detail)
 
 ---
 
