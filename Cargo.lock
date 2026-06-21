@@ -734,7 +734,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "clipboard-history"
-version = "0.16.2"
+version = "0.17.0"
 dependencies = [
  "arrayvec",
  "ask-cli",
@@ -763,7 +763,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-client-sdk"
-version = "0.16.2"
+version = "0.17.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-core",
@@ -785,7 +785,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-core"
-version = "0.16.2"
+version = "0.17.0"
 dependencies = [
  "arrayvec",
  "dirs",
@@ -798,7 +798,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-egui"
-version = "0.16.2"
+version = "0.17.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -813,7 +813,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-server"
-version = "0.16.2"
+version = "0.17.0"
 dependencies = [
  "arrayvec",
  "bitcode",
@@ -834,7 +834,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-tui"
-version = "0.16.2"
+version = "0.17.0"
 dependencies = [
  "clipboard-history-client-sdk",
  "error-stack",
@@ -849,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-wayland"
-version = "0.16.2"
+version = "0.17.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -867,7 +867,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard-history-x11"
-version = "0.16.2"
+version = "0.17.0"
 dependencies = [
  "arrayvec",
  "clipboard-history-client-sdk",
@@ -1864,9 +1864,9 @@ dependencies = [
 
 [[package]]
 name = "fuc_engine"
-version = "3.1.1"
+version = "3.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cb39c1c10dbff2493e5a7fc00f9447f3da2edca31c95351e6ed2f5b5fc9a473"
+checksum = "a725ac677763b0ce7a7702931f543bafc6f6d590e49c5f222f9fca909bd9e7ec"
 dependencies = [
  "bon",
  "crossbeam-channel",
@@ -5457,7 +5457,7 @@ dependencies = [
 
 [[package]]
 name = "wayland-interface-check"
-version = "0.16.2"
+version = "0.17.0"
 dependencies = [
  "rustc-hash 2.1.2",
  "wayland-client",
