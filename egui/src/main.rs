@@ -601,6 +601,7 @@ fn main_ui(
     if ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter))
         && let Some(id) = *active_highlighted_id!(state)
     {
+        state.pending_search_token.take();
         let _ = requests.send(Command::Paste(id));
     }
 
