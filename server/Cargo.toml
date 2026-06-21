@@ -10,14 +10,14 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license = "AGPL-3.0-only"
 
 [dependencies]
-arrayvec = "0.7.6"
+arrayvec = "0.7.7"
 bitcode = { version = "0.6.9", features = ["arrayvec"] }
-bitvec = "1.0.1"
+bitvec = "1.1.1"
 env_logger = { version = "0.11.10", default-features = false }
-error-stack = { version = "0.7.0", default-features = false, features = ["std"] }
+error-stack = { version = "0.7.1", default-features = false, features = ["std"] }
 io-uring = "0.7.12"
 libc = "0.2.186"
-log = { version = "0.4.29", features = ["release_max_level_info"] }
+log = { version = "0.4.33", features = ["release_max_level_info"] }
 ringboard-core = { package = "clipboard-history-core", version = "0", path = "../core", features = ["error-stack"] }
 ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk" }
 rustix = { version = "1.1.4", features = ["fs", "process", "net", "io_uring"] }

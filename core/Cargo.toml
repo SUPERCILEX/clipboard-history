@@ -10,9 +10,9 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
-arrayvec = "0.7.6"
+arrayvec = "0.7.7"
 dirs = "6.0.0"
-error-stack = { version = "0.7.0", default-features = false, optional = true }
+error-stack = { version = "0.7.1", default-features = false, optional = true }
 itoa = "1.0.18"
 rustix = { version = "1.1.4", features = ["fs", "mm", "process", "net", "event", "linux_latest"] }
 thiserror = "2.0.18"

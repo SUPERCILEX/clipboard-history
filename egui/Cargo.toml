@@ -10,8 +10,8 @@ categories = ["command-line-utilities", "development-tools", "filesystem"]
 license.workspace = true
 
 [dependencies]
-arrayvec = "0.7.6"
-eframe = { version = "0.34.2", default-features = false, features = ["glow"] }
+arrayvec = "0.7.7"
+eframe = { version = "0.34.3", default-features = false, features = ["glow"] }
 font-kit = { version = "0.14.3", optional = true }
 image = "0.25.10"
 itoa = "1.0.18"

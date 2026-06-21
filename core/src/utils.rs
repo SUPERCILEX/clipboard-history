@@ -443,7 +443,7 @@ pub fn init_unix_server<P: AsRef<Path>>(socket_file: P, kind: SocketType) -> Res
 
 pub fn read_at_to_end<Fd: AsFd>(
     file: Fd,
-    mut buf: BorrowedCursor,
+    mut buf: BorrowedCursor<u8>,
     offset: u64,
 ) -> rustix::io::Result<()> {
     loop {
