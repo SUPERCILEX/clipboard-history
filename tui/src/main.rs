@@ -495,6 +495,7 @@ fn handle_event(event: &Event, state: &mut State, requests: &Sender<Command>) ->
                         *focused = false;
                     } else if let Some(&UiEntry { entry, cache: _ }) = selected_entry!(entries, ui)
                     {
+                        ui.pending_search_token.take();
                         let _ = requests.send(Command::Paste(entry.id()));
                     }
                 }
