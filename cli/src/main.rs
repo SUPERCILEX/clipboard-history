@@ -156,7 +156,8 @@ enum Cmd {
 
     /// Run garbage collection on the database.
     ///
-    /// Prints the amount of freed space.
+    /// Prints the number of duplicate entries removed and the amount of freed
+    /// space.
     #[command(aliases = ["gc", "clean"])]
     GarbageCollect(GarbageCollect),
 
