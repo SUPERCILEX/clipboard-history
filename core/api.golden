@@ -650,7 +650,7 @@ pub clipboard_history_core::Error::InvalidPidError::context: alloc::borrow::Cow<
 pub clipboard_history_core::Error::InvalidPidError::error: core::num::error::ParseIntError
 pub clipboard_history_core::Error::Io
 pub clipboard_history_core::Error::Io::context: alloc::borrow::Cow<'static, str>
-pub clipboard_history_core::Error::Io::error: std::io::error::Error
+pub clipboard_history_core::Error::Io::error: core::io::error::Error
 impl clipboard_history_core::Error
 pub fn clipboard_history_core::Error::into_report<W: core::error::Error + core::marker::Send + core::marker::Sync + 'static>(self, wrapper: W) -> error_stack::report::Report<W>
 impl core::convert::From<clipboard_history_core::protocol::IdNotFoundError> for clipboard_history_core::Error
@@ -991,8 +991,8 @@ impl clipboard_history_core::AsBytes for clipboard_history_core::protocol::SwapR
 pub fn clipboard_history_core::protocol::SwapResponse::as_bytes(&self) -> &[u8]
 pub trait clipboard_history_core::IoErr<Out>
 pub fn clipboard_history_core::IoErr::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, f: impl core::ops::function::FnOnce() -> I) -> Out
-impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_core::Error>> for core::result::Result<T, std::io::error::Error>
-pub fn core::result::Result<T, std::io::error::Error>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
+impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_core::Error>> for core::result::Result<T, core::io::error::Error>
+pub fn core::result::Result<T, core::io::error::Error>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
 impl<T> clipboard_history_core::IoErr<core::result::Result<T, clipboard_history_core::Error>> for rustix::io::errno::Result<T>
 pub fn rustix::io::errno::Result<T>::map_io_err<I: core::convert::Into<alloc::borrow::Cow<'static, str>>>(self, context: impl core::ops::function::FnOnce() -> I) -> clipboard_history_core::Result<T>
 pub fn clipboard_history_core::acquire_lock_file<A: clipboard_history_core::utils::lock_owned::LockAlreadyOwnedAction>(path: &std::path::Path, _: A) -> clipboard_history_core::Result<<A as clipboard_history_core::utils::lock_owned::LockAlreadyOwnedAction>::Output>

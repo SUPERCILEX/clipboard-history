@@ -1625,9 +1625,8 @@ fn stats() -> Result<(), CliError> {
 
         for entry in ring_reader {
             let entry_size;
-            let duplicate;
 
-            match entry.kind() {
+            let duplicate = match entry.kind() {
                 Kind::Bucket(bucket) => {
                     *bucketed_entry_count += 1;
 
@@ -1642,7 +1641,7 @@ fn stats() -> Result<(), CliError> {
                     entry_size = u64::from(bucket.size());
                     *owned_bytes += entry_size;
 
-                    duplicate = duplicates.add_entry(&entry, &database, &mut reader)?;
+                    duplicates.add_entry(&entry, &database, &mut reader)?
                 }
                 Kind::File => {
                     *file_entry_count += 1;
@@ -1661,9 +1660,9 @@ fn stats() -> Result<(), CliError> {
                     *mime_types.entry(file.mime_type()?).or_default() += 1;
                     *allocated_bytes += stats.stx_blocks * 512;
 
-                    duplicate = duplicates.add_entry(&entry, &database, &mut reader)?;
+                    duplicates.add_entry(&entry, &database, &mut reader)?
                 }
-            }
+            };
 
             *ring_owned_bytes += entry_size;
             *min_entry_size = min(*min_entry_size, entry_size);
