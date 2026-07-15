@@ -11,10 +11,10 @@ use std::{
     hash::BuildHasherDefault,
     io,
     io::{BorrowedBuf, BufReader, ErrorKind, IsTerminal, Read, Seek, SeekFrom, Write},
-    mem::MaybeUninit,
+    mem::{ManuallyDrop, MaybeUninit},
     num::NonZeroU32,
     os::{
-        fd::{AsFd, OwnedFd},
+        fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
         unix::fs::FileExt,
     },
     path::{Path, PathBuf},
@@ -56,12 +56,13 @@ use ringboard_sdk::{
     },
     duplicate_detection::DuplicateDetector,
     search::{CaselessQuery, EntryLocation, Query, QueryResult, cancellation_token},
+    watcher_utils::deduplication::{CopyData, CopyDeduplication},
 };
 use rustc_hash::FxHasher;
 use rustix::{
     fs::{
-        AtFlags, CWD, MemfdFlags, Mode, OFlags, StatxFlags, memfd_create, openat, seek, sendfile,
-        statx,
+        AtFlags, CWD, FileType, MemfdFlags, Mode, OFlags, StatxFlags, memfd_create, openat, seek,
+        sendfile, statx,
     },
     net::{RecvFlags, SendFlags, SocketAddrUnix, SocketFlags},
     stdio::stdin,
@@ -316,6 +317,8 @@ struct Add {
     favorite: bool,
 
     /// The entry mime type.
+    ///
+    /// Ignored if the entry already exists and [force] is not set.
     #[clap(short, long, short_alias = 't', alias = "target")]
     mime_type: Option<MimeType>,
 
@@ -323,6 +326,11 @@ struct Add {
     #[clap(short, long)]
     #[clap(default_value_t = false)]
     copy: bool,
+
+    /// Always add this entry ignoring duplicates.
+    #[clap(long)]
+    #[clap(default_value_t = false)]
+    force: bool,
 }
 
 #[derive(Args, Debug)]
@@ -869,9 +877,10 @@ fn add(
         favorite,
         mime_type,
         copy,
+        force,
     }: Add,
 ) -> Result<(), CliError> {
-    let AddResponse::Success { id } = {
+    let id = 'id: {
         let file = if data_file == Path::new("-") {
             None
         } else {
@@ -880,23 +889,81 @@ fn add(
                     .map_io_err(|| format!("Failed to open file: {data_file:?}"))?,
             )
         };
+        let file = file.as_ref().map_or(stdin(), |file| file.as_fd());
 
-        AddRequest::response(
-            server,
-            if favorite {
-                RingKind::Favorites
+        let file_;
+        let (file, size) = {
+            let statx = statx(
+                file,
+                c"",
+                AtFlags::EMPTY_PATH,
+                StatxFlags::TYPE | StatxFlags::SIZE,
+            )
+            .map_io_err(|| "Failed to statx file.")?;
+            if FileType::from_raw_mode(statx.stx_mode.into()) == FileType::RegularFile {
+                (file, statx.stx_size)
             } else {
-                RingKind::Main
-            },
-            &mime_type
-                .or_else(|| {
-                    mime_guess::from_path(data_file)
-                        .first_raw()
-                        .and_then(|s| MimeType::from(s).ok())
-                })
-                .unwrap_or_default(),
-            file.as_ref().map_or(stdin(), |file| file.as_fd()),
-        )?
+                let src = file;
+                let file = create_tmp_file(
+                    &mut false,
+                    CWD,
+                    c".",
+                    c".ringboard-add-scratchpad",
+                    OFlags::RDWR,
+                    Mode::empty(),
+                )
+                .map_io_err(|| "Failed to create intermediary data file.")?;
+                let mut file = File::from(file);
+
+                let size = io::copy(
+                    &mut *ManuallyDrop::new(unsafe { File::from_raw_fd(src.as_raw_fd()) }),
+                    &mut file,
+                )
+                .map_io_err(|| "Failed to copy intermediary data file.")?;
+                file.seek(SeekFrom::Start(0))
+                    .map_io_err(|| "Failed to reset intermediary data file offset.")?;
+
+                file_ = file;
+                (file_.as_fd(), size)
+            }
+        };
+
+        if !force {
+            let mmap = Mmap::new(file, usize::try_from(size).unwrap())
+                .map_io_err(|| "Failed to mmap file.")?;
+            let mut deduplicator = CopyDeduplication::new()?;
+            let data_hash = CopyDeduplication::hash(CopyData::Slice(&mmap), size);
+            if let Some(existing) = deduplicator.check(data_hash, CopyData::Slice(&mmap))
+                && let MoveToFrontResponse::Success { id } = MoveToFrontRequest::response(
+                    &server,
+                    existing,
+                    if favorite {
+                        Some(RingKind::Favorites)
+                    } else {
+                        None
+                    },
+                )?
+            {
+                break 'id id;
+            }
+        }
+
+        let mime_type = &mime_type
+            .or_else(|| {
+                mime_guess::from_path(data_file)
+                    .first_raw()
+                    .and_then(|s| MimeType::from(s).ok())
+            })
+            .unwrap_or_default();
+
+        let to = if favorite {
+            RingKind::Favorites
+        } else {
+            RingKind::Main
+        };
+        let AddResponse::Success { id } =
+            AddRequest::response_add_unchecked(server, to, mime_type, file)?;
+        id
     };
 
     println!("Entry added: {id}");

@@ -126,10 +126,15 @@ Options:
           Whether to add the entry to the favorites ring
 
   -m, --mime-type <MIME_TYPE>
-          The entry mime type
+          The entry mime type.
+          
+          Ignored if the entry already exists and [force] is not set.
 
   -c, --copy
           Whether to overwrite the system clipboard with this entry
+
+      --force
+          Always add this entry ignoring duplicates
 
   -h, --help
           Print help (use `-h` for a summary)

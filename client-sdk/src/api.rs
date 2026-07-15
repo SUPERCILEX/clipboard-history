@@ -1,26 +1,21 @@
 use std::{
     any::TypeId,
-    fs::File,
-    io,
-    io::{IoSlice, IoSliceMut, Seek, SeekFrom},
-    mem::{ManuallyDrop, MaybeUninit},
-    os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd},
+    io::{IoSlice, IoSliceMut},
+    mem::MaybeUninit,
+    os::fd::{AsFd, OwnedFd},
 };
 
 use ringboard_core::{
-    AsBytes, IoErr, create_tmp_file, protocol,
+    AsBytes, IoErr, protocol,
     protocol::{
         AddResponse, GarbageCollectResponse, MimeType, MoveToFrontResponse, RemoveResponse,
         Request, Response, RingKind, SwapResponse,
     },
 };
-use rustix::{
-    fs::{AtFlags, CWD, FileType, Mode, OFlags, StatxFlags, statx},
-    net::{
-        AddressFamily, RecvAncillaryBuffer, RecvFlags, ReturnFlags, SendAncillaryBuffer,
-        SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketFlags, SocketType, connect, recvmsg,
-        sendmsg, socket_with,
-    },
+use rustix::net::{
+    AddressFamily, RecvAncillaryBuffer, RecvFlags, ReturnFlags, SendAncillaryBuffer,
+    SendAncillaryMessage, SendFlags, SocketAddrUnix, SocketFlags, SocketType, connect, recvmsg,
+    sendmsg, socket_with,
 };
 
 use crate::{ClientError, Entry, EntryReader};
@@ -151,44 +146,6 @@ struct VersionResponse(u8);
 pub struct AddRequest;
 
 impl AddRequest {
-    pub fn response<Server: AsFd, Data: AsFd>(
-        server: Server,
-        to: RingKind,
-        mime_type: &MimeType,
-        data: Data,
-    ) -> Result<AddResponse, ClientError> {
-        if FileType::from_raw_mode(
-            statx(&data, c"", AtFlags::EMPTY_PATH, StatxFlags::TYPE)
-                .map_io_err(|| "Failed to statx file.")?
-                .stx_mode
-                .into(),
-        ) == FileType::RegularFile
-        {
-            Self::response_add_unchecked(server, to, mime_type, data)
-        } else {
-            let file = create_tmp_file(
-                &mut false,
-                CWD,
-                c".",
-                c".ringboard-add-scratchpad",
-                OFlags::RDWR,
-                Mode::empty(),
-            )
-            .map_io_err(|| "Failed to create intermediary data file.")?;
-            let mut file = File::from(file);
-
-            io::copy(
-                &mut *ManuallyDrop::new(unsafe { File::from_raw_fd(data.as_fd().as_raw_fd()) }),
-                &mut file,
-            )
-            .map_io_err(|| "Failed to copy intermediary data file.")?;
-            file.seek(SeekFrom::Start(0))
-                .map_io_err(|| "Failed to reset intermediary data file offset.")?;
-
-            Self::response_add_unchecked(server, to, mime_type, &file)
-        }
-    }
-
     pub fn response_add_unchecked<Server: AsFd, Data: AsFd>(
         server: Server,
         to: RingKind,
