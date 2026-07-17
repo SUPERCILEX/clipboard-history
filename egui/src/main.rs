@@ -656,20 +656,24 @@ fn main_ui(
     let has_favorites = !pinned_entries.is_empty();
     // render_items: entries to render in the main loop (excludes pinned when sections are shown)
     let render_items: Vec<&UiEntry> = if show_sections {
-        unpinned_entries.iter().copied().collect()
+        unpinned_entries.to_vec()
     } else {
         filtered_entries.clone()
     };
     // nav_items: entries for keyboard navigation in visual rendering order
-    let nav_items: Vec<&UiEntry> = if show_sections && state.pinned_expanded {
+    let nav_items: Vec<&UiEntry> = if show_sections {
         pinned_entries.iter().copied().chain(unpinned_entries.iter().copied()).collect()
     } else {
-        render_items.clone()
+        filtered_entries.clone()
     };
 
     // Adjust highlighted_id if nav_items changed
     if !nav_items.iter().any(|e| Some(e.entry.id()) == *active_highlighted_id!(state)) {
-        *active_highlighted_id!(state) = nav_items.first().map(|e| e.entry.id());
+        *active_highlighted_id!(state) = if show_sections {
+            unpinned_entries.first().map(|e| e.entry.id())
+        } else {
+            nav_items.first().map(|e| e.entry.id())
+        };
     }
 
     let no_popups_open = !Popup::is_any_open(ui.ctx());
@@ -687,6 +691,27 @@ fn main_ui(
     {
         state.pending_search_token.take();
         let _ = requests.send(Command::Paste(id));
+    }
+    if show_sections && has_favorites && no_popups_open {
+        let search_focused = ui.memory(|mem| mem.focused().is_some());
+        if !search_focused {
+            let left_pressed = ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowLeft));
+            let right_pressed = ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowRight));
+            if left_pressed {
+                state.pinned_expanded = false;
+                *active_highlighted_id!(state) = unpinned_entries.first().map(|e| e.entry.id());
+            }
+            if right_pressed {
+                state.pinned_expanded = true;
+            }
+            // Auto-expand when navigating to a pinned entry (unless user pressed left)
+            if !left_pressed
+                && let Some(id) = *active_highlighted_id!(state)
+                && pinned_entries.iter().any(|e| e.entry.id() == id)
+            {
+                state.pinned_expanded = true;
+            }
+        }
     }
 
     if filtered_entries.is_empty() {
