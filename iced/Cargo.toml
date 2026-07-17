@@ -16,6 +16,7 @@ ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path 
 rustix = { version = "1.1.4", features = ["fs"] }
 tracy-client = { version = "0.18.4", optional = true }
 futures = "0.3"
+native-theme-iced = "0.5.7"
 tokio = { version = "1", features = ["rt"] }
 
 [features]
