@@ -22,9 +22,9 @@ use arrayvec::ArrayVec;
 use eframe::{
     egui,
     egui::{
-        CentralPanel, Event, FontId, Frame, Image, Key, Label, Margin, Modifiers, Panel, Popup,
-        PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke, TextEdit,
-        TextFormat, ThemePreference, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
+        CentralPanel, Event, FontId, Frame, Image, Key, Label, Margin, Modifiers,
+        Panel, Popup, PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sense, Stroke,
+        TextEdit, TextFormat, ThemePreference, Ui, Vec2, ViewportBuilder, ViewportCommand, Widget,
         text::{LayoutJob, LayoutSection},
     },
 };
@@ -218,7 +218,19 @@ struct UiState {
     was_focused: bool,
     skip_first_focus: bool,
 
+    active_tab: ActiveTab,
+    pinned_expanded: bool,
+
     uri_buf: UriBuf,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+enum ActiveTab {
+    #[default]
+    All,
+    Text,
+    Images,
+    Favorites,
 }
 
 const URI_PREFIX: &str = "ringboard://";
@@ -322,7 +334,7 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
         pending_search_token,
         was_focused: _,
         skip_first_focus: _,
-        uri_buf,
+        uri_buf, ..
     } = ui;
 
     let mut remove_old_images = |entries| {
@@ -535,6 +547,24 @@ fn show_error(ui: &mut Ui, e: &dyn Error) {
     ui.label(format!("Details: {e:#?}"));
 }
 
+fn tab_bar_ui(ui: &mut Ui, active_tab: &mut ActiveTab) {
+    let tabs = [ActiveTab::All, ActiveTab::Text, ActiveTab::Images, ActiveTab::Favorites];
+    let tab_labels = ["All", "Text", "Images", "Favorites"];
+
+    ui.horizontal(|ui| {
+        let style = ui.style_mut();
+        style.spacing.button_padding = egui::vec2(12., 4.);
+
+        for (i, tab) in tabs.iter().enumerate() {
+            let is_selected = *active_tab == *tab;
+            let response = ui.selectable_label(is_selected, tab_labels[i]);
+            if response.clicked() {
+                *active_tab = *tab;
+            }
+        }
+    });
+}
+
 fn main_ui(
     ui: &mut Ui,
     state_: &mut State,
@@ -588,10 +618,60 @@ fn main_ui(
         refresh(&mut state_.ui);
         return;
     }
+
+    // Tab bar
+    Frame::side_top_panel(ui.style())
+        .inner_margin(Margin::symmetric(4, 0))
+        .show(ui, |ui| {
+            tab_bar_ui(ui, &mut state.active_tab);
+        });
+
+    let raw_entries = active_entries!(entries, state);
+    let filtered_entries: Vec<&UiEntry> = raw_entries
+        .iter()
+        .filter(|e| match state.active_tab {
+            ActiveTab::All => true,
+            ActiveTab::Text => matches!(e.cache, UiEntryCache::Text { .. } | UiEntryCache::HighlightedText { .. }),
+            ActiveTab::Images => matches!(e.cache, UiEntryCache::Image),
+            ActiveTab::Favorites => e.entry.ring() == RingKind::Favorites,
+        })
+        .collect();
+
+    let show_sections = state.query.is_empty() && state.active_tab == ActiveTab::All;
+    let pinned_entries: Vec<&UiEntry> = filtered_entries
+        .iter()
+        .filter(|e| e.entry.ring() == RingKind::Favorites)
+        .copied()
+        .collect();
+    let unpinned_entries: Vec<&UiEntry> = filtered_entries
+        .iter()
+        .filter(|e| e.entry.ring() == RingKind::Main)
+        .copied()
+        .collect();
+
+    let has_favorites = !pinned_entries.is_empty();
+    // render_items: entries to render in the main loop (excludes pinned when sections are shown)
+    let render_items: Vec<&UiEntry> = if show_sections {
+        unpinned_entries.iter().copied().collect()
+    } else {
+        filtered_entries.clone()
+    };
+    // nav_items: entries for keyboard navigation in visual rendering order
+    let nav_items: Vec<&UiEntry> = if show_sections && state.pinned_expanded {
+        pinned_entries.iter().copied().chain(unpinned_entries.iter().copied()).collect()
+    } else {
+        render_items.clone()
+    };
+
+    // Adjust highlighted_id if nav_items changed
+    if !nav_items.iter().any(|e| Some(e.entry.id()) == *active_highlighted_id!(state)) {
+        *active_highlighted_id!(state) = nav_items.first().map(|e| e.entry.id());
+    }
+
     let no_popups_open = !Popup::is_any_open(ui.ctx());
-    if !active_entries!(entries, state).is_empty() && no_popups_open {
+    if !nav_items.is_empty() && no_popups_open {
         handle_arrow_keys(
-            active_entries!(entries, state),
+            &nav_items,
             active_highlighted_id!(state),
             &mut try_scroll,
             up_pressed,
@@ -605,7 +685,7 @@ fn main_ui(
         let _ = requests.send(Command::Paste(id));
     }
 
-    if active_entries!(entries, state).is_empty() {
+    if filtered_entries.is_empty() {
         ui.centered_and_justified(|ui| {
             ui.label(
                 RichText::new(if state.pending_search_token.is_some() {
@@ -626,18 +706,56 @@ fn main_ui(
             && ui.memory(|mem| mem.focused().is_none());
         let usable_height_for_popup = ui.available_size().y - starting_height;
 
-        let mut prev_was_favorites = false;
-        for (i, entry) in active_entries!(entries, state).iter().enumerate() {
-            let next_was_favorites = entry.entry.ring() == RingKind::Favorites;
-            if prev_was_favorites && !next_was_favorites {
-                ui.separator();
-            }
-            prev_was_favorites = next_was_favorites;
+        if show_sections && has_favorites {
+            // Pinned section header (collapsible)
+            let expand_icon = if state.pinned_expanded { "▼" } else { "▶" };
+            let header_label = RichText::new(format!(" {expand_icon} Pinned  {}", pinned_entries.len()))
+                .size(13.)
+                .strong();
+            Frame::NONE
+                .inner_margin(Margin::symmetric(4, 2))
+                .show(ui, |ui| {
+                    let r = ui.add(Label::new(header_label).sense(Sense::click()));
+                    if r.clicked() {
+                        state.pinned_expanded = !state.pinned_expanded;
+                    }
+                });
 
+            if state.pinned_expanded {
+                for entry in pinned_entries.iter() {
+                    entry_ui(
+                        ui,
+                        entry,
+                        state,
+                        requests,
+                        refresh,
+                        try_scroll,
+                        try_popup,
+                        no_popups_open,
+                        usable_height_for_popup,
+                        starting_height,
+                        &mut fast_paste_buffer,
+                    );
+                }
+            }
+
+            // Recent section header
+            if !unpinned_entries.is_empty() {
+                Frame::NONE
+                    .inner_margin(Margin::symmetric(4, 2))
+                    .show(ui, |ui| {
+                        let label = RichText::new(format!(" Recent  {}", unpinned_entries.len()))
+                            .size(13.)
+                            .strong();
+                        ui.add(Label::new(label));
+                    });
+            }
+        }
+
+        for entry in render_items.iter() {
             entry_ui(
                 ui,
                 entry,
-                entries,
                 state,
                 requests,
                 refresh,
@@ -645,7 +763,6 @@ fn main_ui(
                 try_popup,
                 no_popups_open,
                 usable_height_for_popup,
-                i,
                 starting_height,
                 &mut fast_paste_buffer,
             );
@@ -679,7 +796,6 @@ fn main_ui(
 fn entry_ui(
     ui: &mut Ui,
     entry: &UiEntry,
-    entries: &UiEntries,
     state: &mut UiState,
     requests: &Sender<Command>,
     refresh: impl FnMut(&mut UiState),
@@ -687,7 +803,6 @@ fn entry_ui(
     try_popup: bool,
     no_popups_open: bool,
     max_popup_height: f32,
-    index: usize,
     top_position: f32,
     fast_paste_buffer: &mut ArrayVec<u64, 10>,
 ) {
@@ -696,7 +811,6 @@ fn entry_ui(
             row_ui(
                 ui,
                 $w,
-                entries,
                 state,
                 requests,
                 refresh,
@@ -704,7 +818,6 @@ fn entry_ui(
                 try_scroll,
                 try_popup,
                 max_popup_height,
-                index,
                 top_position,
                 fast_paste_buffer,
             )
@@ -787,7 +900,6 @@ fn entry_ui(
 fn row_ui(
     ui: &mut Ui,
     widget: impl Widget,
-    entries: &UiEntries,
     state: &mut UiState,
     requests: &Sender<Command>,
     mut refresh: impl FnMut(&mut UiState),
@@ -795,11 +907,11 @@ fn row_ui(
     try_scroll: bool,
     try_popup: bool,
     max_popup_height: f32,
-    index: usize,
     top_position: f32,
     fast_paste_buffer: &mut ArrayVec<u64, 10>,
 ) -> Response {
     let entry_id = entry.id();
+    let is_favorite = entry.ring() == RingKind::Favorites;
 
     if ui.next_widget_position().y >= top_position
         && ui.input(|i| i.modifiers.ctrl)
@@ -812,7 +924,9 @@ fn row_ui(
             });
     }
 
-    let frame_data = Frame::default().inner_margin(5.);
+    let frame_data = Frame::default()
+        .inner_margin(Margin::symmetric(6, 4))
+        .corner_radius(egui::CornerRadius::same(6));
     let mut frame = frame_data.begin(ui);
     frame.content_ui.add(widget);
     frame
@@ -833,6 +947,9 @@ fn row_ui(
     }
     if *highlighted_id == Some(entry_id) {
         frame.frame.fill = ui.style().visuals.widgets.hovered.weak_bg_fill;
+    }
+    if is_favorite {
+        frame.frame.stroke = Stroke::new(1_f32, ui.visuals().selection.stroke.color);
     }
     frame.paint(ui);
 
@@ -877,12 +994,7 @@ fn row_ui(
             }
             if ui.button("Delete").clicked() {
                 run(ui, Command::Delete(entry_id));
-
-                let entries = active_entries!(entries, state);
-                *active_highlighted_id!(state) = entries
-                    .get(index.saturating_add(1))
-                    .or_else(|| entries.get(index.saturating_sub(1)))
-                    .map(|e| e.entry.id());
+                *active_highlighted_id!(state) = None;
             }
         });
         ui.separator();
@@ -930,7 +1042,7 @@ fn row_ui(
 }
 
 fn handle_arrow_keys(
-    entries: &[UiEntry],
+    entries: &[&UiEntry],
     highlighted_id: &mut Option<u64>,
     try_scroll: &mut bool,
     up_pressed: bool,
