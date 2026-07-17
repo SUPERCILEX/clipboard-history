@@ -97,6 +97,7 @@ fn main() -> Result<(), eframe::Error> {
                         let r = if let Message::LoadedImage { id, image } = m {
                             let ringboard_loader = ringboard_loader.clone();
                             let response_sender = response_sender.clone();
+                            let ctx = ctx.clone();
                             thread::spawn(move || {
                                 let run = || {
                                     let priority = getpriority_process(None).map_io_err(|| {
@@ -117,7 +118,10 @@ fn main() -> Result<(), eframe::Error> {
                                         .decode()?)
                                 };
                                 match run() {
-                                    Ok(image) => ringboard_loader.add(id, image),
+                                    Ok(image) => {
+                                        ringboard_loader.add(id, image);
+                                        ctx.request_repaint();
+                                    }
                                     Err(e) => {
                                         let _ = response_sender.send(Message::Error(e));
                                     }
