@@ -13,6 +13,7 @@ use std::{
 
 use iced::{
     Element, Length, Task, Subscription, Theme,
+    keyboard::{self, key},
     widget::{
         button, column, container, image, row, scrollable, text, text_input,
     },
@@ -102,6 +103,7 @@ enum ActiveTab {
 #[allow(dead_code)]
 enum AppMessage {
     Tick,
+    KeyEvent(keyboard::Event),
     ImageDecoded(u64, Result<image_crate::DynamicImage, String>),
     SearchChanged(String),
     SearchKindToggled,
@@ -159,6 +161,7 @@ impl RingboardApp {
     fn update(&mut self, message: AppMessage) -> Task<AppMessage> {
         match message {
             AppMessage::Tick => self.poll_responses(),
+            AppMessage::KeyEvent(event) => self.handle_key_event(event),
             AppMessage::ImageDecoded(id, result) => self.handle_image_decoded(id, result),
             AppMessage::SearchChanged(query) => self.handle_search_changed(query),
             AppMessage::SearchKindToggled => {
@@ -386,8 +389,160 @@ impl RingboardApp {
         }
     }
 
+    fn handle_key_event(&mut self, event: keyboard::Event) -> Task<AppMessage> {
+        let keyboard::Event::KeyPressed {
+            key,
+            modifiers,
+            ..
+        } = event
+        else {
+            return Task::none();
+        };
+
+        let current_id = if self.state.ui.query.is_empty() {
+            self.state.ui.highlighted_id
+        } else {
+            self.state.ui.search_highlighted_id
+        };
+
+        let show_sections = self.state.ui.query.is_empty()
+            && self.state.ui.active_tab == ActiveTab::All;
+        let nav = self.nav_entries();
+        let pinned: Vec<&UiEntry> = self
+            .filtered_entries()
+            .iter()
+            .filter(|e| e.entry.ring() == RingKind::Favorites)
+            .copied()
+            .collect();
+        let unpinned: Vec<&UiEntry> = self
+            .filtered_entries()
+            .iter()
+            .filter(|e| e.entry.ring() == RingKind::Main)
+            .copied()
+            .collect();
+
+        let mut new_id = current_id;
+        let mut set_pinned_expanded: Option<bool> = None;
+
+        match key {
+            key::Key::Named(key::Named::ArrowUp) if !modifiers.control() => {
+                new_id = if let Some(id) = current_id {
+                    let idx = nav.iter().position(|e| e.entry.id() == id);
+                    if idx == Some(0) || idx.is_none() {
+                        nav.last().map(|e| e.entry.id())
+                    } else {
+                        idx.and_then(|i| i.checked_sub(1))
+                            .and_then(|i| nav.get(i))
+                            .map(|e| e.entry.id())
+                    }
+                } else {
+                    nav.last().map(|e| e.entry.id())
+                };
+                if show_sections && !self.state.ui.pinned_expanded
+                    && let Some(id) = new_id
+                    && pinned.iter().any(|e| e.entry.id() == id)
+                {
+                    set_pinned_expanded = Some(true);
+                }
+            }
+            key::Key::Named(key::Named::ArrowDown) if !modifiers.control() => {
+                new_id = if let Some(id) = current_id {
+                    let idx = nav.iter().position(|e| e.entry.id() == id);
+                    if idx == Some(nav.len().saturating_sub(1)) || idx.is_none() {
+                        nav.first().map(|e| e.entry.id())
+                    } else {
+                        idx.and_then(|i| i.checked_add(1))
+                            .and_then(|i| nav.get(i))
+                            .map(|e| e.entry.id())
+                    }
+                } else {
+                    nav.first().map(|e| e.entry.id())
+                };
+                if show_sections && !self.state.ui.pinned_expanded
+                    && let Some(id) = new_id
+                    && pinned.iter().any(|e| e.entry.id() == id)
+                {
+                    set_pinned_expanded = Some(true);
+                }
+            }
+            key::Key::Named(key::Named::ArrowLeft) => {
+                if show_sections && !pinned.is_empty() {
+                    set_pinned_expanded = Some(false);
+                    new_id = unpinned.first().map(|e| e.entry.id());
+                }
+            }
+            key::Key::Named(key::Named::ArrowRight) => {
+                if show_sections && !pinned.is_empty() {
+                    set_pinned_expanded = Some(true);
+                }
+            }
+            key::Key::Named(key::Named::Enter) => {
+                if let Some(id) = current_id {
+                    self.state.ui.pending_search_token.take();
+                    let _ = self.requests.send(Command::Paste(id));
+                }
+                std::process::exit(0);
+            }
+            key::Key::Named(key::Named::Escape) => {
+                if !self.state.ui.query.is_empty() {
+                    self.state.ui.query = String::new();
+                    self.state.entries.search_results = Box::default();
+                    self.state.ui.highlighted_id = None;
+                    self.state.ui.search_highlighted_id = None;
+                    self.state.ui.last_error = None;
+                    self.state.ui.pending_search_token = None;
+                    return Task::none();
+                }
+                std::process::exit(0);
+            }
+            key::Key::Character(ref c) => {
+                if modifiers.control() && (c.as_str() == "r" || c.as_str() == "R") {
+                    return Task::done(AppMessage::Refresh);
+                }
+                return Task::none();
+            }
+            _ => return Task::none(),
+        }
+
+        if self.state.ui.query.is_empty() {
+            self.state.ui.highlighted_id = new_id;
+        } else {
+            self.state.ui.search_highlighted_id = new_id;
+        }
+        if let Some(expanded) = set_pinned_expanded {
+            self.state.ui.pinned_expanded = expanded;
+        }
+
+        Task::none()
+    }
+
+    fn nav_entries(&self) -> Vec<&UiEntry> {
+        let filtered = self.filtered_entries();
+        let show_sections =
+            self.state.ui.query.is_empty() && self.state.ui.active_tab == ActiveTab::All;
+
+        if show_sections {
+            let pinned: Vec<&UiEntry> = filtered
+                .iter()
+                .filter(|e| e.entry.ring() == RingKind::Favorites)
+                .copied()
+                .collect();
+            let unpinned: Vec<&UiEntry> = filtered
+                .iter()
+                .filter(|e| e.entry.ring() == RingKind::Main)
+                .copied()
+                .collect();
+            pinned.into_iter().chain(unpinned).collect()
+        } else {
+            filtered
+        }
+    }
+
     fn subscription(&self) -> Subscription<AppMessage> {
-        iced::time::every(Duration::from_millis(16)).map(|_| AppMessage::Tick)
+        Subscription::batch([
+            iced::time::every(Duration::from_millis(16)).map(|_| AppMessage::Tick),
+            keyboard::listen().map(AppMessage::KeyEvent),
+        ])
     }
 
     fn view(&self) -> Element<'_, AppMessage> {
