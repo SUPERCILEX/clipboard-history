@@ -1,18 +1,21 @@
 use std::{
     env, io,
     sync::{
-        Arc, Mutex, mpsc,
+        Arc, mpsc,
+        atomic::{AtomicBool, Ordering},
         mpsc::{Receiver, Sender},
     },
     thread,
-    time::Duration,
 };
 
 use ::image as image_crate;
+use futures::{Stream, SinkExt};
 use iced::{
-    Element, Subscription, Task,
+    Element, Event, Subscription, Task,
+    event::Status,
     keyboard::{self, key},
-    widget::image,
+    widget::{image, operation},
+    window,
 };
 use ringboard_sdk::{
     ClientError,
@@ -26,7 +29,7 @@ use ringboard_sdk::{
 
 use crate::message::Message;
 use crate::state::{ActiveTab, State};
-use crate::utils::decode_image_async;
+use crate::utils::{decode_image_async, load_server_config_async, save_server_config_async};
 
 pub type ImageCache = std::collections::HashMap<u64, image::Handle>;
 pub type LoadedImagePending = std::collections::HashSet<u64>;
@@ -34,19 +37,81 @@ pub type LoadedImagePending = std::collections::HashSet<u64>;
 /// The application model plus communication channels (TEA Model).
 pub struct RingboardApp {
     pub requests: Sender<Command>,
-    pub responses: Arc<Mutex<Receiver<ControllerMessage>>>,
     pub state: State,
     pub image_cache: ImageCache,
     pub loaded_image_pending: LoadedImagePending,
+    /// Whether closing the window should hide it (resuming instantly on the
+    /// next launch) instead of exiting the process, mirroring the egui
+    /// client's background behavior.
+    daemon: bool,
+    /// Tells the `maintain_single_instance` background thread to stop when
+    /// the app is really exiting (not just hiding).
+    stop: Arc<AtomicBool>,
+    /// This window's id, resolved once at boot; needed to hide/show/focus it.
+    window_id: Option<window::Id>,
+}
+
+/// Bridges the background controller thread's blocking `Receiver` into an
+/// async stream, so the UI is woken only when a message actually arrives
+/// instead of polling on a timer.
+fn controller_messages(responses: Receiver<ControllerMessage>) -> impl Stream<Item = Message> {
+    iced::stream::channel(8, async move |mut output| {
+        thread::spawn(move || {
+            while let Ok(msg) = responses.recv() {
+                // `send` (not `try_send`) so a momentary burst (e.g. many
+                // image loads after the first page loads) applies
+                // backpressure instead of erroring out and permanently
+                // killing this forwarder thread.
+                if futures::executor::block_on(output.send(Message::Controller(Arc::new(msg))))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+    })
+}
+
+/// Bridges the `maintain_single_instance` background thread's wake signal
+/// into an async stream.
+fn wake_messages(rx: Receiver<()>) -> impl Stream<Item = Message> {
+    iced::stream::channel(1, async move |mut output| {
+        thread::spawn(move || {
+            while rx.recv().is_ok() {
+                if futures::executor::block_on(output.send(Message::WakeRequested)).is_err() {
+                    break;
+                }
+            }
+        });
+    })
+}
+
+/// `keyboard::listen()` only delivers events the widget tree *ignored*. The
+/// always-focused search input captures Left/Right itself (to move its text
+/// cursor), so without this they'd never reach `handle_key_event` at all.
+/// Only forwards the ones that were actually captured, so nothing is ever
+/// delivered twice.
+fn captured_arrow_key(event: Event, status: Status, _window: window::Id) -> Option<Message> {
+    if status != Status::Captured {
+        return None;
+    }
+    match event {
+        Event::Keyboard(
+            event @ keyboard::Event::KeyPressed {
+                key: key::Key::Named(key::Named::ArrowLeft | key::Named::ArrowRight),
+                ..
+            },
+        ) => Some(Message::KeyEvent(event)),
+        _ => None,
+    }
 }
 
 impl RingboardApp {
     /// Initialize the model and spawn the background controller thread.
-    pub fn boot() -> (Self, Task<Message>) {
+    pub fn boot(startup_token: Option<crate::startup::Token>) -> (Self, Task<Message>) {
         let (command_sender, command_receiver) = mpsc::channel();
         let (response_sender, response_receiver) = mpsc::sync_channel(8);
         let requests = command_sender.clone();
-        let responses = Arc::new(Mutex::new(response_receiver));
 
         thread::spawn(move || {
             controller(&command_receiver, |m| {
@@ -54,16 +119,43 @@ impl RingboardApp {
             });
         });
 
+        let daemon = env::var_os("RINGBOARD_NO_DAEMON").is_none();
+        let stop = Arc::new(AtomicBool::new(false));
+        let (wake_tx, wake_rx) = mpsc::sync_channel(1);
+        if daemon {
+            let stop = stop.clone();
+            thread::spawn(move || {
+                if let Err(e) = crate::startup::maintain_single_instance(
+                    &stop,
+                    startup_token,
+                    move || {
+                        let _ = wake_tx.send(());
+                    },
+                ) {
+                    eprintln!("Single-instance background thread failed: {e}");
+                }
+            });
+        }
+
         let state = State::new();
         let app = RingboardApp {
             requests,
-            responses,
             state,
             image_cache: ImageCache::default(),
             loaded_image_pending: LoadedImagePending::default(),
+            daemon,
+            stop,
+            window_id: None,
         };
 
-        (app, Task::none())
+        let focus_search = operation::focus(crate::widgets::search_input_id());
+        let controller_stream = Task::stream(controller_messages(response_receiver));
+        let mut tasks = vec![focus_search, controller_stream];
+        if daemon {
+            tasks.push(Task::stream(wake_messages(wake_rx)));
+            tasks.push(window::latest().map(Message::WindowIdResolved));
+        }
+        (app, Task::batch(tasks))
     }
 
     pub fn title(&self) -> String {
@@ -73,8 +165,14 @@ impl RingboardApp {
     /// The TEA update function: (Model, Msg) -> (Model, Cmd).
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Tick => self.poll_responses(),
+            Message::Controller(msg) => self.handle_incoming_controller_message(msg),
             Message::KeyEvent(event) => self.handle_key_event(event),
+            Message::WindowEvent(id, event) => self.handle_window_event(id, event),
+            Message::WindowIdResolved(id) => {
+                self.window_id = self.window_id.or(id);
+                Task::none()
+            }
+            Message::WakeRequested => self.wake(),
             Message::ImageDecoded(id, result) => self.handle_image_decoded(id, result),
             Message::SearchChanged(query) => self.handle_search_changed(query),
             Message::SearchKindToggled => self.toggle_search_kind(),
@@ -101,6 +199,43 @@ impl RingboardApp {
                 self.state.ui.last_error = None;
                 Task::none()
             }
+            Message::EntryHovered(id) => {
+                self.state.ui.hovered_id = id;
+                Task::none()
+            }
+            Message::SettingsLoaded(result) => {
+                match result {
+                    Ok((main, favorites)) => {
+                        self.state.settings.max_main_entries = main.to_string();
+                        self.state.settings.max_favorite_entries = favorites.to_string();
+                    }
+                    Err(e) => self.state.settings.status = Some(Err(e)),
+                }
+                self.state.settings.loaded = true;
+                Task::none()
+            }
+            Message::SettingsMaxMainChanged(value) => {
+                self.state.settings.max_main_entries = value;
+                Task::none()
+            }
+            Message::SettingsMaxFavoritesChanged(value) => {
+                self.state.settings.max_favorite_entries = value;
+                Task::none()
+            }
+            Message::SettingsSaveRequested => self.save_settings(),
+            Message::SettingsSaved(result) => {
+                self.state.settings.saving = false;
+                self.state.settings.status = Some(
+                    result
+                        .map(|()| "Saved. Restart the Ringboard server to apply.".to_string()),
+                );
+                Task::none()
+            }
+            Message::SettingsGcBytesChanged(value) => {
+                self.state.settings.gc_max_wasted_bytes = value;
+                Task::none()
+            }
+            Message::SettingsGcRequested => self.run_gc(),
         }
     }
 
@@ -112,8 +247,9 @@ impl RingboardApp {
     /// The TEA subscriptions: Model -> Subscriptions.
     pub fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
-            iced::time::every(Duration::from_millis(16)).map(|_| Message::Tick),
             keyboard::listen().map(Message::KeyEvent),
+            window::events().map(|(id, event)| Message::WindowEvent(id, event)),
+            iced::event::listen_with(captured_arrow_key),
         ])
     }
 
@@ -132,6 +268,9 @@ impl RingboardApp {
 
     /// Return entries filtered by the active tab.
     pub fn filtered_entries(&self) -> Vec<&UiEntry> {
+        if self.state.ui.active_tab == ActiveTab::Settings {
+            return Vec::new();
+        }
         self.active_entries()
             .iter()
             .filter(|e| match self.state.ui.active_tab {
@@ -142,6 +281,7 @@ impl RingboardApp {
                 ),
                 ActiveTab::Images => matches!(e.cache, UiEntryCache::Image),
                 ActiveTab::Favorites => e.entry.ring() == RingKind::Favorites,
+                ActiveTab::Settings => unreachable!(),
             })
             .collect()
     }
@@ -236,6 +376,62 @@ impl RingboardApp {
         Task::none()
     }
 
+    fn handle_window_event(&mut self, id: window::Id, event: window::Event) -> Task<Message> {
+        self.window_id.get_or_insert(id);
+        match event {
+            window::Event::Focused => operation::focus(crate::widgets::search_input_id()),
+            window::Event::CloseRequested => {
+                if self.daemon {
+                    self.hide_window(id)
+                } else {
+                    self.exit()
+                }
+            }
+            _ => Task::none(),
+        }
+    }
+
+    /// Hides the window instead of exiting, if running as a background
+    /// daemon; otherwise exits the process for real. Used for Escape and
+    /// after a successful paste (the window's native close button is
+    /// handled directly in `handle_window_event`, using the id the
+    /// `CloseRequested` event itself carries).
+    fn close_or_hide(&mut self) -> Task<Message> {
+        let Some(id) = self.window_id.filter(|_| self.daemon) else {
+            return self.exit();
+        };
+        self.hide_window(id)
+    }
+
+    fn hide_window(&mut self, id: window::Id) -> Task<Message> {
+        self.state.reset();
+        self.image_cache.clear();
+        self.loaded_image_pending.clear();
+        // Minimizing is respected far more consistently across window
+        // managers than `Mode::Hidden` (e.g. GNOME/mutter's client-side
+        // decoration frame doesn't reliably follow `set_visible(false)`).
+        window::minimize(id, true)
+    }
+
+    fn exit(&mut self) -> Task<Message> {
+        self.stop.store(true, Ordering::Relaxed);
+        crate::startup::cleanup();
+        std::process::exit(0);
+    }
+
+    /// Called when another `toggle` invocation asked us to wake up.
+    fn wake(&mut self) -> Task<Message> {
+        let Some(id) = self.window_id else {
+            return Task::none();
+        };
+        Task::batch([
+            window::minimize(id, false),
+            window::gain_focus(id),
+            operation::focus(crate::widgets::search_input_id()),
+            self.refresh_entries(),
+        ])
+    }
+
     fn toggle_detail(&mut self) -> Task<Message> {
         if let Some(id) = self.current_highlight_id() {
             if self.state.ui.details_requested == Some(id) {
@@ -250,6 +446,45 @@ impl RingboardApp {
         self.state.ui.active_tab = tab;
         self.state.ui.highlighted_id = None;
         self.state.ui.search_highlighted_id = None;
+        if tab == ActiveTab::Settings && !self.state.settings.loaded {
+            return Task::perform(load_server_config_async(), Message::SettingsLoaded);
+        }
+        Task::none()
+    }
+
+    fn save_settings(&mut self) -> Task<Message> {
+        let Ok(max_main) = self.state.settings.max_main_entries.trim().parse() else {
+            self.state.settings.status =
+                Some(Err("Max main entries must be a positive number".into()));
+            return Task::none();
+        };
+        let Ok(max_favorites) = self.state.settings.max_favorite_entries.trim().parse() else {
+            self.state.settings.status =
+                Some(Err("Max favorite entries must be a positive number".into()));
+            return Task::none();
+        };
+
+        self.state.settings.saving = true;
+        self.state.settings.status = None;
+        Task::perform(
+            save_server_config_async(max_main, max_favorites),
+            Message::SettingsSaved,
+        )
+    }
+
+    fn run_gc(&mut self) -> Task<Message> {
+        let Ok(max_wasted_bytes) = self.state.settings.gc_max_wasted_bytes.trim().parse() else {
+            self.state.settings.status = Some(Err(
+                "Max wasted bytes must be a non-negative number".into()
+            ));
+            return Task::none();
+        };
+
+        self.state.settings.running_gc = true;
+        self.state.settings.status = None;
+        let _ = self
+            .requests
+            .send(Command::GarbageCollect { max_wasted_bytes });
         Task::none()
     }
 
@@ -356,32 +591,20 @@ impl RingboardApp {
     // Controller message handling
     // ------------------------------------------------------------------
 
-    fn poll_responses(&mut self) -> Task<Message> {
-        let mut messages = Vec::new();
-        while let Ok(msg) = self.responses.lock().unwrap().try_recv() {
-            messages.push(msg);
-        }
-
-        let mut tasks: Vec<Task<Message>> = Vec::new();
-        for msg in messages {
-            match msg {
-                ControllerMessage::LoadedImage { id, image } => {
-                    if !self.loaded_image_pending.contains(&id) {
-                        self.loaded_image_pending.insert(id);
-                        tasks.push(Task::perform(
-                            decode_image_async(id, image),
-                            |(id, result)| Message::ImageDecoded(id, result),
-                        ));
-                    }
-                }
-                other => tasks.push(self.handle_controller_message(other)),
+    fn handle_incoming_controller_message(&mut self, msg: Arc<ControllerMessage>) -> Task<Message> {
+        let Some(msg) = Arc::into_inner(msg) else {
+            return Task::none();
+        };
+        if let ControllerMessage::LoadedImage { id, image } = msg {
+            if !self.loaded_image_pending.contains(&id) {
+                self.loaded_image_pending.insert(id);
+                return Task::perform(decode_image_async(id, image), |(id, result)| {
+                    Message::ImageDecoded(id, result)
+                });
             }
+            return Task::none();
         }
-        if tasks.is_empty() {
-            Task::none()
-        } else {
-            Task::batch(tasks)
-        }
+        self.handle_controller_message(msg)
     }
 
     fn handle_controller_message(&mut self, msg: ControllerMessage) -> Task<Message> {
@@ -391,6 +614,7 @@ impl RingboardApp {
                 Task::none()
             }
             ControllerMessage::Error(e) => {
+                self.state.settings.running_gc = false;
                 self.state.ui.last_error = Some(e);
                 Task::none()
             }
@@ -429,7 +653,13 @@ impl RingboardApp {
             }
             ControllerMessage::Deleted(_) => self.refresh_entries(),
             ControllerMessage::LoadedImage { .. } => Task::none(),
-            ControllerMessage::Pasted => std::process::exit(0),
+            ControllerMessage::Pasted => self.close_or_hide(),
+            ControllerMessage::GarbageCollected { bytes_freed } => {
+                self.state.settings.running_gc = false;
+                self.state.settings.status =
+                    Some(Ok(format!("Freed {bytes_freed} bytes.")));
+                self.refresh_entries()
+            }
         }
     }
 
@@ -482,14 +712,27 @@ impl RingboardApp {
                 }
             }
             key::Key::Named(key::Named::ArrowLeft) => {
-                if show_sections && !pinned.is_empty() {
+                let on_pinned_entry =
+                    current_id.is_some_and(|id| pinned.iter().any(|e| e.entry.id() == id));
+                if show_sections && !pinned.is_empty() && on_pinned_entry {
                     set_pinned_expanded = Some(false);
                     new_id = unpinned.first().map(|e| e.entry.id());
+                } else if let Some(id) = current_id
+                    && self.state.ui.details_requested == Some(id)
+                {
+                    return Task::done(Message::DetailClosed);
                 }
             }
             key::Key::Named(key::Named::ArrowRight) => {
-                if show_sections && !pinned.is_empty() {
+                let on_collapsed_pinned_entry = !self.state.ui.pinned_expanded
+                    && current_id.is_some_and(|id| pinned.iter().any(|e| e.entry.id() == id));
+                if show_sections && !pinned.is_empty() && on_collapsed_pinned_entry {
                     set_pinned_expanded = Some(true);
+                } else if let Some(id) = current_id
+                    && self.state.ui.details_requested != Some(id)
+                    && self.entry_has_extra_detail(id)
+                {
+                    return Task::done(Message::DetailRequested(id));
                 }
             }
             key::Key::Named(key::Named::Enter) => {
@@ -511,7 +754,7 @@ impl RingboardApp {
                     self.state.ui.pending_search_token = None;
                     return Task::none();
                 }
-                std::process::exit(0);
+                return self.close_or_hide();
             }
             key::Key::Named(key::Named::Tab) if modifiers.control() => {
                 return if modifiers.shift() {
@@ -546,7 +789,7 @@ impl RingboardApp {
                         return self.toggle_search_kind();
                     }
                     if let Some(digit) = s.chars().next().and_then(|c| c.to_digit(10))
-                        && (1..=4).contains(&digit)
+                        && (1..=ActiveTab::ALL.len() as u32).contains(&digit)
                     {
                         return Task::done(Message::TabSelected(
                             ActiveTab::ALL[digit as usize - 1],
@@ -570,7 +813,62 @@ impl RingboardApp {
             self.state.ui.pinned_expanded = expanded;
         }
 
-        Task::none()
+        if new_id.is_some() && new_id != current_id {
+            self.scroll_to_highlighted()
+        } else {
+            Task::none()
+        }
+    }
+
+    fn entry_has_extra_detail(&self, id: u64) -> bool {
+        self.state
+            .entries
+            .loaded_entries
+            .iter()
+            .chain(self.state.entries.search_results.iter())
+            .find(|e| e.entry.id() == id)
+            .is_some_and(crate::widgets::entry_has_extra_detail)
+    }
+
+    /// Keeps the highlighted entry roughly in view after keyboard
+    /// navigation. Approximate (based on row index, not pixel position)
+    /// since row heights vary (text vs. image previews).
+    fn scroll_to_highlighted(&self) -> Task<Message> {
+        let show_sections =
+            self.state.ui.query.is_empty() && self.state.ui.active_tab == ActiveTab::All;
+        let filtered = self.filtered_entries();
+        let render_order: Vec<u64> = if show_sections {
+            let pinned = filtered
+                .iter()
+                .filter(|e| e.entry.ring() == RingKind::Favorites);
+            let unpinned = filtered
+                .iter()
+                .filter(|e| e.entry.ring() == RingKind::Main);
+            if self.state.ui.pinned_expanded {
+                pinned.chain(unpinned).map(|e| e.entry.id()).collect()
+            } else {
+                unpinned.map(|e| e.entry.id()).collect()
+            }
+        } else {
+            filtered.iter().map(|e| e.entry.id()).collect()
+        };
+
+        let Some(current_id) = self.current_highlight_id() else {
+            return Task::none();
+        };
+        let Some(idx) = render_order.iter().position(|&id| id == current_id) else {
+            return Task::none();
+        };
+        let fraction = if render_order.len() <= 1 {
+            0.0
+        } else {
+            idx as f32 / (render_order.len() - 1) as f32
+        };
+
+        operation::snap_to(
+            crate::widgets::entry_list_id(),
+            operation::RelativeOffset { x: 0.0, y: fraction },
+        )
     }
 
     fn request_images(&mut self, entries: &[UiEntry]) {

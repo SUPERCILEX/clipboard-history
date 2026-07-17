@@ -381,6 +381,7 @@ fn handle_message(message: Message, State { entries, ui }: &mut State, ctx: &egu
         Message::Deleted(_) => {}
         Message::LoadedImage { .. } => unreachable!(),
         Message::Pasted => ctx.send_viewport_cmd(ViewportCommand::Close),
+        Message::GarbageCollected { .. } => {}
     }
 }
 

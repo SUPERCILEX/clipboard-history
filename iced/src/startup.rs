@@ -1,0 +1,134 @@
+use std::{
+    ffi::OsStr,
+    fs,
+    mem::MaybeUninit,
+    os::{fd::AsFd, unix::ffi::OsStrExt},
+    path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+};
+
+use ringboard_sdk::core::{
+    Error as CoreError, IoErr, LeaveBe, OwnedLockFile, SendKillAndTakeover, acquire_lock_file,
+    dirs::push_sockets_prefix,
+};
+use rustix::fs::{AtFlags, CWD, inotify, inotify::ReadFlags, unlinkat};
+
+fn sleep_file_name() -> PathBuf {
+    let mut path = PathBuf::with_capacity("/tmp/.ringboard/username/iced/sleep.lock".len());
+    push_sockets_prefix(&mut path);
+    path.push("iced/sleep.lock");
+    path
+}
+
+pub struct Token(PathBuf, OwnedLockFile);
+
+/// If another instance is already running (asleep in the background), wake
+/// it up and exit this process immediately. Otherwise, take the lock
+/// ourselves and return a [`Token`] for [`maintain_single_instance`] to
+/// reuse, so we become the daemon.
+pub fn maybe_open_existing_instance_and_exit() -> Result<Token, CoreError> {
+    let path = sleep_file_name();
+    fs::create_dir_all(path.parent().unwrap())
+        .map_io_err(|| format!("Failed to create sleep lock file directory: {path:?}"))?;
+    if let Ok(lock) = acquire_lock_file(&path, LeaveBe)? {
+        Ok(Token(path, lock))
+    } else {
+        unlinkat(CWD, &path, AtFlags::empty())
+            .map_io_err(|| format!("Failed to remove sleep file: {path:?}"))?;
+        std::process::exit(0);
+    }
+}
+
+/// Runs until `stop` is set, calling `open` every time another process asks
+/// us to wake up (via [`maybe_open_existing_instance_and_exit`]).
+pub fn maintain_single_instance(
+    stop: &AtomicBool,
+    token: Option<Token>,
+    mut open: impl FnMut(),
+) -> Result<(), CoreError> {
+    let path;
+    let mut _lock;
+    if let Some(Token(path_, lock_)) = token {
+        path = path_;
+        _lock = lock_;
+    } else {
+        path = sleep_file_name();
+    }
+    let path_dir = path.parent().unwrap();
+    let path_name = path.file_name().unwrap();
+    let inotify =
+        inotify::init(inotify::CreateFlags::empty()).map_io_err(|| "Failed to create inotify.")?;
+
+    let mut watch = None;
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            break Ok(());
+        }
+
+        fs::create_dir_all(path_dir)
+            .map_io_err(|| format!("Failed to create sleep lock file directory: {path_dir:?}"))?;
+        if watch.is_none() {
+            let id = inotify::add_watch(
+                &inotify,
+                path_dir,
+                inotify::WatchFlags::MOVE_SELF
+                    | inotify::WatchFlags::DELETE_SELF
+                    | inotify::WatchFlags::DELETE
+                    | inotify::WatchFlags::MOVED_FROM
+                    | inotify::WatchFlags::ONLYDIR
+                    | inotify::WatchFlags::MASK_CREATE,
+            )
+            .map_io_err(|| "Failed to register inotify watch.")?;
+            watch = Some(id);
+        }
+        _lock = acquire_lock_file(&path, SendKillAndTakeover)?;
+        wait_for_sleep_cancel(&inotify, &mut watch, path_name, &mut open)?;
+    }
+}
+
+/// Deletes the sleep lock file. Call this once on real (non-daemon) exit.
+pub fn cleanup() {
+    let path = sleep_file_name();
+    let _ = unlinkat(CWD, &path, AtFlags::empty()).inspect_err(|e| {
+        eprintln!("Failed to delete sleep file: {path:?}\nError: {e}");
+    });
+}
+
+fn wait_for_sleep_cancel(
+    inotify: impl AsFd,
+    watch_id: &mut Option<i32>,
+    path_name: &OsStr,
+    mut open: impl FnMut(),
+) -> Result<(), CoreError> {
+    let mut watch_deleted = false;
+    let mut file_changed = false;
+    {
+        let mut buf = [MaybeUninit::uninit(); 128];
+        let mut buf = inotify::Reader::new(&inotify, &mut buf);
+        loop {
+            let e = buf.next().map_io_err(|| "Failed to read inotify events")?;
+            let mut dir_moved = false;
+            if Some(e.wd()) == *watch_id {
+                dir_moved = e.events().contains(ReadFlags::MOVE_SELF);
+                watch_deleted |= e.events().contains(ReadFlags::IGNORED);
+                file_changed |= e
+                    .file_name()
+                    .is_some_and(|f| f.to_bytes() == path_name.as_bytes());
+
+                if dir_moved && let Some(watch_id) = watch_id.take() {
+                    inotify::remove_watch(&inotify, watch_id)
+                        .map_io_err(|| "Failed to remove inotify watch.")?;
+                }
+                if watch_deleted {
+                    *watch_id = None;
+                }
+            }
+
+            if buf.is_buffer_empty() && (dir_moved || watch_deleted || file_changed) {
+                break;
+            }
+        }
+    }
+    open();
+    Ok(())
+}

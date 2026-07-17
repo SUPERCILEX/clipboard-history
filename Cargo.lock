@@ -1066,6 +1066,7 @@ dependencies = [
  "native-theme-iced",
  "rustix 1.1.4",
  "tokio",
+ "toml 1.1.2+spec-1.1.0",
  "tracy-client",
 ]
 

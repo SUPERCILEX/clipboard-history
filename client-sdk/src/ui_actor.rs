@@ -22,13 +22,16 @@ use thiserror::Error;
 use crate::{
     ClientError, DatabaseReader, Entry, EntryReader, Kind,
     api::{
-        MoveToFrontRequest, RemoveRequest, connect_to_paste_server, connect_to_server,
-        send_paste_buffer,
+        GarbageCollectRequest, MoveToFrontRequest, RemoveRequest, connect_to_paste_server,
+        connect_to_server, send_paste_buffer,
     },
     core::{
         BucketAndIndex, Error as CoreError, IoErr, RingAndIndex,
         dirs::{data_dir, socket_file},
-        protocol::{IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind, composite_id},
+        protocol::{
+            GarbageCollectResponse, IdNotFoundError, MoveToFrontResponse, RemoveResponse, RingKind,
+            composite_id,
+        },
         ring::{MAX_ENTRIES, Ring},
         size_to_bucket,
     },
@@ -95,6 +98,7 @@ pub enum Command {
     },
     LoadImage(u64),
     Paste(u64),
+    GarbageCollect { max_wasted_bytes: u64 },
 }
 
 #[derive(Default, Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -125,6 +129,7 @@ pub enum Message {
         image: File,
     },
     Pasted,
+    GarbageCollected { bytes_freed: u64 },
 }
 
 #[derive(Debug)]
@@ -336,6 +341,16 @@ fn handle_command<E>(
             RemoveResponse { error: None } => Ok(Some(Message::Deleted(id))),
             RemoveResponse { error: Some(e) } => Err(e.into()),
         },
+        Command::GarbageCollect { max_wasted_bytes } => {
+            let GarbageCollectResponse { bytes_freed } = {
+                GarbageCollectRequest::response(
+                    maybe_init_server(socket_file, connect_to_server, server)?,
+                    max_wasted_bytes,
+                )
+            }
+            .inspect_err(|_| *server = None)?;
+            Ok(Some(Message::GarbageCollected { bytes_freed }))
+        }
         Command::Search { query, kind, token } => {
             shitty_refresh(database);
 

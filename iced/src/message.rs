@@ -1,15 +1,27 @@
+use std::sync::Arc;
+
 use ::image as image_crate;
-use iced::keyboard;
+use iced::{keyboard, window};
+use ringboard_sdk::ui_actor::Message as ControllerMessage;
 
 use crate::state::ActiveTab;
 
 /// The only way to change application state (TEA Msg).
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Poll the controller response channel.
-    Tick,
+    /// A message pushed from the background controller thread.
+    ///
+    /// Wrapped in an `Arc` since widgets (e.g. buttons) require `Message:
+    /// Clone` and `ringboard_sdk`'s controller message type isn't `Clone`.
+    Controller(Arc<ControllerMessage>),
     /// Global keyboard event.
     KeyEvent(keyboard::Event),
+    /// Window-level event (focus changes, etc).
+    WindowEvent(window::Id, window::Event),
+    /// The id of this app's window, resolved once at boot.
+    WindowIdResolved(Option<window::Id>),
+    /// Another instance of the app asked us to wake up and show ourselves.
+    WakeRequested,
     /// Async image decode completed.
     ImageDecoded(u64, Result<image_crate::DynamicImage, String>),
     /// Search query changed.
@@ -40,4 +52,20 @@ pub enum Message {
     FastPaste(u64),
     /// Dismiss the transient error banner.
     DismissError,
+    /// Pointer entered or left an entry row.
+    EntryHovered(Option<u64>),
+    /// The on-disk server config finished loading (or failed to).
+    SettingsLoaded(Result<(u32, u32), String>),
+    /// The "max main entries" field changed.
+    SettingsMaxMainChanged(String),
+    /// The "max favorite entries" field changed.
+    SettingsMaxFavoritesChanged(String),
+    /// The user asked to persist the server config to disk.
+    SettingsSaveRequested,
+    /// The server config finished saving (or failed to).
+    SettingsSaved(Result<(), String>),
+    /// The "max wasted bytes" GC threshold field changed.
+    SettingsGcBytesChanged(String),
+    /// The user asked to run garbage collection now.
+    SettingsGcRequested,
 }

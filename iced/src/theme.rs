@@ -61,30 +61,18 @@ impl Default for ThemeManager {
     }
 }
 
-pub fn card_style(
-    theme: &Theme,
-    highlighted: bool,
-    is_favorite: bool,
-    radius: f32,
-) -> container::Style {
+pub fn card_style(theme: &Theme, highlighted: bool, radius: f32) -> container::Style {
     let palette = theme.extended_palette();
     let bg = if highlighted {
         palette.primary.weak.color
     } else {
         palette.background.weak.color
     };
-    let border_color = if is_favorite {
-        palette.primary.strong.color
-    } else if highlighted {
-        palette.primary.base.color
-    } else {
-        Color::TRANSPARENT
-    };
     container::Style {
         background: Some(Background::Color(bg)),
         border: Border {
-            color: border_color,
-            width: if is_favorite || highlighted { 2.0 } else { 0.0 },
+            color: Color::TRANSPARENT,
+            width: 0.0,
             radius: radius.into(),
         },
         shadow: Shadow::default(),
@@ -93,15 +81,40 @@ pub fn card_style(
     }
 }
 
-pub fn section_header_style(theme: &Theme, radius: f32) -> container::Style {
+/// Left-edge indicator strip for the keyboard-selected entry row.
+pub fn accent_bar_style(theme: &Theme, active: bool, radius: f32) -> container::Style {
     let palette = theme.extended_palette();
     container::Style {
-        background: Some(Background::Color(palette.background.strong.color)),
+        background: Some(Background::Color(if active {
+            palette.primary.strong.color
+        } else {
+            Color::TRANSPARENT
+        })),
         border: Border {
             radius: radius.into(),
             ..Border::default()
         },
         snap: false,
+        ..container::Style::default()
+    }
+}
+
+pub fn section_header_style(theme: &Theme, _radius: f32) -> container::Style {
+    let palette = theme.extended_palette();
+    container::Style {
+        background: None,
+        border: Border::default(),
+        text_color: Some(palette.background.base.text.scale_alpha(0.65)),
+        snap: false,
+        ..container::Style::default()
+    }
+}
+
+/// A 1px hairline divider, e.g. under section headers.
+pub fn divider_style(theme: &Theme) -> container::Style {
+    let palette = theme.extended_palette();
+    container::Style {
+        background: Some(Background::Color(palette.background.strong.color)),
         ..container::Style::default()
     }
 }
@@ -187,10 +200,15 @@ pub fn badge_style(theme: &Theme, radius: f32, primary: bool) -> container::Styl
     }
 }
 
-pub fn primary_button_style(theme: &Theme, _status: button::Status) -> button::Style {
+pub fn primary_button_style(theme: &Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
+    let bg = match status {
+        button::Status::Hovered => palette.primary.strong.color,
+        button::Status::Pressed => palette.primary.strong.color,
+        _ => palette.primary.base.color,
+    };
     button::Style {
-        background: Some(Background::Color(palette.primary.base.color)),
+        background: Some(Background::Color(bg)),
         text_color: palette.primary.strong.text,
         border: Border {
             color: palette.primary.strong.color,
@@ -202,10 +220,15 @@ pub fn primary_button_style(theme: &Theme, _status: button::Status) -> button::S
     }
 }
 
-pub fn secondary_button_style(theme: &Theme, _status: button::Status) -> button::Style {
+pub fn secondary_button_style(theme: &Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
+    let bg = match status {
+        button::Status::Hovered => palette.background.strong.color.scale_alpha(0.7),
+        button::Status::Pressed => palette.background.strong.color,
+        _ => palette.background.weak.color,
+    };
     button::Style {
-        background: Some(Background::Color(palette.background.strong.color)),
+        background: Some(Background::Color(bg)),
         text_color: palette.background.base.text,
         border: Border {
             color: palette.background.base.text,
@@ -217,10 +240,15 @@ pub fn secondary_button_style(theme: &Theme, _status: button::Status) -> button:
     }
 }
 
-pub fn danger_button_style(theme: &Theme, _status: button::Status) -> button::Style {
+pub fn danger_button_style(theme: &Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
+    let bg = match status {
+        button::Status::Hovered => palette.danger.weak.color,
+        button::Status::Pressed => palette.danger.weak.color.scale_alpha(0.7),
+        _ => Color::TRANSPARENT,
+    };
     button::Style {
-        background: Some(Background::Color(Color::TRANSPARENT)),
+        background: Some(Background::Color(bg)),
         text_color: palette.danger.base.color,
         border: Border::default(),
         shadow: Shadow::default(),
@@ -228,12 +256,43 @@ pub fn danger_button_style(theme: &Theme, _status: button::Status) -> button::St
     }
 }
 
-pub fn icon_button_style(theme: &Theme, _status: button::Status) -> button::Style {
+pub fn icon_button_style(theme: &Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
+    let bg = match status {
+        button::Status::Hovered => palette.background.weak.color,
+        button::Status::Pressed => palette.background.strong.color,
+        _ => Color::TRANSPARENT,
+    };
     button::Style {
-        background: Some(Background::Color(Color::TRANSPARENT)),
+        background: Some(Background::Color(bg)),
         text_color: palette.background.base.text,
         border: Border::default(),
+        shadow: Shadow::default(),
+        snap: false,
+    }
+}
+
+/// A pill-shaped segmented-control button, used for the tab bar and the
+/// search-kind toggle. Quiet at rest; filled only when active.
+pub fn pill_button_style(theme: &Theme, status: button::Status, is_active: bool) -> button::Style {
+    let palette = theme.extended_palette();
+    let (bg, text_color) = if is_active {
+        (palette.primary.base.color, palette.primary.strong.text)
+    } else {
+        let bg = match status {
+            button::Status::Hovered => palette.background.weak.color,
+            button::Status::Pressed => palette.background.strong.color,
+            _ => Color::TRANSPARENT,
+        };
+        (bg, palette.background.base.text.scale_alpha(0.85))
+    };
+    button::Style {
+        background: Some(Background::Color(bg)),
+        text_color,
+        border: Border {
+            radius: 999.0.into(),
+            ..Border::default()
+        },
         shadow: Shadow::default(),
         snap: false,
     }
