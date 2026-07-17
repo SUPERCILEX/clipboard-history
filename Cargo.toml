@@ -4,6 +4,7 @@ members = [
     "client-sdk",
     "core",
     "egui",
+    "iced",
     "server",
     "tui",
     "wayland",

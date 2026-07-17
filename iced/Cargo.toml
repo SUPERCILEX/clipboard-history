@@ -1,0 +1,27 @@
+[package]
+name = "clipboard-history-iced"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Ringboard iced client application."
+repository.workspace = true
+keywords = ["ringboard", "clipboard", "tools", "iced"]
+categories = ["command-line-utilities", "development-tools", "filesystem"]
+license.workspace = true
+
+[dependencies]
+iced = { version = "0.14.0", default-features = false, features = ["wgpu", "tiny-skia", "crisp", "web-colors", "tokio", "linux-theme-detection", "x11", "wayland", "image"] }
+image = "0.25.10"
+ringboard-sdk = { package = "clipboard-history-client-sdk", version = "0", path = "../client-sdk", features = ["ui"] }
+rustix = { version = "1.1.4", features = ["fs"] }
+tracy-client = { version = "0.18.4", optional = true }
+futures = "0.3"
+tokio = { version = "1", features = ["rt"] }
+
+[features]
+default = []
+trace = ["dep:tracy-client"]
+
+[[bin]]
+name = "ringboard-iced"
+path = "src/main.rs"
