@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    env,
     fmt::Display,
     fs::File,
     io::{ErrorKind, Read},
@@ -9,6 +10,7 @@ use std::{
         fd::{AsFd, OwnedFd},
         unix::fs::FileExt,
     },
+    process::Command,
     rc::Rc,
     time::Duration,
 };
@@ -86,6 +88,8 @@ enum CliError {
     X11NoXfixes,
     #[error("Config deserialization failed")]
     Toml(#[from] toml::de::Error),
+    #[error("{0}")]
+    GnomeExtension(String),
 }
 
 impl From<X11Error> for CliError {
@@ -148,6 +152,7 @@ fn into_report(cli_err: CliError) -> Report<Wrapper> {
         CliError::X11Error(e) => Report::new(wrapper).attach(format!("{e:?}")),
         CliError::X11IdsExhausted | CliError::X11NoXfixes => Report::new(wrapper),
         CliError::Toml(e) => Report::new(e).change_context(wrapper),
+        CliError::GnomeExtension(e) => Report::new(wrapper).attach(e),
     }
 }
 
@@ -268,6 +273,9 @@ fn run() -> Result<(), CliError> {
         fast_path_optimizations,
     } = load_config()?;
     info!("Using configuration {config:?}");
+
+    let injector = detect_injector();
+    info!("Using injector {injector:?}");
 
     let server = {
         let socket_file = socket_file();
@@ -432,6 +440,7 @@ fn run() -> Result<(), CliError> {
                     &mut ancillary_buf,
                     &mut last_paste,
                     &mut clear_selection_mask,
+                    injector,
                     paste_timer.is_some(),
                 )?,
                 2 => {
@@ -1086,6 +1095,7 @@ fn handle_paste_event(
     ancillary_buf: &mut [MaybeUninit<u8>; rustix::cmsg_space!(ScmRights(1))],
     last_paste: &mut Option<(PasteFile, PasteAtom)>,
     clear_selection_mask: &mut u8,
+    injector: Injector,
     auto_paste: bool,
 ) -> Result<(), CliError> {
     struct MoveToFrontGuard<'a, 'b, Server: AsFd>(
@@ -1183,36 +1193,44 @@ fn handle_paste_event(
 
     if auto_paste && trigger_paste {
         trace!("Preparing to send paste command.");
-        let focused_window = conn.get_input_focus()?.reply()?.focus;
-        let should_defer = || -> Result<bool, CliError> {
-            let class = conn
-                .get_property(
-                    false,
-                    focused_window,
-                    window_class_atom,
-                    GetPropertyType::ANY,
-                    0,
-                    u32::MAX,
-                )?
-                .reply()?;
-            let Some(name) = class.value.split(|&b| b == 0).nth(1) else {
-                return Ok(false);
-            };
-            if name != b"ringboard-egui" {
-                return Ok(false);
+        match injector {
+            // The extension performs its own in-shell wait for Ringboard's window to
+            // lose focus, and covers Wayland-native clients that X11 focus events cannot
+            // see, so the X11 deferral must not be used here.
+            Injector::GnomeExtension => paste_via_gnome_extension(),
+            Injector::XTest => {
+                let focused_window = conn.get_input_focus()?.reply()?.focus;
+                let should_defer = || -> Result<bool, CliError> {
+                    let class = conn
+                        .get_property(
+                            false,
+                            focused_window,
+                            window_class_atom,
+                            GetPropertyType::ANY,
+                            0,
+                            u32::MAX,
+                        )?
+                        .reply()?;
+                    let Some(name) = class.value.split(|&b| b == 0).nth(1) else {
+                        return Ok(false);
+                    };
+                    if name != b"ringboard-egui" {
+                        return Ok(false);
+                    }
+
+                    conn.change_window_attributes(
+                        root,
+                        &ChangeWindowAttributesAux::default().event_mask(EventMask::FOCUS_CHANGE),
+                    )?;
+
+                    Ok(true)
+                };
+                if should_defer().ok() == Some(true) {
+                    debug!("Waiting for focus event to send paste command.");
+                } else {
+                    do_paste(conn, root)?;
+                }
             }
-
-            conn.change_window_attributes(
-                root,
-                &ChangeWindowAttributesAux::default().event_mask(EventMask::FOCUS_CHANGE),
-            )?;
-
-            Ok(true)
-        };
-        if should_defer().ok() == Some(true) {
-            debug!("Waiting for focus event to send paste command.");
-        } else {
-            do_paste(conn, root)?;
         }
     }
 
@@ -1230,5 +1248,83 @@ fn do_paste(conn: &RustConnection, root: Window) -> Result<(), CliError> {
     conn.flush()?;
     info!("Sent paste command.");
 
+    Ok(())
+}
+
+/// Interface exported by `gnome-extension/`. Keep in sync with `extension.js`.
+const GNOME_EXTENSION_BUS_NAME: &str = "dev.alexsaveau.ringboard.Paste";
+const GNOME_EXTENSION_OBJECT_PATH: &str = "/dev/alexsaveau/ringboard/Paste";
+const GNOME_EXTENSION_PASTE_METHOD: &str = "dev.alexsaveau.ringboard.Paste.Paste";
+
+/// How the paste keystroke is delivered to the focused application.
+#[derive(Copy, Clone, Debug)]
+enum Injector {
+    /// XTEST, which is the correct mechanism for X11 sessions.
+    XTest,
+    /// The companion GNOME Shell extension. On GNOME Wayland, XTEST is routed
+    /// through `org.freedesktop.portal.RemoteDesktop`, which prompts on every
+    /// paste, and it cannot reach native Wayland clients, so gnome-shell
+    /// injects the keystroke for us instead.
+    GnomeExtension,
+}
+
+fn detect_injector() -> Injector {
+    let wayland = env::var_os("WAYLAND_DISPLAY").is_some()
+        || env::var("XDG_SESSION_TYPE").is_ok_and(|session| session == "wayland");
+    let gnome = env::var("XDG_CURRENT_DESKTOP").is_ok_and(|desktops| {
+        desktops
+            .split(':')
+            .any(|desktop| desktop.eq_ignore_ascii_case("gnome"))
+    });
+
+    if wayland && gnome {
+        Injector::GnomeExtension
+    } else {
+        Injector::XTest
+    }
+}
+
+/// Asks the companion GNOME Shell extension to inject the paste keystroke.
+///
+/// Failures are logged rather than propagated: `main` terminates on error and
+/// the service has `Restart=on-failure`, so propagating would crash-loop the
+/// watcher (and stop clipboard monitoring entirely) whenever the extension is
+/// missing or disabled. This is not silent: the reason is reported at error
+/// level.
+fn paste_via_gnome_extension() {
+    match try_paste_via_gnome_extension() {
+        Ok(()) => info!("Sent paste command via the GNOME Shell extension."),
+        Err(e) => error!("{e}"),
+    }
+}
+
+fn try_paste_via_gnome_extension() -> Result<(), CliError> {
+    let output = Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--dest",
+            GNOME_EXTENSION_BUS_NAME,
+            "--object-path",
+            GNOME_EXTENSION_OBJECT_PATH,
+            "--method",
+            GNOME_EXTENSION_PASTE_METHOD,
+        ])
+        .output()
+        .map_err(|e| {
+            CliError::GnomeExtension(format!(
+                "Failed to run gdbus ({e}). Install libglib2.0-bin and the Ringboard GNOME Shell \
+                 extension (see gnome-extension/README.md)."
+            ))
+        })?;
+
+    if !output.status.success() {
+        return Err(CliError::GnomeExtension(format!(
+            "Failed to paste via the Ringboard GNOME Shell extension ({}): {}. Is the extension \
+             installed and enabled (see gnome-extension/README.md)?",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim(),
+        )));
+    }
     Ok(())
 }

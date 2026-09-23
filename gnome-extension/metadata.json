@@ -1,0 +1,8 @@
+{
+  "uuid": "ringboard-paste@alexsaveau.dev",
+  "name": "Ringboard Paste",
+  "description": "Companion for Ringboard. Injects the paste keystroke when the Ringboard watcher asks it to. Required on GNOME Wayland, where injecting through XTEST would trigger a RemoteDesktop portal prompt on every paste and cannot reach native Wayland applications.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/SUPERCILEX/clipboard-history",
+  "version": 1
+}

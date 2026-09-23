@@ -49,6 +49,46 @@ systemctl --user daemon-reload
 systemctl --user start ringboard-server
 systemctl --user enable ringboard-$XDG_SESSION_TYPE --now
 
+# GNOME on Wayland uses the X11 watcher because Mutter has no data-control protocol,
+# but XTEST there goes through the RemoteDesktop portal (prompting on every paste)
+# and cannot reach native Wayland apps. The companion shell extension injects the
+# keystroke from inside gnome-shell instead.
+# Lowercased to match detect_injector(), which is case-insensitive: a watcher
+# that selects the extension while the installer skipped it fails every paste.
+desktops=$(echo "$XDG_CURRENT_DESKTOP" | tr '[:upper:]' '[:lower:]')
+case ":$desktops:" in
+  *:gnome:*) is_gnome=1 ;;
+  *) is_gnome=0 ;;
+esac
+if [ "$is_gnome" = 1 ] && [ -n "$WAYLAND_DISPLAY" ]; then
+  echo "Installing the Ringboard GNOME Shell extension..."
+  ext_dir=$(mktemp -d)
+  fetch https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/gnome-extension/metadata.json -O --output-dir "$ext_dir"
+  fetch https://raw.githubusercontent.com/SUPERCILEX/clipboard-history/master/gnome-extension/extension.js -O --output-dir "$ext_dir"
+  (cd "$ext_dir" && zip -q ringboard-paste.zip metadata.json extension.js)
+  gnome-extensions install --force "$ext_dir/ringboard-paste.zip"
+  rm -rf "$ext_dir"
+
+  # gnome-shell only discovers extensions at startup, so `gnome-extensions enable`
+  # cannot work yet: pre-enable it through GSettings instead, which is what the
+  # Extensions app does. Appending rather than overwriting keeps other extensions.
+  current=$(gsettings get org.gnome.shell enabled-extensions)
+  case "$current" in
+    *ringboard-paste@alexsaveau.dev*) ;;
+    *)
+      if [ "$current" = "@as []" ]; then
+        gsettings set org.gnome.shell enabled-extensions "['ringboard-paste@alexsaveau.dev']"
+      else
+        gsettings set org.gnome.shell enabled-extensions "${current%]}, 'ringboard-paste@alexsaveau.dev']"
+      fi
+      ;;
+  esac
+
+  echo
+  echo "Log out and back in so GNOME Shell loads the extension. Pasting on GNOME"
+  echo "Wayland will not work until it is loaded."
+fi
+
 echo
 echo "--- DONE ---"
 echo

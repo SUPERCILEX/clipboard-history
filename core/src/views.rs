@@ -15,7 +15,7 @@ use crate::{
 pub struct RingAndIndex(u32);
 
 impl RingAndIndex {
-    const KIND_SHIFT: u32 = const { u32::BITS - MAX_ENTRIES.leading_zeros() };
+    const KIND_SHIFT: u32 = const { MAX_ENTRIES.bit_width() };
 
     #[must_use]
     pub fn new(ring: RingKind, index: u32) -> Self {
